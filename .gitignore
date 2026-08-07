@@ -3,3 +3,9 @@ backend/.env
 data/.secret_key
 backend/static/hisbenew-erp-mobile.cer
 tmp/portable/mobile-https/
+
+backend/.venv/
+backend/.pytest_cache/
+backend/__pycache__/
+frontend/node_modules/
+
