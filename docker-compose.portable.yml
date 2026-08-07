@@ -1,0 +1,23 @@
+services:
+  erp:
+    build:
+      context: .
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    environment:
+      APP_DATA_DIR: /data
+      STATIC_DIR: /data/static
+      FRONTEND_DIST_DIR: /app/frontend-dist
+      DATABASE_URL: sqlite:////data/hisbenew_industries.db
+      WEB_CONCURRENCY: 1
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-}
+      SECRET_KEY: ${SECRET_KEY:-}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      INTERNAL_CALL_ICE_SERVERS: ${INTERNAL_CALL_ICE_SERVERS:-}
+      AMAZON_CREDENTIALS_ENCRYPTION_KEY: ${AMAZON_CREDENTIALS_ENCRYPTION_KEY:-}
+      PORT: 8000
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

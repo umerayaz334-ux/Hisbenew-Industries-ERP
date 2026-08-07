@@ -1,0 +1,333 @@
+@media (min-width: 901px) {
+  .app-layout > .main-content:not(.login-page) > .dashboard-page {
+    width: 100%;
+    max-width: none;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0 0 40px;
+    overflow-x: hidden;
+    background: #f6f7f9;
+    color: #202020;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-warehouse-dashboard .warehouse-hero,
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-warehouse-dashboard .warehouse-metric-grid,
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-warehouse-dashboard .warehouse-dashboard-layout {
+    margin-right: 32px;
+    margin-left: 32px;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-warehouse-dashboard .warehouse-hero {
+    margin-top: 24px;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-warehouse-dashboard .warehouse-dashboard-layout {
+    margin-top: 24px;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-warehouse-dashboard .warehouse-dashboard-topbar {
+    justify-content: space-between;
+    gap: 20px;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-warehouse-dashboard .warehouse-dashboard-open {
+    flex: 0 0 auto;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-topbar {
+    display: flex;
+    min-height: 120px;
+    align-items: center;
+    padding: 28px 32px;
+    border: 0;
+    border-bottom: 1px solid #dedede;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-topbar span {
+    color: #666666;
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-topbar h1 {
+    max-width: 920px;
+    margin: 6px 0 0;
+    color: #202020;
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.12;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-topbar p {
+    max-width: 680px;
+    margin: 9px 0 0;
+    color: #666666;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-mobile-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.85fr);
+    gap: 18px;
+    align-items: stretch;
+    min-height: 150px;
+    margin: 24px 32px 0;
+    padding: 22px 24px;
+    border: 1px solid #d8d8d8;
+    border-left: 4px solid #737373;
+    border-radius: 6px;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-mobile-hero.is-today {
+    border-color: #d8d8d8;
+    border-left-color: #7a520f;
+    background: #ffffff;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-mobile-hero.is-overdue {
+    border-color: #d8d8d8;
+    border-left-color: #8a2e23;
+    background: #ffffff;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-mobile-hero-main {
+    display: grid;
+    align-content: center;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-mobile-hero-main h2 {
+    margin-top: 12px;
+    color: #202020;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.14;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-mobile-hero-main p {
+    max-width: 720px;
+    margin-top: 8px;
+    color: #666666;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.45;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-mobile-hero-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-mobile-hero-metrics div {
+    display: grid;
+    min-height: 92px;
+    align-content: center;
+    padding: 14px;
+    border: 1px solid #e2e2e2;
+    border-radius: 5px;
+    background: #fafafa;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-mobile-hero-metrics strong {
+    color: #202020;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-mobile-hero-metrics span {
+    margin-top: 7px;
+    color: #666666;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: none;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-command-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    gap: 12px;
+    margin: 16px 32px 0;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-command-grid article {
+    min-width: 0;
+    min-height: 108px;
+    padding: 16px;
+    border: 1px solid #d8d8d8;
+    border-radius: 6px;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-command-grid article.is-warning {
+    border-left: 4px solid #8a5f12;
+    background: #fffdf8;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-command-grid article.is-danger {
+    border-left: 4px solid #8a2e23;
+    background: #fffdfc;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-command-grid span {
+    color: #666666;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-command-grid strong {
+    margin-top: 10px;
+    color: #202020;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-command-grid small {
+    margin-top: 8px;
+    color: #666666;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-workspace {
+    display: grid;
+    gap: 20px;
+    align-items: start;
+    margin: 24px 32px 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-command-dashboard .dashboard-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-worker-dashboard .dashboard-workspace {
+    grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.9fr);
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-list-section,
+  .app-layout > .main-content:not(.login-page) .dashboard-order-section {
+    min-width: 0;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid #d8d8d8;
+    border-radius: 6px;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-section-heading {
+    margin: 0;
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid #eeeeee;
+    background: #ffffff;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-section-heading span {
+    color: #666666;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: none;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-section-heading h2 {
+    margin-top: 4px;
+    color: #202020;
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-action-list,
+  .app-layout > .main-content:not(.login-page) .dashboard-order-task-list {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-command-dashboard .dashboard-action-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-page.is-worker-dashboard .dashboard-action-list {
+    grid-template-columns: 1fr;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-order-task-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-action-row,
+  .app-layout > .main-content:not(.login-page) .dashboard-order-task-card {
+    min-width: 0;
+    border: 1px solid #e4e4e4;
+    border-radius: 5px;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-action-row {
+    min-height: 72px;
+    padding: 14px;
+    border-bottom: 1px solid #e4e4e4;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-action-row:hover {
+    background: #fafafa;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-action-row strong {
+    color: #202020;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-action-row small {
+    color: #666666;
+    font-size: 12px;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-action-row em {
+    border-radius: 999px;
+    background: #f1f1f1;
+    color: #3f3f3f;
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-action-row em.is-hot {
+    background: #f4e2df;
+    color: #742b20;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-order-task-main {
+    min-height: 88px;
+    padding: 14px;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-order-detail {
+    padding: 0 14px 14px;
+  }
+
+  .app-layout > .main-content:not(.login-page) .dashboard-empty {
+    min-height: 150px;
+    border: 0;
+    border-radius: 0;
+    background: #ffffff;
+    color: #666666;
+    font-size: 14px;
+    font-weight: 500;
+  }
+}

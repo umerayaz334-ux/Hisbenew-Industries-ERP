@@ -1,0 +1,571 @@
+8:30:42 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:30:42 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx:189:21
+    at async load (http://localhost:5173/src/App.jsx:210:4)
+8:30:42 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:30:42 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx:189:21
+    at async load (http://localhost:5173/src/App.jsx:210:4)
+8:30:45 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:30:45 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx:189:21
+    at async load (http://localhost:5173/src/App.jsx:210:4)
+8:30:45 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx:189:21
+    at async load (http://localhost:5173/src/App.jsx:210:4)
+8:30:45 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:01 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:15 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:15 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx:189:21
+    at async load (http://localhost:5173/src/App.jsx:210:4)
+8:31:15 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx:189:21
+    at async load (http://localhost:5173/src/App.jsx:210:4)
+8:31:15 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:23 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:23 PM [vite] (client) [console.error] Regular bills loading error: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:24 PM [vite] (client) [console.error] Fetch payouts error: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:24 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:24 PM [vite] (client) [console.error] Fetch payouts error: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:25 PM [vite] (client) [console.error] Inventory loading error: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:25 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:25 PM [vite] (client) [console.error] Inventory loading error: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:26 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:26 PM [vite] (client) [console.error] Supplier dashboard loading error: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:26 PM [vite] (client) [console.error] Supplier dashboard loading error: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:29 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:30 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:46 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:31:46 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:32:00 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:32:02 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx:189:21
+    at async load (http://localhost:5173/src/App.jsx:210:4)
+8:32:02 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:32:02 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx:189:21
+    at async load (http://localhost:5173/src/App.jsx:210:4)
+8:32:02 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:32:18 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:32:26 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783351930788:189:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783351930788:210:4)
+8:32:26 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:32:26 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783351930788:189:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783351930788:210:4)
+8:32:26 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:32:42 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:32:57 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:32:57 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:33:08 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783351930788:189:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783351930788:210:4)
+8:33:08 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:33:08 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783351930788:189:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783351930788:210:4)
+8:33:08 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:33:22 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783351930788:189:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783351930788:210:4)
+8:33:22 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:33:22 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783351930788:189:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783351930788:210:4)
+8:33:22 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:33:23 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:33:23 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783351930788:189:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783351930788:210:4)
+8:33:23 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783351930788:189:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783351930788:210:4)
+8:33:23 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:33:24 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783351930788:189:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783351930788:210:4)
+8:33:24 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:33:24 PM [vite] (client) [console.error] User status check failed: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783351930788:189:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783351930788:210:4)
+8:33:24 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:45:22 PM [vite] (client) [console.error] Login error: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:48:12 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:48:12 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+12:02:50 AM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+11:04:49 AM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+11:04:49 AM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+12:04:57 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+1:40:51 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+2:54:51 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+4:10:23 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+4:10:23 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:19:57 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+8:19:57 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+12:27:37 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+12:29:58 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+12:45:36 PM [vite] (client) [console.warn] Order follow-ups could not be loaded. AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+12:45:38 PM [vite] (client) [console.error] Orders loading error: AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+12:45:38 PM [vite] (client) [console.warn] Order follow-ups could not be loaded. AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+1:07:59 PM [vite] (client) [console.error] Website settings failed to load: AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+1:07:59 PM [vite] (client) [console.error] Website settings failed to load: AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+1:11:26 PM [vite] (client) [console.error] Website settings failed to load: AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+1:11:26 PM [vite] (client) [console.warn] Activity page view could not be logged. AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+1:11:26 PM [vite] (client) [console.error] User status check failed: AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async http://localhost:5173/src/App.jsx?t=1783498137832:192:21
+    at async load (http://localhost:5173/src/App.jsx?t=1783498137832:224:4)
+1:11:26 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+5:35:46 PM [vite] (client) Pre-transform error: Failed to load url /src/utils/websiteSettings.js (resolved id: D:/Factory Software/Hisbenew Industries ERP/frontend/src/utils/websiteSettings.js) in D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/Website.jsx. Does the file exist?
+5:35:46 PM [vite] (client) Pre-transform error: Failed to load url /src/utils/websiteSettings.js (resolved id: D:/Factory Software/Hisbenew Industries ERP/frontend/src/utils/websiteSettings.js) in D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/Website.jsx. Does the file exist?
+5:35:46 PM [vite] (client) Pre-transform error: Failed to load url /src/utils/websiteSettings.js (resolved id: D:/Factory Software/Hisbenew Industries ERP/frontend/src/utils/websiteSettings.js) in D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/Website.jsx. Does the file exist?
+5:35:46 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/WebsiteCatalog.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+5:35:46 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Website.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+5:35:46 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/WebsiteAdmin.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+5:36:25 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Website.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+5:37:18 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Website.css. This could be due to syntax errors or importing non-existent modules. (see errors above)
+5:38:24 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/WebsiteCatalog.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+5:39:10 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/WebsiteAdmin.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+5:42:16 PM [vite] (client) Pre-transform error: Failed to load url /src/pages/WebsiteAdmin.jsx (resolved id: D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx) in D:/Factory Software/Hisbenew Industries ERP/frontend/src/App.jsx. Does the file exist?
+5:43:57 PM [vite] (client) Pre-transform error: Failed to resolve import "./WebsiteAdmin.css" from "src/pages/WebsiteAdmin.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx:10:7
+  2  |  import api, { getStaticUrl } from "../api/api";
+  3  |  import { DEFAULT_WEBSITE_SETTINGS, WEBSITE_SECTIONS, getVisibleSectionOrder, normalizeWebsiteSettings, websitePreview...
+  4  |  import "./WebsiteAdmin.css";
+     |          ^
+  5  |  var _jsxFileName = "D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx";
+  6  |  import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+5:43:57 PM [vite] (client) Pre-transform error: Failed to resolve import "./WebsiteAdmin.css" from "src/pages/WebsiteAdmin.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx:10:7
+  2  |  import api, { getStaticUrl } from "../api/api";
+  3  |  import { DEFAULT_WEBSITE_SETTINGS, WEBSITE_SECTIONS, getVisibleSectionOrder, normalizeWebsiteSettings, websitePreview...
+  4  |  import "./WebsiteAdmin.css";
+     |          ^
+  5  |  var _jsxFileName = "D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx";
+  6  |  import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+5:43:57 PM [vite] Internal server error: Failed to resolve import "./WebsiteAdmin.css" from "src/pages/WebsiteAdmin.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx:10:7
+  2  |  import api, { getStaticUrl } from "../api/api";
+  3  |  import { DEFAULT_WEBSITE_SETTINGS, WEBSITE_SECTIONS, getVisibleSectionOrder, normalizeWebsiteSettings, websitePreview...
+  4  |  import "./WebsiteAdmin.css";
+     |          ^
+  5  |  var _jsxFileName = "D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx";
+  6  |  import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+      at TransformPluginContext._formatLog (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30602:39)
+      at TransformPluginContext.error (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30599:14)
+      at normalizeUrl (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27842:18)
+      at async file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27905:30
+      at async Promise.all (index 3)
+      at async TransformPluginContext.transform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27873:4)
+      at async EnvironmentPluginContainer.transform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30387:14)
+      at async loadAndTransform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:24646:26)
+      at async viteTransformMiddleware (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:24440:20)
+5:43:57 PM [vite] (client) Pre-transform error: Failed to resolve import "./WebsiteAdmin.css" from "src/pages/WebsiteAdmin.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx:10:7
+  2  |  import api, { getStaticUrl } from "../api/api";
+  3  |  import { DEFAULT_WEBSITE_SETTINGS, WEBSITE_SECTIONS, getVisibleSectionOrder, normalizeWebsiteSettings, websitePreview...
+  4  |  import "./WebsiteAdmin.css";
+     |          ^
+  5  |  var _jsxFileName = "D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx";
+  6  |  import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+5:43:57 PM [vite] (client) Pre-transform error: Failed to resolve import "./WebsiteAdmin.css" from "src/pages/WebsiteAdmin.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx:10:7
+  2  |  import api, { getStaticUrl } from "../api/api";
+  3  |  import { DEFAULT_WEBSITE_SETTINGS, WEBSITE_SECTIONS, getVisibleSectionOrder, normalizeWebsiteSettings, websitePreview...
+  4  |  import "./WebsiteAdmin.css";
+     |          ^
+  5  |  var _jsxFileName = "D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/WebsiteAdmin.jsx";
+  6  |  import { jsxDEV as _jsxDEV } from "react/jsx-dev-runtime";
+5:51:19 PM [vite] (client) [console.error] Website settings save failed: AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+5:51:20 PM [vite] (client) [console.error] User status check failed: AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+10:51:59 PM [vite] (client) Pre-transform error: Failed to resolve import "./pages/Fulfillment" from "src/App.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/App.jsx:20:24
+  17 |  import Shipping from "./pages/Shipping";
+  18 |  import ShippingBalance from "./pages/ShippingBalance";
+  19 |  import Fulfillment from "./pages/Fulfillment";
+     |                           ^
+  20 |  import FollowUps from "./pages/FollowUps";
+  21 |  import Payouts from "./pages/Payouts";
+10:51:59 PM [vite] Internal server error: Failed to resolve import "./pages/Fulfillment" from "src/App.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/App.jsx:20:24
+  17 |  import Shipping from "./pages/Shipping";
+  18 |  import ShippingBalance from "./pages/ShippingBalance";
+  19 |  import Fulfillment from "./pages/Fulfillment";
+     |                           ^
+  20 |  import FollowUps from "./pages/FollowUps";
+  21 |  import Payouts from "./pages/Payouts";
+      at TransformPluginContext._formatLog (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30602:39)
+      at TransformPluginContext.error (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30599:14)
+      at normalizeUrl (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27842:18)
+      at async file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27905:30
+      at async Promise.all (index 18)
+      at async TransformPluginContext.transform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27873:4)
+      at async EnvironmentPluginContainer.transform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30387:14)
+      at async loadAndTransform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:24646:26)
+10:51:59 PM [vite] (client) [console.error] [vite] Failed to reload /src/App.jsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+10:53:34 PM [vite] (client) Pre-transform error: Failed to resolve import "./pages/Fulfillment" from "src/App.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/App.jsx:20:24
+  17 |  import Shipping from "./pages/Shipping";
+  18 |  import ShippingBalance from "./pages/ShippingBalance";
+  19 |  import Fulfillment from "./pages/Fulfillment";
+     |                           ^
+  20 |  import FollowUps from "./pages/FollowUps";
+  21 |  import Payouts from "./pages/Payouts";
+10:53:34 PM [vite] (client) Pre-transform error: Failed to resolve import "./pages/Fulfillment" from "src/App.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/App.jsx:20:24
+  17 |  import Shipping from "./pages/Shipping";
+  18 |  import ShippingBalance from "./pages/ShippingBalance";
+  19 |  import Fulfillment from "./pages/Fulfillment";
+     |                           ^
+  20 |  import FollowUps from "./pages/FollowUps";
+  21 |  import Payouts from "./pages/Payouts";
+10:53:34 PM [vite] (client) Pre-transform error: Failed to resolve import "./pages/Fulfillment" from "src/App.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/App.jsx:20:24
+  17 |  import Shipping from "./pages/Shipping";
+  18 |  import ShippingBalance from "./pages/ShippingBalance";
+  19 |  import Fulfillment from "./pages/Fulfillment";
+     |                           ^
+  20 |  import FollowUps from "./pages/FollowUps";
+  21 |  import Payouts from "./pages/Payouts";
+10:53:34 PM [vite] Internal server error: Failed to resolve import "./pages/Fulfillment" from "src/App.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/App.jsx:20:24
+  17 |  import Shipping from "./pages/Shipping";
+  18 |  import ShippingBalance from "./pages/ShippingBalance";
+  19 |  import Fulfillment from "./pages/Fulfillment";
+     |                           ^
+  20 |  import FollowUps from "./pages/FollowUps";
+  21 |  import Payouts from "./pages/Payouts";
+      at TransformPluginContext._formatLog (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30602:39)
+      at TransformPluginContext.error (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30599:14)
+      at normalizeUrl (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27842:18)
+      at async file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27905:30
+      at async Promise.all (index 18)
+      at async TransformPluginContext.transform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27873:4)
+      at async EnvironmentPluginContainer.transform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30387:14)
+      at async loadAndTransform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:24646:26)
+10:54:51 PM [vite] (client) Pre-transform error: Failed to resolve import "./Fulfillment.css" from "src/pages/Fulfillment.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/Fulfillment.jsx:4:7
+  2  |  import api, { getStaticUrl } from "../api/api";
+  3  |  import { formatUtcLocal } from "../utils/dateUtils";
+  4  |  import "./Fulfillment.css";
+     |          ^
+  5  |  var _jsxFileName = "D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/Fulfillment.jsx";
+  6  |  import { jsxDEV as _jsxDEV, Fragment as _Fragment } from "react/jsx-dev-runtime";
+10:54:51 PM [vite] Internal server error: Failed to resolve import "./Fulfillment.css" from "src/pages/Fulfillment.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/Fulfillment.jsx:4:7
+  2  |  import api, { getStaticUrl } from "../api/api";
+  3  |  import { formatUtcLocal } from "../utils/dateUtils";
+  4  |  import "./Fulfillment.css";
+     |          ^
+  5  |  var _jsxFileName = "D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/Fulfillment.jsx";
+  6  |  import { jsxDEV as _jsxDEV, Fragment as _Fragment } from "react/jsx-dev-runtime";
+      at TransformPluginContext._formatLog (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30602:39)
+      at TransformPluginContext.error (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30599:14)
+      at normalizeUrl (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27842:18)
+      at async file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27905:30
+      at async Promise.all (index 3)
+      at async TransformPluginContext.transform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:27873:4)
+      at async EnvironmentPluginContainer.transform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:30387:14)
+      at async loadAndTransform (file:///D:/Factory%20Software/Hisbenew%20Industries%20ERP/frontend/node_modules/vite/dist/node/chunks/node.js:24646:26)
+10:54:51 PM [vite] (client) Pre-transform error: Failed to resolve import "./Fulfillment.css" from "src/pages/Fulfillment.jsx". Does the file exist?
+  Plugin: vite:import-analysis
+  File: D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/Fulfillment.jsx:4:7
+  2  |  import api, { getStaticUrl } from "../api/api";
+  3  |  import { formatUtcLocal } from "../utils/dateUtils";
+  4  |  import "./Fulfillment.css";
+     |          ^
+  5  |  var _jsxFileName = "D:/Factory Software/Hisbenew Industries ERP/frontend/src/pages/Fulfillment.jsx";
+  6  |  import { jsxDEV as _jsxDEV, Fragment as _Fragment } from "react/jsx-dev-runtime";
+11:13:26 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+11:13:41 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+11:13:43 PM [vite] (client) [console.error] Fulfillment loading error: AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async Promise.all (index 0)
+    at async loadFulfillment (http://localhost:5173/src/pages/Fulfillment.jsx?t=1783533384905:238:50)
+11:13:43 PM [vite] (client) [console.error] Fulfillment loading error: AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+    at Axios$1.request (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2854:37)
+    at async Promise.all (index 0)
+    at async loadFulfillment (http://localhost:5173/src/pages/Fulfillment.jsx?t=1783533384905:238:50)
+11:14:10 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+11:14:40 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+11:15:10 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+11:15:40 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+11:15:41 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+11:16:10 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Request failed with status code 404
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)
+11:16:12 PM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+11:29:09 PM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+11:29:09 PM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+11:32:12 PM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+11:32:12 PM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+11:32:28 PM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+11:32:28 PM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:30:02 AM [vite] (client) [console.error] User status check failed: AxiosError: timeout of 5000ms exceeded
+    at XMLHttpRequest.handleTimeout (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2144:11)
+9:30:02 AM [vite] (client) [console.warn] Sidebar counts could not be loaded. AxiosError: timeout of 5000ms exceeded
+    at XMLHttpRequest.handleTimeout (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2144:11)
+9:56:09 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:56:09 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:56:39 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+9:56:41 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:56:41 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:56:52 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:56:52 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:57:26 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:57:26 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:57:38 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:57:38 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:57:49 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+9:57:49 AM [vite] (client) [console.error] My Tasks load error: Error: Failed to fetch tasks
+    at http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:21:11
+    at async load (http://localhost:5173/src/pages/MyTasks.jsx?t=1783352358553:54:4)
+10:14:07 AM [vite] (client) [console.error] User status check failed: AxiosError: Network Error
+    at XMLHttpRequest.handleError (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2134:16)
+12:29:39 PM [vite] (client) [console.error] Login error: AxiosError: Request failed with status code 401
+    at settle (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:1752:14)
+    at XMLHttpRequest.onloadend (http://localhost:5173/node_modules/.vite/deps/axios.js?v=d132295d:2105:4)

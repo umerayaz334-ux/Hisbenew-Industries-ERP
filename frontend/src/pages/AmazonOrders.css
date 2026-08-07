@@ -1,0 +1,711 @@
+.amazon-orders-page {
+  min-height: 100vh;
+  background: #f6f7f8;
+  color: #22272d;
+}
+
+.amazon-orders-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 34px max(24px, calc((100% - 1460px) / 2)) 28px;
+  border-bottom: 1px solid #d9dde2;
+  background: #fff;
+}
+
+.amazon-orders-header h1,
+.amazon-orders-section-heading h2,
+.amazon-orders-modal h2 {
+  margin: 5px 0 0;
+  color: #20242a;
+  font-weight: 850;
+  letter-spacing: -0.025em;
+}
+
+.amazon-orders-header h1 {
+  font-size: clamp(30px, 4vw, 42px);
+}
+
+.amazon-orders-header p {
+  max-width: 770px;
+  margin: 9px 0 0;
+  color: #5c6570;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.amazon-orders-eyebrow {
+  color: #99600a;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.amazon-orders-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.amazon-orders-connection,
+.amazon-orders-safety {
+  display: inline-flex;
+  min-height: 38px;
+  padding: 0 12px;
+  align-items: center;
+  border: 1px solid #e0b0a9;
+  border-radius: 999px;
+  background: #fff0ee;
+  color: #91382c;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.amazon-orders-connection.is-connected {
+  border-color: #add8bf;
+  background: #ebf8f0;
+  color: #246941;
+}
+
+.amazon-orders-safety {
+  border-color: #b9ccda;
+  background: #f0f7fb;
+  color: #365d77;
+}
+
+.amazon-orders-header-actions select,
+.amazon-orders-primary-button {
+  min-height: 40px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.amazon-orders-header-actions select {
+  padding: 0 10px;
+  border: 1px solid #c7cdd4;
+  background: #fff;
+  color: #37434e;
+}
+
+.amazon-orders-primary-button {
+  padding: 0 16px;
+  border: 1px solid #a86107;
+  background: #b86d08;
+  color: #fff;
+  cursor: pointer;
+}
+
+.amazon-orders-primary-button.is-secondary {
+  border-color: #8794a0;
+  background: #fff;
+  color: #37434e;
+}
+
+.amazon-orders-primary-button:disabled,
+.amazon-orders-actions button:disabled,
+.amazon-orders-job-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.amazon-orders-content {
+  display: grid;
+  gap: 20px;
+  width: min(1460px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 64px;
+}
+
+.amazon-orders-notice,
+.amazon-orders-job-progress,
+.amazon-orders-access {
+  padding: 13px 16px;
+  border: 1px solid #d9dde2;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.amazon-orders-access {
+  width: min(720px, calc(100% - 48px));
+  margin: 50px auto;
+}
+
+.amazon-orders-notice.is-success {
+  border-color: #b8dcc8;
+  background: #eef9f2;
+  color: #236640;
+}
+
+.amazon-orders-notice.is-error {
+  border-color: #e4bbb6;
+  background: #fff1ef;
+  color: #8d3024;
+}
+
+.amazon-orders-job-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-color: #c5d8e7;
+  background: #f2f8fc;
+  color: #335a76;
+}
+
+.amazon-orders-job-progress p {
+  margin: 3px 0 0;
+}
+
+.amazon-orders-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #c6dceb;
+  border-top-color: #3b7094;
+  border-radius: 50%;
+  animation: amazon-orders-spin 0.8s linear infinite;
+}
+
+@keyframes amazon-orders-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.amazon-orders-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.amazon-orders-summary-grid article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #d9dde2;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 7px 20px rgba(31, 41, 55, 0.035);
+}
+
+.amazon-orders-summary-grid span,
+.amazon-orders-summary-grid small {
+  color: #727b85;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.amazon-orders-summary-grid span {
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.amazon-orders-summary-grid strong {
+  overflow: hidden;
+  color: #25313b;
+  font-size: 24px;
+  text-overflow: ellipsis;
+}
+
+.amazon-orders-summary-grid small {
+  line-height: 1.4;
+}
+
+.amazon-orders-safety-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #cbd9e3;
+  border-radius: 10px;
+  background: #f5f9fc;
+}
+
+.amazon-orders-safety-strip div {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-right: 1px solid #d7e1e8;
+}
+
+.amazon-orders-safety-strip div:last-child {
+  border-right: 0;
+}
+
+.amazon-orders-safety-strip strong {
+  color: #365d77;
+  font-size: 10px;
+}
+
+.amazon-orders-safety-strip span {
+  color: #697a87;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.amazon-orders-workspace,
+.amazon-orders-jobs {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid #d9dde2;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(31, 41, 55, 0.04);
+}
+
+.amazon-orders-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.amazon-orders-section-heading h2 {
+  font-size: 21px;
+}
+
+.amazon-orders-section-heading > span {
+  color: #727b85;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.amazon-orders-filters {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) 175px 175px auto;
+  gap: 12px;
+  align-items: end;
+  margin: 20px 0;
+  padding: 13px;
+  border: 1px solid #e1e4e8;
+  border-radius: 9px;
+  background: #fafbfc;
+}
+
+.amazon-orders-filters label:not(.amazon-orders-check) {
+  display: grid;
+  gap: 6px;
+}
+
+.amazon-orders-filters label > span {
+  color: #6d7782;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.amazon-orders-filters input,
+.amazon-orders-filters select {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #cfd5db;
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 11px;
+}
+
+.amazon-orders-check {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 6px;
+  color: #4d5863;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.amazon-orders-check input {
+  min-height: auto;
+}
+
+.amazon-orders-table-wrap {
+  overflow: auto;
+  border: 1px solid #dfe3e7;
+  border-radius: 8px;
+}
+
+.amazon-orders-table {
+  width: 100%;
+  min-width: 1280px;
+  border-collapse: collapse;
+}
+
+.amazon-orders-table th,
+.amazon-orders-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e4e7ea;
+  text-align: left;
+  vertical-align: top;
+}
+
+.amazon-orders-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f5f7f9;
+  color: #66717b;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.amazon-orders-table td {
+  color: #3d4650;
+  font-size: 10px;
+}
+
+.amazon-orders-table tbody tr:hover:not(.amazon-orders-detail-row) td {
+  background: #fbfcfd;
+}
+
+.amazon-orders-order-id,
+.amazon-orders-status-stack {
+  display: grid;
+  gap: 4px;
+}
+
+.amazon-orders-order-id {
+  min-width: 170px;
+}
+
+.amazon-orders-order-id span,
+.amazon-orders-order-id small,
+.amazon-orders-status-stack small,
+.amazon-orders-cell-note {
+  display: block;
+  color: #737e89;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.amazon-orders-status,
+.amazon-orders-mapping,
+.amazon-orders-job-status {
+  display: inline-flex;
+  width: fit-content;
+  padding: 5px 8px;
+  align-items: center;
+  border: 1px solid #c9d5df;
+  border-radius: 999px;
+  background: #f1f6fa;
+  color: #3b6079;
+  font-size: 9px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.amazon-orders-status.is-success,
+.amazon-orders-job-status.is-success,
+.amazon-orders-mapping.is-mapped {
+  border-color: #b8d8c5;
+  background: #edf8f1;
+  color: #2c6b45;
+}
+
+.amazon-orders-status.is-error,
+.amazon-orders-job-status.is-error {
+  border-color: #e0b7b1;
+  background: #fff1ef;
+  color: #8b3529;
+}
+
+.amazon-orders-status.is-warning,
+.amazon-orders-job-status.is-warning,
+.amazon-orders-mapping.is-unmapped {
+  border-color: #e4c681;
+  background: #fff8df;
+  color: #765813;
+}
+
+.amazon-orders-actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  min-width: 150px;
+}
+
+.amazon-orders-actions button,
+.amazon-orders-detail-heading button,
+.amazon-orders-job-list button,
+.amazon-orders-modal header button {
+  padding: 6px 8px;
+  border: 1px solid #c7cdd4;
+  border-radius: 5px;
+  background: #fff;
+  color: #3f4b57;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.amazon-orders-detail-row td {
+  padding: 0;
+  background: #f8fafb;
+}
+
+.amazon-orders-detail {
+  display: grid;
+  gap: 13px;
+  padding: 18px;
+}
+
+.amazon-orders-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.amazon-orders-detail-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.amazon-orders-detail-heading span {
+  color: #737e89;
+  font-size: 9px;
+}
+
+.amazon-orders-issues {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.amazon-orders-issues span {
+  padding: 7px 9px;
+  border: 1px solid #e4c681;
+  border-radius: 6px;
+  background: #fff8df;
+  color: #765813;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.amazon-orders-item-list {
+  display: grid;
+  gap: 8px;
+}
+
+.amazon-orders-item-list article {
+  display: grid;
+  grid-template-columns: minmax(270px, 1fr) minmax(400px, 1fr);
+  gap: 18px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #dfe4e8;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.amazon-orders-item-list article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.amazon-orders-item-list article span,
+.amazon-orders-item-list article small {
+  color: #737e89;
+  font-size: 9px;
+}
+
+.amazon-orders-item-list dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+}
+
+.amazon-orders-item-list dl div {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 6px;
+  background: #f7f9fa;
+}
+
+.amazon-orders-item-list dt {
+  color: #737e89;
+  font-size: 8px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.amazon-orders-item-list dd {
+  margin: 0;
+  color: #303b45;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.amazon-orders-empty {
+  padding: 42px 20px;
+  color: #737d87;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.amazon-orders-empty.is-compact {
+  padding: 22px 0 4px;
+}
+
+.amazon-orders-job-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.amazon-orders-job-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid #e0e4e8;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.amazon-orders-job-list article > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.amazon-orders-job-list article > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.amazon-orders-job-list article span,
+.amazon-orders-job-list article small {
+  color: #747f89;
+  font-size: 9px;
+}
+
+.amazon-orders-job-list article small {
+  color: #8a3b2e;
+}
+
+.amazon-orders-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(20, 26, 32, 0.48);
+}
+
+.amazon-orders-modal {
+  width: min(760px, 100%);
+  max-height: min(780px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 22px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(20, 26, 32, 0.25);
+}
+
+.amazon-orders-modal > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e1e5e8;
+}
+
+.amazon-orders-modal h2 {
+  font-size: 22px;
+}
+
+.amazon-orders-history-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.amazon-orders-history-list article {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid #e0e4e8;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.amazon-orders-history-list article > span,
+.amazon-orders-history-list small {
+  color: #737e89;
+  font-size: 9px;
+}
+
+.amazon-orders-history-list article > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #52606c;
+}
+
+@media (max-width: 1180px) {
+  .amazon-orders-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .amazon-orders-header {
+    display: grid;
+  }
+
+  .amazon-orders-header-actions {
+    justify-content: flex-start;
+  }
+
+  .amazon-orders-content {
+    width: min(100% - 24px, 1460px);
+  }
+
+  .amazon-orders-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .amazon-orders-safety-strip,
+  .amazon-orders-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .amazon-orders-safety-strip div {
+    border-right: 0;
+    border-bottom: 1px solid #d7e1e8;
+  }
+
+  .amazon-orders-safety-strip div:last-child {
+    border-bottom: 0;
+  }
+
+  .amazon-orders-workspace,
+  .amazon-orders-jobs {
+    padding: 15px;
+  }
+
+  .amazon-orders-section-heading {
+    display: grid;
+  }
+}

@@ -1,0 +1,228 @@
+.school-attendance-page { min-height: 100vh; padding: 28px; background: #f4f5fa; color: #17182b; }
+.attendance-header { margin-bottom: 15px; }
+.attendance-date-controls { display: flex; align-items: end; gap: 9px; }
+.attendance-date-controls label { display: grid; gap: 5px; color: #77798c; font-size: 10px; font-weight: 900; }
+.attendance-date-controls select,
+.attendance-date-controls input { min-height: 42px; padding: 8px 11px; border: 1px solid #d9dae7; border-radius: 9px; background: #fff; color: #292a40; font: inherit; font-size: 12px; }
+.attendance-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.attendance-kpis article { position: relative; overflow: hidden; min-height: 104px; padding: 17px; border: 1px solid #e0e2ed; border-radius: 15px; background: #fff; }
+.attendance-kpis article::before { position: absolute; top: 0; right: 0; left: 0; height: 4px; background: var(--school-primary, #191797); content: ""; }
+.attendance-kpis article.is-danger::before { background: #d04437; }
+.attendance-kpis article.is-warning::before { background: #e4a400; }
+.attendance-kpis span,
+.attendance-kpis strong,
+.attendance-kpis small { display: block; }
+.attendance-kpis span { color: #797b8f; font-size: 11px; font-weight: 850; }
+.attendance-kpis strong { margin-top: 8px; color: var(--school-primary, #191797); font-size: 29px; font-weight: 950; }
+.attendance-kpis small { margin-top: 3px; color: #a0a1b0; font-size: 9px; font-weight: 700; }
+.attendance-tabs { display: flex; gap: 4px; margin-bottom: 12px; padding: 5px; overflow-x: auto; border: 1px solid #e0e2ed; border-radius: 13px; background: #fff; }
+.attendance-tabs button { display: flex; min-height: 40px; flex: 0 0 auto; align-items: center; gap: 7px; padding: 0 13px; border: 0; border-radius: 9px; background: transparent; color: #696b7f; cursor: pointer; font: inherit; font-size: 11px; font-weight: 900; }
+.attendance-tabs button.is-active { background: var(--school-primary, #191797); color: #fff; }
+.attendance-tabs button span { display: grid; min-width: 20px; height: 20px; place-items: center; border-radius: 999px; background: #fff0ed; color: #a43a2d; font-size: 9px; }
+.attendance-workspace { min-width: 0; }
+.attendance-overview-grid,
+.attendance-report-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+.attendance-panel { min-width: 0; padding: 17px; border: 1px solid #e0e2ed; border-radius: 16px; background: #fff; }
+.attendance-panel.is-wide { grid-column: 1 / -1; }
+.attendance-panel-title h2,
+.attendance-panel-title p { margin: 0; }
+.attendance-panel-title h2 { color: #232438; font-size: 16px; font-weight: 950; }
+.attendance-panel-title p { margin-top: 4px; color: #858698; font-size: 10px; font-weight: 700; }
+.attendance-session-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+.attendance-session-grid > button { min-width: 0; padding: 13px; border: 1px solid #e3e4ed; border-radius: 11px; background: #fbfbfe; color: inherit; cursor: pointer; text-align: left; }
+.attendance-session-grid > button:hover { border-color: var(--school-primary, #191797); background: #fff; }
+.attendance-session-grid strong,
+.attendance-session-grid small { display: block; }
+.attendance-session-grid strong { margin-top: 8px; overflow: hidden; color: #2e2f43; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.attendance-session-grid small { margin-top: 4px; color: #898a9c; font-size: 9px; }
+.attendance-session-grid button > div { display: flex; gap: 8px; margin-top: 10px; }
+.attendance-session-grid button > div b { color: #197247; font-size: 9px; }
+.attendance-session-grid button > div b.is-absent { color: #a43a2d; }
+.attendance-type { display: inline-flex; padding: 4px 7px; border-radius: 999px; background: #eef0ff; color: #4642a1; font-size: 8px; font-weight: 950; text-transform: uppercase; }
+.attendance-type.is-subject { background: #fff6d8; color: #7b5c00; }
+.attendance-alert-list { display: grid; gap: 8px; margin-top: 13px; }
+.attendance-alert-list article { display: grid; grid-template-columns: 10px 1fr; gap: 8px; padding: 10px; border: 1px solid #e6e7ef; border-radius: 9px; }
+.attendance-alert-list article > span { width: 8px; height: 8px; margin-top: 3px; border-radius: 50%; background: #e4a400; }
+.attendance-alert-list article > span.is-sent { background: #208456; }
+.attendance-alert-list strong,
+.attendance-alert-list small { display: block; }
+.attendance-alert-list strong { font-size: 11px; }
+.attendance-alert-list small { margin-top: 2px; color: #898b9c; font-size: 9px; }
+.attendance-alert-list p { margin: 5px 0 0; color: #686a7e; font-size: 10px; line-height: 1.45; }
+.attendance-device-list { display: grid; gap: 8px; margin-top: 14px; }
+.attendance-device-list article { display: flex; align-items: center; justify-content: space-between; padding: 10px 11px; border: 1px solid #e3e4ed; border-radius: 9px; background: #fbfbfe; }
+.attendance-device-list b { color: var(--school-primary, #191797); font-size: 11px; }
+.attendance-device-list span { color: #267650; font-size: 9px; font-weight: 850; }
+.attendance-panel-note { margin: 11px 0 0; color: #8a8b9c; font-size: 9px; line-height: 1.5; }
+.attendance-empty { display: grid; min-height: 190px; place-items: center; align-content: center; padding: 20px; text-align: center; }
+.attendance-empty.is-compact { min-height: 110px; }
+.attendance-empty strong { font-size: 14px; }
+.attendance-empty p { max-width: 430px; margin: 6px 0 0; color: #898b9d; font-size: 10px; line-height: 1.5; }
+.attendance-loading { display: grid; min-height: 360px; place-items: center; border: 1px solid #e0e2ed; border-radius: 16px; background: #fff; color: #77798d; font-size: 12px; font-weight: 850; }
+.attendance-register-layout { display: grid; gap: 13px; }
+.attendance-register-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+.attendance-register-form label,
+.attendance-leave-form label,
+.attendance-policy-form label { display: grid; gap: 5px; color: #626478; font-size: 9px; font-weight: 900; }
+.attendance-register-form input,
+.attendance-register-form select,
+.attendance-leave-form input,
+.attendance-leave-form select,
+.attendance-leave-form textarea,
+.attendance-policy-form input,
+.attendance-policy-form select { width: 100%; min-height: 41px; padding: 8px 10px; border: 1px solid #d9dae7; border-radius: 9px; outline: 0; background: #fff; color: #292a40; font: inherit; font-size: 11px; }
+.attendance-register-form > button,
+.attendance-leave-form > button,
+.attendance-policy-form > button,
+.attendance-staff-header > button,
+.attendance-report-header button { min-height: 41px; align-self: end; padding: 0 13px; border: 0; border-radius: 9px; background: var(--school-primary, #191797); color: #fff; cursor: pointer; font: inherit; font-size: 10px; font-weight: 900; }
+.attendance-register-form button:disabled,
+.attendance-leave-form button:disabled { cursor: not-allowed; opacity: .55; }
+.attendance-register-panel { padding: 0; overflow: hidden; }
+.attendance-register-title { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 17px; border-bottom: 1px solid #e7e8ef; }
+.attendance-register-title h2,
+.attendance-register-title p { margin: 0; }
+.attendance-register-title h2 { margin-top: 7px; font-size: 18px; }
+.attendance-register-title p { margin-top: 3px; color: #858698; font-size: 10px; }
+.attendance-register-title > div:last-child { display: flex; gap: 6px; }
+.attendance-register-title > div:last-child button { padding: 7px 9px; border: 1px solid #dadbe7; border-radius: 7px; background: #fff; color: #55576b; cursor: pointer; font-size: 9px; font-weight: 850; }
+.attendance-table-wrap { overflow-x: auto; }
+.attendance-table { width: 100%; min-width: 1050px; border-collapse: collapse; }
+.attendance-table th { padding: 10px 12px; border-bottom: 1px solid #e4e5ed; background: #f8f8fc; color: #797b8e; font-size: 8px; font-weight: 950; letter-spacing: .5px; text-align: left; text-transform: uppercase; }
+.attendance-table td { padding: 10px 12px; border-bottom: 1px solid #eeeeF4; color: #35364a; font-size: 10px; vertical-align: middle; }
+.attendance-table td > strong,
+.attendance-table td > small { display: block; }
+.attendance-table td > small { margin-top: 3px; color: #898a9b; font-size: 8px; }
+.attendance-table input,
+.attendance-table select { width: 100%; min-height: 34px; padding: 6px 7px; border: 1px solid #dddde8; border-radius: 7px; background: #fff; font: inherit; font-size: 9px; }
+.attendance-person { display: flex; align-items: center; gap: 8px; min-width: 160px; }
+.attendance-person > img,
+.attendance-person > span { display: grid; width: 31px; height: 31px; flex: 0 0 31px; place-items: center; border-radius: 8px; background: #efeffb; color: var(--school-primary, #191797); object-fit: cover; font-weight: 900; }
+.attendance-person strong,
+.attendance-person small { display: block; }
+.attendance-person strong { font-size: 10px; }
+.attendance-person small { margin-top: 2px; color: #8d8e9f; font-size: 8px; }
+.attendance-status-select { min-width: 90px; font-weight: 900 !important; }
+.attendance-status-select.is-present { background: #edf9f2; color: #17643c; }
+.attendance-status-select.is-absent { background: #fff0ed; color: #9f3328; }
+.attendance-status-select.is-late { background: #fff8df; color: #7d5c00; }
+.attendance-status-select.is-leave,
+.attendance-status-select.is-excused { background: #eef1ff; color: #4549a0; }
+.attendance-file-link { display: inline-flex; margin-top: 4px; color: var(--school-primary, #191797); cursor: pointer; font-size: 8px; font-weight: 900; }
+.attendance-file-link input { display: none; }
+.attendance-correction-link { padding: 6px 8px; border: 0; border-radius: 6px; background: #f0f1f7; color: #4d4f64; cursor: pointer; font-size: 8px; font-weight: 900; }
+.attendance-register-actions { display: flex; justify-content: flex-end; gap: 7px; padding: 13px 16px; background: #fbfbfe; }
+.attendance-register-actions button { min-height: 37px; padding: 0 13px; border: 1px solid #d9dae6; border-radius: 8px; background: #fff; color: #4d4f63; cursor: pointer; font: inherit; font-size: 9px; font-weight: 900; }
+.attendance-register-actions button.is-primary { border-color: var(--school-primary, #191797); background: var(--school-primary, #191797); color: #fff; }
+.attendance-staff-header,
+.attendance-report-header { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.staff-attendance-table { min-width: 1120px; margin-top: 15px; }
+.attendance-two-column { display: grid; grid-template-columns: minmax(290px, .75fr) minmax(0, 1.25fr); gap: 13px; align-items: start; }
+.attendance-leave-form { display: grid; gap: 10px; margin-top: 15px; }
+.attendance-leave-form textarea { resize: vertical; }
+.attendance-date-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.attendance-card-list { display: grid; gap: 8px; margin-top: 13px; }
+.attendance-card-list article { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid #e3e4ed; border-radius: 10px; background: #fbfbfe; }
+.attendance-card-main { min-width: 0; }
+.attendance-card-main > strong,
+.attendance-card-main > small { display: block; }
+.attendance-card-main > strong { margin-top: 6px; font-size: 12px; }
+.attendance-card-main > small { margin-top: 3px; color: #87899a; font-size: 9px; }
+.attendance-card-main > p { margin: 7px 0 0; color: #626478; font-size: 10px; line-height: 1.45; }
+.attendance-card-main > a { display: inline-flex; margin-top: 7px; color: var(--school-primary, #191797); font-size: 9px; font-weight: 900; text-decoration: none; }
+.attendance-status-pill { display: inline-flex; padding: 4px 7px; border-radius: 999px; background: #eff0f5; color: #656778; font-size: 8px; font-weight: 950; }
+.attendance-status-pill.is-approved { background: #e8f8ef; color: #187548; }
+.attendance-status-pill.is-rejected { background: #fff0ed; color: #a43a2d; }
+.attendance-status-pill.is-pending { background: #fff7dd; color: #7c5d00; }
+.attendance-card-actions { display: grid; gap: 5px; }
+.attendance-card-actions button { min-width: 70px; padding: 7px 8px; border: 0; border-radius: 7px; background: #e8f8ef; color: #187548; cursor: pointer; font-size: 8px; font-weight: 900; }
+.attendance-card-actions button.is-danger { background: #fff0ed; color: #a43a2d; }
+.attendance-audit-list { display: grid; gap: 0; max-height: 590px; margin-top: 13px; overflow-y: auto; }
+.attendance-audit-list article { display: grid; grid-template-columns: 16px 1fr; gap: 7px; min-height: 62px; }
+.attendance-audit-list article > span { position: relative; }
+.attendance-audit-list article > span::before { position: absolute; top: 5px; left: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--school-primary, #191797); content: ""; }
+.attendance-audit-list article > span::after { position: absolute; top: 14px; bottom: -2px; left: 7px; width: 1px; background: #dbdce7; content: ""; }
+.attendance-audit-list article:last-child > span::after { display: none; }
+.attendance-audit-list strong,
+.attendance-audit-list small { display: block; }
+.attendance-audit-list strong { font-size: 10px; }
+.attendance-audit-list small { margin-top: 2px; color: #8a8b9c; font-size: 8px; }
+.attendance-audit-list p { margin: 4px 0 0; color: #696b7d; font-size: 9px; }
+.attendance-report-header > div:last-child { display: flex; gap: 6px; }
+.attendance-report-header input,
+.attendance-report-header select { min-height: 37px; padding: 7px 8px; border: 1px solid #d9dae6; border-radius: 8px; background: #fff; font: inherit; font-size: 9px; }
+.attendance-summary-table { min-width: 820px; margin-top: 14px; }
+.attendance-summary-table tr.is-low { background: #fff9f0; }
+.attendance-percent { display: inline-block; width: 90px; height: 5px; margin-right: 7px; overflow: hidden; border-radius: 999px; background: #ebecef; vertical-align: middle; }
+.attendance-percent span { display: block; height: 100%; background: var(--school-primary, #191797); }
+.attendance-summary-table tr.is-low .attendance-percent span { background: #d04437; }
+.attendance-warning-list { display: grid; gap: 7px; margin-top: 13px; }
+.attendance-warning-list article { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px; border: 1px solid #e4e5ed; border-radius: 9px; }
+.attendance-warning-list strong { font-size: 10px; }
+.attendance-warning-list span { color: #b03e32; font-size: 11px; font-weight: 950; }
+.attendance-warning-list small { grid-column: 1 / -1; color: #87899b; font-size: 8px; }
+.attendance-policy-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+.attendance-policy-form .attendance-check { display: flex; grid-column: 1 / -1; align-items: center; gap: 8px; }
+.attendance-check input { width: 17px; min-height: 17px; }
+.attendance-policy-readonly { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 14px 0 0; }
+.attendance-policy-readonly div { padding: 10px; border: 1px solid #e3e4ed; border-radius: 9px; }
+.attendance-policy-readonly dt { color: #888a9b; font-size: 8px; font-weight: 900; text-transform: uppercase; }
+.attendance-policy-readonly dd { margin: 4px 0 0; font-size: 11px; font-weight: 850; }
+.attendance-modal-backdrop { position: fixed; z-index: 7000; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(12, 13, 42, .6); backdrop-filter: blur(5px); }
+.attendance-modal { width: min(620px, 100%); max-height: calc(100dvh - 36px); overflow-y: auto; border-radius: 18px; background: #fff; box-shadow: 0 30px 80px rgba(7, 8, 31, .3); }
+.attendance-modal > header { display: flex; align-items: center; justify-content: space-between; padding: 17px 19px; border-bottom: 1px solid #e8e9f0; }
+.attendance-modal header p,
+.attendance-modal header h2 { margin: 0; }
+.attendance-modal header p { color: var(--school-primary, #191797); font-size: 9px; font-weight: 950; text-transform: uppercase; }
+.attendance-modal header h2 { margin-top: 3px; font-size: 20px; }
+.attendance-modal header button { width: 34px; height: 34px; border: 0; border-radius: 50%; background: #f0f1f5; cursor: pointer; font-size: 20px; }
+.attendance-modal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 19px; }
+.attendance-modal-grid label { display: grid; gap: 5px; color: #65677a; font-size: 9px; font-weight: 900; }
+.attendance-modal-grid label.is-wide { grid-column: 1 / -1; }
+.attendance-modal-grid input,
+.attendance-modal-grid select,
+.attendance-modal-grid textarea { width: 100%; min-height: 41px; padding: 8px 10px; border: 1px solid #d9dae7; border-radius: 9px; font: inherit; font-size: 11px; }
+.attendance-modal > footer { display: flex; justify-content: flex-end; gap: 7px; padding: 0 19px 19px; }
+.attendance-modal > footer button { min-height: 39px; padding: 0 13px; border: 1px solid #d9dae6; border-radius: 8px; background: #fff; cursor: pointer; font: inherit; font-size: 9px; font-weight: 900; }
+.attendance-modal > footer button.is-primary { border-color: var(--school-primary, #191797); background: var(--school-primary, #191797); color: #fff; }
+
+@media (max-width: 1000px) {
+  .attendance-session-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .attendance-register-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .attendance-policy-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 900px) {
+  .school-attendance-page { min-height: calc(100dvh - 74px); padding: 14px 12px 24px; }
+  .attendance-header { align-items: stretch; }
+  .attendance-date-controls { display: grid; grid-template-columns: 1fr 1fr; }
+  .attendance-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .attendance-kpis article { min-height: 88px; padding: 14px; }
+  .attendance-kpis strong { font-size: 25px; }
+  .attendance-two-column,
+  .attendance-overview-grid,
+  .attendance-report-layout { grid-template-columns: 1fr; }
+  .attendance-panel.is-wide { grid-column: auto; }
+  .attendance-report-header { align-items: stretch; flex-direction: column; }
+  .attendance-report-header > div:last-child { overflow-x: auto; }
+}
+
+@media (max-width: 560px) {
+  .attendance-date-controls,
+  .attendance-register-form,
+  .attendance-policy-form,
+  .attendance-policy-readonly,
+  .attendance-modal-grid { grid-template-columns: 1fr; }
+  .attendance-session-grid { grid-template-columns: 1fr; }
+  .attendance-tabs { margin-right: -12px; margin-left: -12px; border-right: 0; border-left: 0; border-radius: 0; }
+  .attendance-register-title { align-items: stretch; flex-direction: column; }
+  .attendance-register-title > div:last-child { display: grid; grid-template-columns: 1fr 1fr; }
+  .attendance-register-actions { align-items: stretch; flex-direction: column; }
+  .attendance-register-actions button { width: 100%; }
+  .attendance-card-list article { align-items: stretch; flex-direction: column; }
+  .attendance-card-actions { grid-template-columns: 1fr 1fr; }
+  .attendance-modal-backdrop { align-items: end; padding: 8px; }
+  .attendance-modal { max-height: calc(100dvh - 16px); border-radius: 16px; }
+  .attendance-modal-grid label.is-wide,
+  .attendance-policy-form .attendance-check { grid-column: auto; }
+}

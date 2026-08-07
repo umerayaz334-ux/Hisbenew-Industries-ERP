@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Dar-e-Arqam</title>
+  <desc id="description">An open book in front of a yellow rising sun on a deep blue background.</desc>
+  <rect width="512" height="512" rx="48" fill="#191797"/>
+  <rect x="18" y="18" width="476" height="476" rx="34" fill="none" stroke="#fff" stroke-width="12"/>
+  <path fill="#fff200" d="M36 326h440v142H36z"/>
+  <g fill="#fff200" transform="translate(256 285)">
+    <path d="M0-190 25-45-25-45z"/>
+    <path d="m-83-168 54 132-72-118z"/>
+    <path d="m83-168-18 145 90-132z"/>
+    <path d="m-156-121 112 95-137-54z"/>
+    <path d="m156-121-102 104 136-63z"/>
+    <path d="m-205-56 151 45-168 8z"/>
+    <path d="m205-56-145 57 162-4z"/>
+  </g>
+  <g stroke="#191797" stroke-linejoin="round" stroke-width="8">
+    <path fill="#fff" d="M84 352 128 242c48 12 91-7 128 35 37-42 80-23 128-35l44 110c-66-11-116-24-172 18-56-42-106-29-172-18z"/>
+    <path fill="#fff" d="M106 339 145 228c44 10 79-11 111 34 32-45 67-24 111-34l39 111c-62-17-108-34-150 18-42-52-88-35-150-18z"/>
+    <path fill="none" d="M256 262v95M111 339c61 17 103-26 145 18M401 339c-61 17-103-26-145 18"/>
+    <path fill="#191797" d="M84 352c70 8 119 8 172 30 53-22 102-22 172-30l-5 30c-67-8-117-10-155 15-3 22-21 22-24 0-38-25-88-23-155-15z"/>
+  </g>
+  <text x="256" y="455" fill="#191797" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="900" text-anchor="middle" letter-spacing="-1">DAR-E-ARQAM</text>
+</svg>

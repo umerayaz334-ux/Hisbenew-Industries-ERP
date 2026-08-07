@@ -1,0 +1,769 @@
+.amazon-inbound-page {
+  min-height: 100%;
+  padding: 28px;
+  color: #17221c;
+  background:
+    radial-gradient(circle at 92% 5%, rgba(242, 169, 59, 0.16), transparent 28rem),
+    linear-gradient(160deg, #f8f8f2 0%, #f2f5ed 52%, #edf1e9 100%);
+}
+
+.amazon-inbound-header,
+.amazon-inbound-section-heading,
+.amazon-inbound-modal-heading,
+.amazon-inbound-header-actions,
+.amazon-inbound-actions,
+.amazon-inbound-tabs,
+.amazon-inbound-detail-actions,
+.amazon-inbound-modal-actions,
+.amazon-inbound-form-section > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amazon-inbound-header {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.amazon-inbound-header h1,
+.amazon-inbound-section-heading h2,
+.amazon-inbound-modal h2,
+.amazon-inbound-detail h3 {
+  margin: 0;
+  color: #102719;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.amazon-inbound-header h1 {
+  margin-top: 4px;
+  font-size: clamp(2rem, 5vw, 4.1rem);
+  letter-spacing: -0.045em;
+}
+
+.amazon-inbound-header p {
+  max-width: 780px;
+  margin: 10px 0 0;
+  color: #55615a;
+  line-height: 1.65;
+}
+
+.amazon-inbound-eyebrow {
+  color: #a15d0b;
+  font-size: 0.73rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.amazon-inbound-header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.amazon-inbound-header button,
+.amazon-inbound-actions button,
+.amazon-inbound-tabs button,
+.amazon-inbound-detail-actions button,
+.amazon-inbound-modal button,
+.amazon-inbound-form-section button,
+.amazon-inbound-option button {
+  min-height: 38px;
+  padding: 8px 13px;
+  border: 1px solid #cbd2c7;
+  border-radius: 10px;
+  color: #264331;
+  background: #fff;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.amazon-inbound-header button:hover,
+.amazon-inbound-actions button:hover,
+.amazon-inbound-detail-actions button:hover,
+.amazon-inbound-modal button:hover {
+  border-color: #8da092;
+  background: #f7faf6;
+}
+
+.amazon-inbound-header button.is-primary,
+.amazon-inbound-modal button.is-primary {
+  border-color: #163d27;
+  color: #fff;
+  background: #163d27;
+}
+
+.amazon-inbound-header button:disabled,
+.amazon-inbound-actions button:disabled,
+.amazon-inbound-modal button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.amazon-inbound-connection,
+.amazon-inbound-status,
+.amazon-inbound-issue,
+.amazon-inbound-clear {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 28px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.amazon-inbound-connection {
+  color: #6b3d06;
+  background: #fff0d4;
+}
+
+.amazon-inbound-connection.is-connected,
+.amazon-inbound-status.is-success,
+.amazon-inbound-clear {
+  color: #176237;
+  background: #dff3e6;
+}
+
+.amazon-inbound-status.is-progress {
+  color: #125b77;
+  background: #dceff5;
+}
+
+.amazon-inbound-status.is-working {
+  color: #755208;
+  background: #fff2c9;
+}
+
+.amazon-inbound-status.is-error,
+.amazon-inbound-issue {
+  color: #912d2d;
+  background: #fbe2e2;
+}
+
+.amazon-inbound-safety,
+.amazon-inbound-notice,
+.amazon-inbound-progress,
+.amazon-inbound-workspace,
+.amazon-inbound-jobs {
+  border: 1px solid rgba(41, 66, 49, 0.13);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 14px 34px rgba(36, 56, 42, 0.06);
+}
+
+.amazon-inbound-safety {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  color: #44544a;
+  font-size: 0.82rem;
+}
+
+.amazon-inbound-safety strong {
+  color: #163d27;
+}
+
+.amazon-inbound-notice {
+  padding: 12px 15px;
+  margin: 12px 0;
+  font-size: 0.86rem;
+}
+
+.amazon-inbound-notice.is-success {
+  border-color: #b9dcc6;
+  color: #176237;
+  background: #edf8f0;
+}
+
+.amazon-inbound-notice.is-error {
+  border-color: #ebc2c2;
+  color: #912d2d;
+  background: #fff2f2;
+}
+
+.amazon-inbound-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  margin-bottom: 14px;
+}
+
+.amazon-inbound-progress div {
+  display: grid;
+  gap: 2px;
+}
+
+.amazon-inbound-progress small {
+  color: #657168;
+}
+
+.amazon-inbound-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #d5ddd6;
+  border-top-color: #a15d0b;
+  border-radius: 50%;
+  animation: amazon-inbound-spin 0.8s linear infinite;
+}
+
+@keyframes amazon-inbound-spin {
+  to { transform: rotate(360deg); }
+}
+
+.amazon-inbound-summary {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(125px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.amazon-inbound-summary article {
+  display: grid;
+  gap: 5px;
+  min-height: 112px;
+  padding: 15px;
+  border: 1px solid rgba(43, 68, 50, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.amazon-inbound-summary span,
+.amazon-inbound-summary small {
+  color: #667168;
+  font-size: 0.72rem;
+}
+
+.amazon-inbound-summary span {
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.amazon-inbound-summary strong {
+  color: #163d27;
+  font-size: 1.65rem;
+}
+
+.amazon-inbound-workspace,
+.amazon-inbound-jobs {
+  padding: 18px;
+  margin-top: 16px;
+}
+
+.amazon-inbound-section-heading {
+  margin-bottom: 16px;
+}
+
+.amazon-inbound-section-heading h2 {
+  margin-top: 3px;
+  font-size: 1.45rem;
+}
+
+.amazon-inbound-tabs {
+  padding: 3px;
+  border: 1px solid #d2d9d0;
+  border-radius: 12px;
+  background: #f4f6f2;
+}
+
+.amazon-inbound-tabs button {
+  border: 0;
+  background: transparent;
+}
+
+.amazon-inbound-tabs button.is-active {
+  color: #fff;
+  background: #234c34;
+}
+
+.amazon-inbound-filters {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 210px auto;
+  gap: 12px;
+  align-items: end;
+  padding: 13px;
+  margin-bottom: 14px;
+  border-radius: 13px;
+  background: #f5f7f3;
+}
+
+.amazon-inbound-filters label,
+.amazon-inbound-modal label,
+.amazon-inbound-reconcile-list label {
+  display: grid;
+  gap: 6px;
+  color: #526158;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.amazon-inbound-filters input,
+.amazon-inbound-filters select,
+.amazon-inbound-modal input,
+.amazon-inbound-modal select,
+.amazon-inbound-modal textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 11px;
+  border: 1px solid #cbd3c9;
+  border-radius: 9px;
+  color: #17221c;
+  background: #fff;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.amazon-inbound-modal textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.amazon-inbound-check {
+  display: flex !important;
+  align-items: center;
+  gap: 8px !important;
+  min-height: 40px;
+}
+
+.amazon-inbound-check input,
+.amazon-inbound-confirm input {
+  width: auto;
+  min-height: auto;
+}
+
+.amazon-inbound-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #dde2da;
+  border-radius: 13px;
+}
+
+.amazon-inbound-table {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+}
+
+.amazon-inbound-table th,
+.amazon-inbound-table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid #e3e7e0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.amazon-inbound-table th {
+  color: #667168;
+  background: #f4f6f2;
+  font-size: 0.69rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.amazon-inbound-table td {
+  font-size: 0.82rem;
+}
+
+.amazon-inbound-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.amazon-inbound-identity,
+.amazon-inbound-quantity-stack {
+  display: grid;
+  gap: 4px;
+}
+
+.amazon-inbound-identity strong {
+  color: #183423;
+}
+
+.amazon-inbound-identity span,
+.amazon-inbound-identity small,
+.amazon-inbound-quantity-stack small {
+  color: #68736b;
+  font-size: 0.72rem;
+}
+
+.amazon-inbound-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.amazon-inbound-actions button,
+.amazon-inbound-detail-actions button {
+  min-height: 31px;
+  padding: 5px 8px;
+  font-size: 0.72rem;
+}
+
+.amazon-inbound-detail-row td {
+  padding: 0;
+  background: #f7f9f5;
+}
+
+.amazon-inbound-detail {
+  padding: 18px;
+}
+
+.amazon-inbound-detail h3 {
+  margin: 18px 0 10px;
+  font-size: 1rem;
+}
+
+.amazon-inbound-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.amazon-inbound-detail-grid div {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid #dce2da;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.amazon-inbound-detail-grid span,
+.amazon-inbound-item-list span,
+.amazon-inbound-item-list small {
+  color: #68736b;
+  font-size: 0.72rem;
+}
+
+.amazon-inbound-item-list {
+  display: grid;
+  gap: 8px;
+}
+
+.amazon-inbound-item-list article {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px;
+  border: 1px solid #dce2da;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.amazon-inbound-item-list article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.amazon-inbound-item-list small.is-error {
+  color: #a53a31;
+}
+
+.amazon-inbound-item-list dl {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 16px;
+  margin: 0;
+}
+
+.amazon-inbound-item-list dl div {
+  display: grid;
+  gap: 2px;
+  min-width: 68px;
+}
+
+.amazon-inbound-item-list dt {
+  color: #737e76;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}
+
+.amazon-inbound-item-list dd {
+  margin: 0;
+  color: #203c2a;
+  font-weight: 800;
+}
+
+.amazon-inbound-movements {
+  display: grid;
+  gap: 5px;
+}
+
+.amazon-inbound-movements > div {
+  display: grid;
+  grid-template-columns: 150px 1fr 1.4fr 70px;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 0.74rem;
+}
+
+.amazon-inbound-movements b {
+  text-align: right;
+}
+
+.amazon-inbound-job-list {
+  display: grid;
+  gap: 8px;
+}
+
+.amazon-inbound-job-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid #dce2da;
+  border-radius: 11px;
+}
+
+.amazon-inbound-job-list article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.amazon-inbound-job-list span,
+.amazon-inbound-job-list small {
+  color: #6a756d;
+  font-size: 0.72rem;
+}
+
+.amazon-inbound-empty,
+.amazon-inbound-access {
+  padding: 44px 18px;
+  color: #68736b;
+  text-align: center;
+}
+
+.amazon-inbound-empty.is-compact {
+  padding: 18px;
+}
+
+.amazon-inbound-access {
+  border: 1px solid #e0caca;
+  border-radius: 14px;
+  color: #8a3333;
+  background: #fff5f5;
+}
+
+.amazon-inbound-modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(13, 25, 17, 0.58);
+  backdrop-filter: blur(4px);
+}
+
+.amazon-inbound-modal {
+  display: grid;
+  gap: 15px;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 44px);
+  padding: 20px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 17px;
+  background: #fbfcf9;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
+}
+
+.amazon-inbound-modal.is-wide {
+  width: min(930px, 100%);
+}
+
+.amazon-inbound-modal-heading {
+  align-items: flex-start;
+}
+
+.amazon-inbound-modal-heading > button {
+  min-width: 38px;
+  padding: 0;
+  font-size: 1.35rem;
+}
+
+.amazon-inbound-modal p {
+  margin: 0;
+  color: #5f6d63;
+  line-height: 1.55;
+}
+
+.amazon-inbound-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.amazon-inbound-form-grid .is-span-2 {
+  grid-column: 1 / -1;
+}
+
+.amazon-inbound-form-section {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid #dbe1d9;
+  border-radius: 12px;
+}
+
+.amazon-inbound-form-section h3 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.amazon-inbound-form-item {
+  display: grid;
+  grid-template-columns: 1fr 100px auto;
+  gap: 8px;
+}
+
+.amazon-inbound-confirm {
+  display: flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: flex-start;
+  gap: 9px !important;
+  padding: 11px;
+  border-radius: 10px;
+  color: #35503f !important;
+  background: #eef4ec;
+}
+
+.amazon-inbound-confirm.is-warning {
+  color: #754b08 !important;
+  background: #fff1d2;
+}
+
+.amazon-inbound-modal-actions {
+  justify-content: flex-end;
+}
+
+.amazon-inbound-reconcile-list {
+  display: grid;
+  gap: 8px;
+}
+
+.amazon-inbound-reconcile-list article {
+  display: grid;
+  grid-template-columns: 1fr repeat(3, 110px);
+  gap: 10px;
+  align-items: end;
+  padding: 11px;
+  border: 1px solid #dbe1d9;
+  border-radius: 11px;
+}
+
+.amazon-inbound-reconcile-list article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.amazon-inbound-reconcile-list article > div span {
+  color: #6b766e;
+  font-size: 0.72rem;
+}
+
+.amazon-inbound-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid #dbe1d9;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.amazon-inbound-option > div {
+  display: grid;
+  gap: 4px;
+}
+
+.amazon-inbound-option span,
+.amazon-inbound-option small {
+  color: #69756c;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 1280px) {
+  .amazon-inbound-summary {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 820px) {
+  .amazon-inbound-page {
+    padding: 16px;
+  }
+
+  .amazon-inbound-header,
+  .amazon-inbound-section-heading,
+  .amazon-inbound-safety {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .amazon-inbound-header-actions {
+    justify-content: flex-start;
+  }
+
+  .amazon-inbound-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .amazon-inbound-filters,
+  .amazon-inbound-form-grid,
+  .amazon-inbound-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .amazon-inbound-form-grid .is-span-2 {
+    grid-column: auto;
+  }
+
+  .amazon-inbound-item-list article {
+    flex-direction: column;
+  }
+
+  .amazon-inbound-item-list dl {
+    justify-content: flex-start;
+  }
+
+  .amazon-inbound-reconcile-list article {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .amazon-inbound-reconcile-list article > div {
+    grid-column: 1 / -1;
+  }
+
+  .amazon-inbound-movements > div {
+    grid-template-columns: 1fr;
+  }
+
+  .amazon-inbound-movements b {
+    text-align: left;
+  }
+}
+
+@media (max-width: 520px) {
+  .amazon-inbound-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .amazon-inbound-form-item {
+    grid-template-columns: 1fr;
+  }
+}

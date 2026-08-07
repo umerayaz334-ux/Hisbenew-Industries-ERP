@@ -1,0 +1,554 @@
+.amazon-finances-page {
+  --finance-ink: #172033;
+  --finance-muted: #697386;
+  --finance-border: #e4e7ec;
+  --finance-purple: #5b3fd6;
+  min-height: 100%;
+  padding: 24px;
+  color: var(--finance-ink);
+  background:
+    radial-gradient(circle at 92% 2%, rgba(255, 184, 92, 0.16), transparent 26rem),
+    linear-gradient(180deg, #f7f8fc 0, #f3f5f9 100%);
+}
+
+.amazon-finances-hero,
+.amazon-finances-workspace,
+.amazon-finances-jobs {
+  border: 1px solid rgba(218, 222, 231, 0.9);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 50px rgba(31, 39, 71, 0.08);
+}
+
+.amazon-finances-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px;
+  background:
+    linear-gradient(118deg, rgba(49, 35, 117, 0.98), rgba(95, 67, 205, 0.95)),
+    #4431a0;
+  color: white;
+  overflow: hidden;
+}
+
+.amazon-finances-hero h1,
+.amazon-finances-jobs h2 {
+  margin: 3px 0 8px;
+}
+
+.amazon-finances-hero h1 {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+}
+
+.amazon-finances-hero p {
+  max-width: 720px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.amazon-finances-eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.amazon-finances-actions {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 360px;
+}
+
+.amazon-finances-actions label,
+.amazon-finances-filters label {
+  display: grid;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.amazon-finances-actions select,
+.amazon-finances-actions button,
+.amazon-finances-filters input,
+.amazon-finances-filters select,
+.amazon-finances-filters button,
+.amazon-finances-settlement-action button,
+.amazon-finances-job-list button {
+  min-height: 42px;
+  border-radius: 11px;
+  border: 1px solid var(--finance-border);
+  font: inherit;
+}
+
+.amazon-finances-actions select {
+  color: var(--finance-ink);
+  background: white;
+  padding: 0 12px;
+}
+
+.amazon-finances-actions button,
+.amazon-finances-settlement-action button {
+  padding: 0 17px;
+  border-color: #ffb14a;
+  background: #ffb14a;
+  color: #261b06;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.amazon-finances-actions button.is-secondary {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+
+.amazon-finances-page button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.amazon-finances-connection {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 2px;
+  color: var(--finance-muted);
+  font-size: 0.86rem;
+}
+
+.amazon-finances-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #eef1f6;
+  color: #536071;
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.amazon-finances-badge.is-success {
+  color: #08704d;
+  background: #ddf8ed;
+}
+
+.amazon-finances-badge.is-error {
+  color: #b3223c;
+  background: #ffe3e8;
+}
+
+.amazon-finances-badge.is-warning {
+  color: #865800;
+  background: #fff0c7;
+}
+
+.amazon-finances-badge.is-working {
+  color: #3f46a8;
+  background: #e9eaff;
+}
+
+.amazon-finances-notice,
+.amazon-finances-state {
+  margin: 12px 0;
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: #edf0f7;
+  color: #485568;
+}
+
+.amazon-finances-notice.is-success,
+.amazon-finances-state.is-success {
+  background: #e2f8ef;
+  color: #076c4a;
+}
+
+.amazon-finances-notice.is-error,
+.amazon-finances-state.is-error {
+  background: #ffe7eb;
+  color: #a91f38;
+}
+
+.amazon-finances-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.amazon-finances-card {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-height: 104px;
+  padding: 17px;
+  border: 1px solid var(--finance-border);
+  border-radius: 17px;
+  background: white;
+  overflow: hidden;
+}
+
+.amazon-finances-card::after {
+  content: "";
+  position: absolute;
+  top: -30px;
+  right: -25px;
+  width: 85px;
+  height: 85px;
+  border-radius: 50%;
+  background: var(--card-accent, #e9eaff);
+  opacity: 0.75;
+}
+
+.amazon-finances-card span {
+  color: var(--finance-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.amazon-finances-card strong {
+  align-self: end;
+  font-size: 1.35rem;
+}
+
+.amazon-finances-card.is-balance {
+  grid-column: span 2;
+  border-color: #9ddccb;
+  background:
+    linear-gradient(135deg, rgba(231, 252, 246, 0.9), rgba(255, 255, 255, 0.98));
+}
+
+.amazon-finances-card.is-balance strong {
+  color: #086a54;
+  font-size: 1.7rem;
+}
+
+.amazon-finances-card.is-available {
+  --card-accent: #d7e6ff;
+}
+
+.amazon-finances-card.is-deferred {
+  --card-accent: #ffe8ad;
+}
+
+.amazon-finances-card.is-available small,
+.amazon-finances-card.is-deferred small {
+  position: relative;
+  z-index: 1;
+  color: var(--finance-muted);
+  line-height: 1.35;
+}
+
+.amazon-finances-card.is-deferred strong {
+  color: #8a5a00;
+}
+
+.amazon-finances-card-meta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amazon-finances-card-meta small {
+  color: var(--finance-muted);
+  line-height: 1.35;
+}
+
+.amazon-finances-card-meta button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #8ecfbd;
+  border-radius: 9px;
+  background: white;
+  color: #086a54;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.amazon-finances-card.is-balance { --card-accent: #aee9d8; }
+.amazon-finances-card.is-revenue { --card-accent: #c7f5e6; }
+.amazon-finances-card.is-fees { --card-accent: #ffe2b8; }
+.amazon-finances-card.is-refunds { --card-accent: #ffd5dc; }
+.amazon-finances-card.is-reimbursements { --card-accent: #d5edff; }
+.amazon-finances-card.is-net { --card-accent: #dcd8ff; }
+.amazon-finances-card.is-profit { --card-accent: #c7f0cf; }
+.amazon-finances-card.is-settlement { --card-accent: #fff0ba; }
+.amazon-finances-card.is-issues { --card-accent: #f5d4ff; }
+
+.amazon-finances-workspace {
+  overflow: hidden;
+}
+
+.amazon-finances-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 10px 12px 0;
+  border-bottom: 1px solid var(--finance-border);
+  overflow-x: auto;
+}
+
+.amazon-finances-tabs button {
+  padding: 13px 15px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--finance-muted);
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.amazon-finances-tabs button.is-active {
+  border-color: var(--finance-purple);
+  color: var(--finance-purple);
+}
+
+.amazon-finances-tabs button span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 23px;
+  min-height: 23px;
+  margin-left: 5px;
+  border-radius: 999px;
+  background: #eef0f6;
+  font-size: 0.7rem;
+}
+
+.amazon-finances-filters {
+  display: flex;
+  align-items: end;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding: 14px;
+  background: #fafbfc;
+}
+
+.amazon-finances-filters > input {
+  flex: 1 1 320px;
+}
+
+.amazon-finances-filters input,
+.amazon-finances-filters select {
+  padding: 0 11px;
+  background: white;
+  color: var(--finance-ink);
+}
+
+.amazon-finances-filters button.is-light,
+.amazon-finances-job-list button.is-light {
+  padding: 0 15px;
+  background: white;
+  color: var(--finance-purple);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.amazon-finances-table-wrap {
+  overflow: auto;
+}
+
+.amazon-finances-table-wrap table {
+  width: 100%;
+  min-width: 1050px;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.amazon-finances-table-wrap th,
+.amazon-finances-table-wrap td {
+  padding: 13px 14px;
+  border-bottom: 1px solid #edf0f4;
+  text-align: left;
+  vertical-align: top;
+}
+
+.amazon-finances-table-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f7f8fb;
+  color: #657082;
+  font-size: 0.69rem;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.amazon-finances-table-wrap td strong,
+.amazon-finances-table-wrap td small {
+  display: block;
+}
+
+.amazon-finances-table-wrap td small {
+  margin-top: 5px;
+  color: var(--finance-muted);
+  font-size: 0.72rem;
+}
+
+.amazon-finances-table-wrap tr:hover td {
+  background: #fcfcff;
+}
+
+.amazon-finances-empty {
+  padding: 34px !important;
+  color: var(--finance-muted);
+  text-align: center !important;
+}
+
+.is-negative {
+  color: #b22742 !important;
+}
+
+.is-positive {
+  color: #08704d !important;
+}
+
+.amazon-finances-settlement-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--finance-border);
+  background: #fffaf1;
+  font-weight: 750;
+}
+
+.amazon-finances-issues {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.amazon-finances-issues article {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.7fr) 1.8fr minmax(120px, 0.5fr);
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--finance-border);
+  border-left: 4px solid #8c95a5;
+  border-radius: 13px;
+}
+
+.amazon-finances-issues article.is-error { border-left-color: #d02d4c; }
+.amazon-finances-issues article.is-warning { border-left-color: #e6a11c; }
+.amazon-finances-issues article.is-info { border-left-color: #5774d7; }
+
+.amazon-finances-issues article div {
+  display: grid;
+  gap: 3px;
+}
+
+.amazon-finances-issues article span,
+.amazon-finances-issues article small {
+  color: var(--finance-muted);
+  word-break: break-word;
+}
+
+.amazon-finances-issues article p {
+  margin: 0;
+}
+
+.amazon-finances-jobs {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 18px;
+  margin-top: 16px;
+  padding: 20px;
+}
+
+.amazon-finances-jobs .amazon-finances-eyebrow {
+  color: var(--finance-purple);
+}
+
+.amazon-finances-job-list {
+  display: grid;
+  gap: 8px;
+}
+
+.amazon-finances-job-list article {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) auto minmax(180px, 1.2fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--finance-border);
+  border-radius: 12px;
+}
+
+.amazon-finances-job-list article div {
+  display: grid;
+}
+
+.amazon-finances-job-list article div span,
+.amazon-finances-job-list > p {
+  color: var(--finance-muted);
+  font-size: 0.74rem;
+}
+
+@media (max-width: 1050px) {
+  .amazon-finances-hero,
+  .amazon-finances-jobs {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .amazon-finances-actions {
+    min-width: 0;
+  }
+
+  .amazon-finances-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .amazon-finances-page {
+    padding: 12px;
+  }
+
+  .amazon-finances-hero {
+    padding: 20px;
+  }
+
+  .amazon-finances-actions,
+  .amazon-finances-actions > * {
+    width: 100%;
+  }
+
+  .amazon-finances-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .amazon-finances-card.is-balance {
+    grid-column: span 1;
+  }
+
+  .amazon-finances-connection {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .amazon-finances-issues article,
+  .amazon-finances-job-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .amazon-finances-settlement-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,68 @@
+.school-settings-layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; align-items: start; }
+.school-settings-form { display: grid; gap: 15px; }
+.school-settings-card { padding: 21px; border: 1px solid #e1e3ef; border-radius: 17px; background: #ffffff; }
+.school-settings-card-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 19px; }
+.school-settings-card-heading > span { display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; border-radius: 9px; background: color-mix(in srgb, var(--school-primary, #191797) 10%, white); color: var(--school-primary, #191797); font-size: 10px; font-weight: 900; }
+.school-settings-card-heading h2,
+.school-settings-card-heading p { margin: 0; }
+.school-settings-card-heading h2 { color: #1b1c31; font-size: 17px; }
+.school-settings-card-heading p { margin-top: 4px; color: #7a7c8e; font-size: 12px; line-height: 1.45; }
+.school-settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+.school-settings-fields label:last-child { grid-column: 1 / -1; }
+.school-logo-setting { display: flex; align-items: center; gap: 18px; }
+.school-logo-preview { display: grid; width: 106px; height: 106px; flex: 0 0 106px; place-items: center; overflow: hidden; border: 1px solid #dedfeb; border-radius: 18px; background: #f6f6fb; }
+.school-logo-preview img { width: 88px; height: 88px; border-radius: 13px; object-fit: contain; }
+.school-logo-upload { display: inline-flex !important; min-height: 40px; align-items: center; padding: 0 13px; border: 1px solid var(--school-primary, #191797); border-radius: 9px; color: var(--school-primary, #191797) !important; cursor: pointer; }
+.school-logo-upload input { display: none; }
+.school-logo-setting small { display: block; margin-top: 7px; color: #898b9c; font-size: 10px; }
+.school-link-button { display: block; margin-top: 8px; padding: 0; border: 0; background: transparent; color: #67697d; cursor: pointer; font-size: 11px; font-weight: 800; text-decoration: underline; }
+.school-theme-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.school-theme-presets button { display: grid; justify-items: start; min-height: 108px; padding: 12px; border: 1px solid #dfe0eb; border-radius: 12px; background: #fafafe; cursor: pointer; text-align: left; }
+.school-theme-presets button.is-selected { border-color: var(--school-primary, #191797); box-shadow: inset 0 0 0 1px var(--school-primary, #191797); }
+.school-theme-presets button > span { display: flex; gap: 5px; }
+.school-theme-presets i { display: block; width: 25px; height: 25px; border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 7px; }
+.school-theme-presets strong { margin-top: 9px; color: #26273b; font-size: 11px; }
+.school-theme-presets small { color: #858698; font-size: 9px; font-weight: 750; }
+.school-color-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.school-color-fields label > div { display: flex; min-height: 44px; align-items: center; gap: 8px; padding: 6px 9px; border: 1px solid #dfe0eb; border-radius: 10px; }
+.school-color-fields input { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; }
+.school-color-fields code { color: #56586c; font-size: 11px; }
+.school-setting-toggle { display: flex !important; align-items: center; justify-content: space-between; gap: 20px; }
+.school-setting-toggle > span strong,
+.school-setting-toggle > span small { display: block; }
+.school-setting-toggle > span strong { color: #2b2c40; font-size: 13px; }
+.school-setting-toggle > span small { margin-top: 4px; color: #7d7f91; font-size: 11px; font-weight: 650; }
+.school-setting-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.school-setting-toggle > i { position: relative; width: 48px; height: 27px; flex: 0 0 48px; border-radius: 999px; background: #caced8; transition: 160ms ease; }
+.school-setting-toggle > i::after { position: absolute; top: 4px; left: 4px; width: 19px; height: 19px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.2); content: ""; transition: 160ms ease; }
+.school-setting-toggle input:checked + i { background: var(--school-primary, #191797); }
+.school-setting-toggle input:checked + i::after { transform: translateX(21px); }
+.school-settings-actions { display: flex; justify-content: flex-end; gap: 9px; padding: 4px 0 18px; }
+
+.school-settings-preview { position: sticky; top: 20px; padding: 17px; border: 1px solid #dfe0eb; border-radius: 17px; background: #ffffff; }
+.school-settings-preview > p { margin: 0 0 11px; color: #77798b; font-size: 10px; font-weight: 900; letter-spacing: .8px; text-transform: uppercase; }
+.school-settings-preview > small { display: block; margin-top: 12px; color: #858698; font-size: 10px; line-height: 1.5; }
+.school-preview-window { display: grid; min-height: 280px; grid-template-columns: 72px 1fr; overflow: hidden; border: 1px solid #e1e2ea; border-radius: 13px; background: #f2f3f8; }
+.school-preview-sidebar { display: flex; align-items: center; flex-direction: column; gap: 12px; padding: 12px 8px; background: var(--preview-primary); }
+.school-preview-sidebar img { width: 42px; height: 42px; border-radius: 9px; object-fit: contain; }
+.school-preview-sidebar span { width: 42px; height: 7px; border-radius: 999px; background: rgba(255,255,255,.32); }
+.school-preview-sidebar span:first-of-type { background: var(--preview-accent); }
+.school-preview-content { padding: 30px 17px; background: var(--preview-surface); }
+.school-preview-content small { color: var(--preview-primary); font-size: 8px; font-weight: 900; }
+.school-preview-content h2 { margin: 6px 0 0; color: var(--preview-primary); font-size: 18px; }
+.school-preview-content p { margin: 4px 0 17px; color: #77798a; font-size: 10px; }
+.school-preview-content > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.school-preview-content > div span { height: 44px; border-radius: 7px; background: color-mix(in srgb, var(--preview-primary) 8%, white); }
+.school-preview-content button { min-height: 30px; margin-top: 18px; padding: 0 10px; border: 0; border-radius: 7px; background: var(--preview-primary); color: #fff; font-size: 8px; font-weight: 900; }
+
+@media (max-width: 1120px) { .school-settings-layout { grid-template-columns: 1fr; } .school-settings-preview { position: static; } }
+@media (max-width: 650px) {
+  .school-settings-card { padding: 16px; }
+  .school-settings-fields,
+  .school-theme-presets,
+  .school-color-fields { grid-template-columns: 1fr; }
+  .school-settings-fields label:last-child { grid-column: auto; }
+  .school-logo-setting { align-items: flex-start; flex-direction: column; }
+  .school-settings-actions { align-items: stretch; flex-direction: column-reverse; }
+  .school-settings-actions button { width: 100%; }
+}

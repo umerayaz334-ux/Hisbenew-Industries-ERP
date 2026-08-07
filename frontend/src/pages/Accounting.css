@@ -1,0 +1,571 @@
+.accounting-page {
+  min-height: 100vh;
+  background: #f6f7f8;
+  color: #141619;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+.accounting-page *,
+.accounting-page *::before,
+.accounting-page *::after {
+  box-sizing: border-box;
+}
+
+.accounting-page button,
+.accounting-page input,
+.accounting-page select,
+.accounting-page textarea {
+  font: inherit;
+}
+
+.accounting-header {
+  min-height: 152px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 34px 40px;
+  background: #ffffff;
+  border-bottom: 1px solid #d9dde2;
+}
+
+.accounting-header h1 {
+  margin: 0;
+  color: #17191c;
+  font-size: clamp(36px, 4vw, 48px);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.accounting-header p {
+  margin: 10px 0 0;
+  max-width: 620px;
+  color: #68707a;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.accounting-header-actions,
+.accounting-row-actions,
+.accounting-mini-actions,
+.accounting-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.accounting-primary-btn,
+.accounting-secondary-btn,
+.accounting-light-btn,
+.accounting-icon-btn,
+.accounting-mini-actions button,
+.accounting-modal-header button {
+  min-height: 44px;
+  border-radius: 6px;
+  border: 1px solid #cdd3da;
+  padding: 0 18px;
+  background: #ffffff;
+  color: #17191c;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.accounting-primary-btn {
+  min-width: 130px;
+  border-color: #2f3032;
+  background: #2f3032;
+  color: #ffffff;
+}
+
+.accounting-primary-btn:hover,
+.accounting-primary-btn:focus-visible {
+  background: #17191c;
+  border-color: #17191c;
+}
+
+.accounting-secondary-btn:hover,
+.accounting-secondary-btn:focus-visible,
+.accounting-light-btn:hover,
+.accounting-light-btn:focus-visible,
+.accounting-icon-btn:hover,
+.accounting-icon-btn:focus-visible,
+.accounting-mini-actions button:hover,
+.accounting-mini-actions button:focus-visible,
+.accounting-modal-header button:hover,
+.accounting-modal-header button:focus-visible {
+  border-color: #8f98a3;
+  background: #f3f5f7;
+}
+
+.accounting-light-btn {
+  background: #f8fafb;
+}
+
+.accounting-primary-btn:disabled,
+.accounting-secondary-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.accounting-body {
+  width: min(100%, 1560px);
+  margin: 0 auto;
+  padding: 32px 40px 48px;
+}
+
+.accounting-alert {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid #b9dcc4;
+  background: #eef8f1;
+  color: #176238;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.accounting-alert.is-error {
+  border-color: #efc5c2;
+  background: #fff2f1;
+  color: #9b2820;
+}
+
+.accounting-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.accounting-summary-grid article {
+  min-height: 132px;
+  padding: 20px;
+  border: 1px solid #d9dde2;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.accounting-summary-grid span,
+.accounting-panel-heading span {
+  display: block;
+  color: #747c86;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.accounting-summary-grid strong {
+  display: block;
+  margin-top: 14px;
+  color: #111316;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.accounting-summary-grid small {
+  display: block;
+  margin-top: 10px;
+  color: #67707a;
+  font-size: 14px;
+}
+
+.accounting-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 410px;
+  gap: 20px;
+  align-items: start;
+}
+
+.accounting-ledger-panel,
+.accounting-side-panel {
+  border: 1px solid #d9dde2;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.accounting-side-stack {
+  display: grid;
+  gap: 20px;
+}
+
+.accounting-panel-heading {
+  min-height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #e0e3e7;
+}
+
+.accounting-panel-heading h2 {
+  margin: 4px 0 0;
+  color: #121417;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.accounting-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.accounting-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.accounting-table th,
+.accounting-table td {
+  padding: 16px 18px;
+  border-bottom: 1px solid #e4e7eb;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.accounting-table th {
+  color: #30343a;
+  background: #fbfcfd;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.accounting-table td {
+  color: #17191c;
+  font-size: 14px;
+}
+
+.accounting-table td strong,
+.accounting-account-row strong,
+.accounting-platform-row strong {
+  display: block;
+  color: #111316;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.accounting-table td small,
+.accounting-account-row small,
+.accounting-platform-row small {
+  display: block;
+  margin-top: 5px;
+  color: #6d7580;
+  font-size: 13px;
+}
+
+.accounting-chip,
+.accounting-auto-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.accounting-chip.is-in {
+  background: #eaf7ef;
+  color: #176238;
+}
+
+.accounting-chip.is-out {
+  background: #fff0ee;
+  color: #9b2820;
+}
+
+.accounting-auto-tag {
+  width: max-content;
+  margin-top: 6px;
+  background: #edf1f6;
+  color: #515b66;
+}
+
+.accounting-icon-btn {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.accounting-icon-btn.is-danger,
+.accounting-mini-actions button:last-child {
+  color: #9b2820;
+}
+
+.accounting-account-list,
+.accounting-platform-list {
+  display: grid;
+}
+
+.accounting-account-row,
+.accounting-platform-row {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e4e7eb;
+}
+
+.accounting-account-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.accounting-account-row:last-child,
+.accounting-platform-row:last-child {
+  border-bottom: 0;
+}
+
+.accounting-account-row > div:nth-child(2) {
+  text-align: right;
+}
+
+.accounting-account-row > div:nth-child(2) span {
+  display: block;
+  font-weight: 900;
+}
+
+.accounting-mini-actions {
+  grid-column: 1 / -1;
+}
+
+.accounting-mini-actions button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.accounting-platform-row dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 4px 0 0;
+}
+
+.accounting-platform-row dt {
+  color: #6b737d;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.accounting-platform-row dd {
+  margin: 4px 0 0;
+  color: #141619;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.accounting-empty {
+  padding: 36px 22px;
+  color: #6d7580;
+  font-weight: 700;
+  text-align: center;
+}
+
+.accounting-empty.compact {
+  padding: 22px;
+  text-align: left;
+}
+
+.accounting-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 20px;
+  background: rgba(13, 17, 23, 0.46);
+  overflow-y: auto;
+}
+
+.accounting-modal {
+  width: min(760px, 100%);
+  border-radius: 10px;
+  border: 1px solid #d4d9df;
+  background: #ffffff;
+  box-shadow: 0 22px 60px rgba(14, 20, 28, 0.24);
+  overflow: hidden;
+}
+
+.accounting-modal.compact-modal {
+  width: min(620px, 100%);
+}
+
+.accounting-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #e0e3e7;
+}
+
+.accounting-modal-header h2 {
+  margin: 0;
+  color: #141619;
+  font-size: 24px;
+}
+
+.accounting-form {
+  padding: 22px;
+}
+
+.accounting-segmented {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 18px;
+  border: 1px solid #d4d9df;
+  border-radius: 8px;
+  background: #f4f6f8;
+}
+
+.accounting-segmented button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #515b66;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.accounting-segmented button.active {
+  background: #ffffff;
+  color: #17191c;
+  box-shadow: 0 1px 3px rgba(14, 20, 28, 0.12);
+}
+
+.accounting-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.accounting-form label,
+.accounting-wide-field {
+  display: grid;
+  gap: 7px;
+}
+
+.accounting-form label span,
+.accounting-wide-field span {
+  color: #4f5863;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.accounting-form input,
+.accounting-form select,
+.accounting-form textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cfd5dc;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #17191c;
+  outline: none;
+}
+
+.accounting-form textarea {
+  resize: vertical;
+}
+
+.accounting-form input:focus,
+.accounting-form select:focus,
+.accounting-form textarea:focus {
+  border-color: #17191c;
+  box-shadow: 0 0 0 3px rgba(23, 25, 28, 0.08);
+}
+
+.accounting-wide-field {
+  margin-top: 16px;
+}
+
+.accounting-toggle-field {
+  align-content: end;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  min-height: 69px;
+}
+
+.accounting-toggle-field input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.accounting-modal-actions {
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+@media (max-width: 1180px) {
+  .accounting-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .accounting-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-side-stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .accounting-header {
+    align-items: flex-start;
+    flex-direction: column;
+    min-height: auto;
+    padding: 26px 20px;
+  }
+
+  .accounting-body {
+    padding: 22px 16px 36px;
+  }
+
+  .accounting-summary-grid,
+  .accounting-side-stack,
+  .accounting-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-summary-grid strong {
+    font-size: 24px;
+  }
+
+  .accounting-header-actions,
+  .accounting-header-actions button {
+    width: 100%;
+  }
+
+  .accounting-header-actions button {
+    justify-content: center;
+  }
+
+  .accounting-panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .accounting-account-row {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-account-row > div:nth-child(2) {
+    text-align: left;
+  }
+
+  .accounting-platform-row dl {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,432 @@
+.erp-call-remote-audio {
+  display: none;
+}
+
+.erp-call-overlay {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(9, 24, 38, 0.68);
+  backdrop-filter: blur(8px);
+}
+
+.erp-call-card {
+  display: flex;
+  width: min(390px, 100%);
+  min-height: 480px;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  padding: 36px 28px 30px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 8%, rgba(77, 177, 162, 0.2), transparent 35%),
+    linear-gradient(155deg, #16374e 0%, #0c2233 65%, #091a28 100%);
+  color: #ffffff;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+
+.erp-call-card.has-video {
+  width: min(920px, 100%);
+  min-height: min(700px, calc(100dvh - 44px));
+  justify-content: flex-start;
+  padding: 22px 24px 24px;
+}
+
+.erp-call-video-stage {
+  position: relative;
+  width: 100%;
+  max-height: 56dvh;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: #050d13;
+}
+
+.erp-call-remote-video,
+.erp-call-local-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.erp-call-local-video {
+  position: absolute;
+  z-index: 2;
+  right: 14px;
+  bottom: 14px;
+  width: min(190px, 28%);
+  height: auto;
+  aspect-ratio: 16 / 10;
+  border: 2px solid rgba(255, 255, 255, 0.78);
+  border-radius: 12px;
+  background: #0b1c28;
+  object-fit: cover;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.36);
+}
+
+.erp-call-video-stage.is-local-only .erp-call-local-video {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  object-fit: contain;
+}
+
+.erp-call-video-stage.is-local-share-focus .erp-call-local-video {
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  object-fit: contain;
+}
+
+.erp-call-video-placeholder {
+  position: absolute;
+  display: grid;
+  align-content: center;
+  place-items: center;
+  gap: 12px;
+  background: radial-gradient(circle, #214b61, #071722 68%);
+  inset: 0;
+}
+
+.erp-call-video-placeholder span {
+  display: grid;
+  width: 104px;
+  height: 104px;
+  place-items: center;
+  border: 1px solid rgba(126, 216, 202, 0.38);
+  border-radius: 999px;
+  background: #1c5d64;
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.erp-call-video-placeholder small {
+  color: #bed1da;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.erp-call-sharing-badge {
+  position: absolute;
+  z-index: 3;
+  top: 13px;
+  left: 13px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(8, 25, 37, 0.84);
+  color: #cffff7;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.erp-call-fullscreen {
+  position: absolute;
+  z-index: 4;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(8, 25, 37, 0.86);
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  gap: 7px;
+}
+
+.erp-call-fullscreen span {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.erp-call-video-stage:fullscreen,
+.erp-call-video-stage:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  aspect-ratio: auto;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #020609;
+}
+
+.erp-call-video-stage:fullscreen .erp-call-remote-video,
+.erp-call-video-stage:fullscreen .erp-call-local-video,
+.erp-call-video-stage:-webkit-full-screen .erp-call-remote-video,
+.erp-call-video-stage:-webkit-full-screen .erp-call-local-video {
+  object-fit: contain;
+}
+
+.erp-call-pulse {
+  position: relative;
+  display: grid;
+  width: 112px;
+  height: 112px;
+  place-items: center;
+  margin-bottom: 26px;
+  border: 1px solid rgba(191, 236, 228, 0.34);
+  border-radius: 999px;
+  background: linear-gradient(145deg, #2f8b81, #1c5d64);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.erp-call-pulse::before,
+.erp-call-pulse::after {
+  position: absolute;
+  border: 1px solid rgba(102, 210, 194, 0.35);
+  border-radius: inherit;
+  content: "";
+  inset: -10px;
+}
+
+.erp-call-overlay:is(.is-incoming, .is-outgoing) .erp-call-pulse::before,
+.erp-call-overlay:is(.is-incoming, .is-outgoing) .erp-call-pulse::after {
+  animation: erp-call-ring 1.8s ease-out infinite;
+}
+
+.erp-call-overlay:is(.is-incoming, .is-outgoing) .erp-call-pulse::after {
+  animation-delay: 0.65s;
+}
+
+.erp-call-pulse span {
+  font-size: 31px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.erp-call-eyebrow {
+  margin: 0;
+  color: #7ed8ca;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.erp-call-card h2 {
+  margin: 8px 0 0;
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.erp-call-role {
+  margin: 5px 0 0;
+  color: #b6c8d5;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.erp-call-status {
+  min-height: 22px;
+  margin-top: 25px;
+  color: #e8f3f5;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.erp-call-status.is-unstable {
+  color: #ffd29b;
+}
+
+.erp-call-notice {
+  max-width: 290px;
+  margin: 10px 0 0;
+  color: #ffd6aa;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.erp-call-enable-sound {
+  margin-top: 14px;
+  padding: 9px 15px;
+  border: 1px solid rgba(126, 216, 202, 0.65);
+  border-radius: 999px;
+  background: rgba(126, 216, 202, 0.14);
+  color: #d9fff8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.erp-call-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 20px;
+  min-height: 78px;
+  margin-top: 48px;
+}
+
+.erp-call-actions.is-incoming {
+  gap: 58px;
+}
+
+.erp-call-action {
+  display: flex;
+  width: 70px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  flex-direction: column;
+  font: inherit;
+  gap: 8px;
+}
+
+.erp-call-action svg {
+  box-sizing: content-box;
+  padding: 15px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: transform 150ms ease, background 150ms ease;
+}
+
+.erp-call-action:hover svg {
+  transform: translateY(-2px);
+}
+
+.erp-call-action span {
+  color: #dce8ed;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.erp-call-action.is-decline svg {
+  background: #d64c4c;
+}
+
+.erp-call-action.is-answer svg {
+  background: #278a63;
+}
+
+.erp-call-action.is-mute.is-active svg {
+  background: #ffffff;
+  color: #16374e;
+}
+
+.erp-call-action:is(.is-camera, .is-screen).is-active svg {
+  background: #7ed8ca;
+  color: #0c2233;
+}
+
+.erp-call-card.has-video .erp-call-status {
+  margin-top: 12px;
+}
+
+.erp-call-card.has-video .erp-call-actions {
+  margin-top: 24px;
+}
+
+.erp-call-close {
+  min-width: 112px;
+  margin-top: 40px;
+  padding: 11px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+@keyframes erp-call-ring {
+  0% {
+    opacity: 0.8;
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.38);
+  }
+}
+
+@media (max-width: 560px) {
+  .erp-call-overlay {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .erp-call-card {
+    width: 100%;
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .erp-call-card.has-video {
+    min-height: 100dvh;
+    padding: 12px 12px 20px;
+    overflow-y: auto;
+  }
+
+  .erp-call-video-stage {
+    max-height: 52dvh;
+    margin-bottom: 14px;
+    border-radius: 14px;
+  }
+
+  .erp-call-local-video {
+    right: 9px;
+    bottom: 9px;
+    width: 30%;
+    border-radius: 9px;
+  }
+
+  .erp-call-fullscreen {
+    padding: 8px;
+  }
+
+  .erp-call-fullscreen span {
+    display: none;
+  }
+
+  .erp-call-card.has-video .erp-call-actions {
+    gap: 10px;
+  }
+
+  .erp-call-card.has-video .erp-call-action {
+    width: 62px;
+  }
+
+  .erp-call-card.has-video .erp-call-action svg {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .erp-call-overlay .erp-call-pulse::before,
+  .erp-call-overlay .erp-call-pulse::after {
+    animation: none;
+  }
+}

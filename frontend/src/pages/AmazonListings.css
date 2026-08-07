@@ -1,0 +1,1002 @@
+.amazon-listings-page {
+  min-height: 100vh;
+  background: #f7f8fa;
+  color: #20242a;
+}
+
+.amazon-listings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 34px max(24px, calc((100% - 1380px) / 2)) 28px;
+  border-bottom: 1px solid #d9dde2;
+  background: #fff;
+}
+
+.amazon-listings-header h1,
+.amazon-listings-section-heading h2,
+.amazon-listings-modal h2 {
+  margin: 5px 0 0;
+  color: #20242a;
+  font-weight: 850;
+  letter-spacing: -0.025em;
+}
+
+.amazon-listings-header h1 {
+  font-size: clamp(30px, 4vw, 42px);
+}
+
+.amazon-listings-header p {
+  max-width: 760px;
+  margin: 9px 0 0;
+  color: #5c6570;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.amazon-listings-eyebrow {
+  color: #99600a;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.amazon-listings-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.amazon-listings-connection,
+.amazon-listings-status,
+.amazon-listings-channel,
+.amazon-listings-job-status,
+.amazon-listings-unmapped {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.amazon-listings-connection {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid #d9b47d;
+  background: #fff7e7;
+  color: #785112;
+}
+
+.amazon-listings-connection.is-connected {
+  border-color: #add8bf;
+  background: #ebf8f0;
+  color: #246941;
+}
+
+.amazon-listings-connection.is-offline {
+  border-color: #e2b6b0;
+  background: #fff0ee;
+  color: #99392d;
+}
+
+.amazon-listings-primary-button,
+.amazon-listings-secondary-button {
+  min-height: 40px;
+  padding: 0 15px;
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.amazon-listings-primary-button {
+  border: 1px solid #a86107;
+  background: #b86d08;
+  color: #fff;
+}
+
+.amazon-listings-secondary-button {
+  border: 1px solid #c7cdd4;
+  background: #fff;
+  color: #34404c;
+}
+
+.amazon-listings-primary-button:disabled,
+.amazon-listings-secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.amazon-listings-content {
+  display: grid;
+  gap: 20px;
+  width: min(1380px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 64px;
+}
+
+.amazon-listings-notice,
+.amazon-listings-job-progress {
+  padding: 13px 16px;
+  border: 1px solid #d9dde2;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.amazon-listings-notice.is-success {
+  border-color: #b8dcc8;
+  background: #eef9f2;
+  color: #236640;
+}
+
+.amazon-listings-notice.is-error {
+  border-color: #e4bbb6;
+  background: #fff1ef;
+  color: #8d3024;
+}
+
+.amazon-listings-notice.is-warning {
+  border-color: #ead18b;
+  background: #fff8df;
+  color: #6b5214;
+}
+
+.amazon-listings-job-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-color: #c5d8e7;
+  background: #f2f8fc;
+  color: #335a76;
+}
+
+.amazon-listings-job-progress p {
+  margin: 3px 0 0;
+}
+
+.amazon-listings-spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #c6dceb;
+  border-top-color: #3b7094;
+  border-radius: 50%;
+  animation: amazon-listings-spin 0.8s linear infinite;
+}
+
+@keyframes amazon-listings-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.amazon-listings-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.amazon-listings-summary-grid article {
+  display: grid;
+  gap: 5px;
+  padding: 18px;
+  border: 1px solid #d9dde2;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 7px 20px rgba(31, 41, 55, 0.035);
+}
+
+.amazon-listings-summary-grid span {
+  color: #727b85;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.amazon-listings-summary-grid strong {
+  color: #25313b;
+  font-size: 28px;
+}
+
+.amazon-listings-summary-grid small {
+  color: #77818c;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.amazon-listings-workspace,
+.amazon-listings-jobs {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid #d9dde2;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(31, 41, 55, 0.04);
+}
+
+.amazon-listings-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.amazon-listings-section-heading h2 {
+  font-size: 21px;
+}
+
+.amazon-listings-section-heading > span,
+.amazon-listings-section-heading > button {
+  color: #727b85;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.amazon-listings-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 170px 170px auto;
+  gap: 12px;
+  align-items: end;
+  margin: 20px 0;
+  padding: 14px;
+  border: 1px solid #e1e4e8;
+  border-radius: 9px;
+  background: #fafbfc;
+}
+
+.amazon-listings-filters label,
+.amazon-listings-modal > label {
+  display: grid;
+  gap: 6px;
+  color: #596571;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.amazon-listings-filters input,
+.amazon-listings-filters select,
+.amazon-listings-modal > label input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid #c9d1d9;
+  border-radius: 7px;
+  outline: none;
+  background: #fff;
+  color: #26313b;
+  font: inherit;
+  font-size: 11px;
+}
+
+.amazon-listings-filters input:focus,
+.amazon-listings-filters select:focus,
+.amazon-listings-modal > label input:focus {
+  border-color: #b76c08;
+  box-shadow: 0 0 0 3px rgba(183, 108, 8, 0.12);
+}
+
+.amazon-listings-filters .amazon-listings-check {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid #d1d7dd;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.amazon-listings-check input {
+  width: 16px;
+  min-height: auto;
+  accent-color: #b76c08;
+}
+
+.amazon-listings-empty,
+.amazon-listings-access {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 34px;
+  border: 1px dashed #c9cfd6;
+  border-radius: 9px;
+  background: #fbfcfd;
+  color: #66717c;
+  font-size: 12px;
+}
+
+.amazon-listings-empty strong {
+  color: #2d3944;
+  font-size: 16px;
+}
+
+.amazon-listings-empty p {
+  max-width: 620px;
+  margin: 0 0 8px;
+  line-height: 1.55;
+}
+
+.amazon-listings-access {
+  width: min(760px, calc(100% - 48px));
+  margin: 60px auto;
+  border-style: solid;
+  background: #fff;
+}
+
+.amazon-listings-access span {
+  color: #a04335;
+  font-weight: 850;
+}
+
+.amazon-listings-access h1,
+.amazon-listings-access p {
+  margin: 0;
+}
+
+.amazon-listings-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e0e4e8;
+  border-radius: 8px;
+}
+
+.amazon-listings-table {
+  width: 100%;
+  min-width: 1240px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.amazon-listings-table th {
+  padding: 11px 12px;
+  border-bottom: 1px solid #dfe3e7;
+  background: #f5f7f9;
+  color: #65707b;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.amazon-listings-table th:nth-child(1) {
+  width: 330px;
+}
+
+.amazon-listings-table th:nth-child(2) {
+  width: 110px;
+}
+
+.amazon-listings-table th:nth-child(3) {
+  width: 115px;
+}
+
+.amazon-listings-table th:nth-child(4) {
+  width: 145px;
+}
+
+.amazon-listings-table th:nth-child(5) {
+  width: 125px;
+}
+
+.amazon-listings-table th:nth-child(6) {
+  width: 190px;
+}
+
+.amazon-listings-table th:nth-child(7) {
+  width: 180px;
+}
+
+.amazon-listings-table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid #eceff2;
+  color: #35414c;
+  font-size: 11px;
+  vertical-align: top;
+}
+
+.amazon-listings-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.amazon-listings-table td > strong,
+.amazon-listings-table td > span,
+.amazon-listings-table td > small {
+  display: block;
+  overflow: hidden;
+  margin-bottom: 5px;
+  text-overflow: ellipsis;
+}
+
+.amazon-listings-table td > strong {
+  color: #27333e;
+  font-size: 11px;
+}
+
+.amazon-listings-table td > span {
+  color: #5f6974;
+  line-height: 1.45;
+}
+
+.amazon-listings-offer-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-width: 0;
+}
+
+.amazon-listings-offer-cell > div:last-child {
+  min-width: 0;
+}
+
+.amazon-listings-offer-cell strong,
+.amazon-listings-offer-cell small,
+.amazon-listings-offer-cell > div > span {
+  display: block;
+  overflow: hidden;
+  margin-bottom: 5px;
+  text-overflow: ellipsis;
+}
+
+.amazon-listings-offer-cell strong {
+  color: #27333e;
+}
+
+.amazon-listings-offer-cell > div > span {
+  display: -webkit-box;
+  color: #5f6974;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.amazon-listings-offer-cell small {
+  color: #858d96;
+  font-size: 9px;
+}
+
+.amazon-listings-thumbnail {
+  display: grid;
+  flex: 0 0 58px;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #e0e4e8;
+  border-radius: 8px;
+  background: #f5f7f9;
+}
+
+.amazon-listings-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+}
+
+.amazon-listings-thumbnail span {
+  padding: 5px;
+  color: #98a1aa;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.amazon-listings-table td > small {
+  color: #858d96;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.amazon-listings-table dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.amazon-listings-table dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.amazon-listings-table dt {
+  color: #8a929b;
+  font-size: 8px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.amazon-listings-table dd {
+  overflow: hidden;
+  margin: 0;
+  color: #35404a;
+  font-size: 10px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+}
+
+.amazon-listings-channel {
+  padding: 4px 8px;
+  background: #eef3f7;
+  color: #3a5b73;
+}
+
+.amazon-listings-unmapped {
+  margin-bottom: 7px;
+  padding: 4px 8px;
+  background: #fff3e3;
+  color: #855517;
+}
+
+.amazon-listings-status {
+  max-width: 100%;
+  margin-bottom: 7px;
+  padding: 4px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amazon-listings-status.is-active {
+  background: #eaf7ef;
+  color: #286d44;
+}
+
+.amazon-listings-status.is-inactive {
+  background: #f2f3f5;
+  color: #68717a;
+}
+
+.amazon-listings-inventory {
+  position: relative;
+  display: grid;
+  width: fit-content;
+  min-width: 108px;
+  gap: 3px;
+  outline: none;
+  cursor: help;
+}
+
+.amazon-listings-inventory > strong {
+  color: #26343f;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.amazon-listings-inventory > span {
+  color: #4f5e6a;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.amazon-listings-inventory > small {
+  color: #89929b;
+  font-size: 8px;
+}
+
+.amazon-listings-inventory.is-unavailable > strong {
+  color: #7c858e;
+}
+
+.amazon-listings-inventory-popover {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 9px);
+  left: -10px;
+  display: grid;
+  visibility: hidden;
+  width: 310px;
+  gap: 11px;
+  padding: 15px;
+  border: 1px solid #ccd3da;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(21, 31, 41, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    visibility 120ms ease;
+}
+
+.amazon-listings-inventory:hover .amazon-listings-inventory-popover,
+.amazon-listings-inventory:focus .amazon-listings-inventory-popover,
+.amazon-listings-inventory:focus-within .amazon-listings-inventory-popover {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.amazon-listings-inventory-popover::before {
+  position: absolute;
+  top: -6px;
+  left: 24px;
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid #ccd3da;
+  border-left: 1px solid #ccd3da;
+  background: #fff;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.amazon-listings-inventory-popover-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amazon-listings-inventory-popover-heading strong {
+  color: #26343f;
+  font-size: 11px;
+}
+
+.amazon-listings-inventory-popover-heading span {
+  color: #287047;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.amazon-listings-inventory-popover dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  border: 1px solid #e1e5e9;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.amazon-listings-inventory-popover dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 8px;
+  border-right: 1px solid #e7eaed;
+  border-bottom: 1px solid #e7eaed;
+}
+
+.amazon-listings-inventory-popover dl > div:nth-child(even) {
+  border-right: 0;
+}
+
+.amazon-listings-inventory-popover dl > div:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.amazon-listings-inventory-popover dt {
+  color: #6e7882;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: none;
+}
+
+.amazon-listings-inventory-popover dd {
+  flex: 0 0 auto;
+  color: #2f3b45;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.amazon-listings-inventory-popover > p,
+.amazon-listings-inventory-popover > small {
+  margin: 0;
+  color: #73808b;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.amazon-listings-stock-health {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+.amazon-listings-stock-health > span {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.amazon-listings-stock-health .is-healthy {
+  background: #e8f7ee;
+  color: #246b42;
+}
+
+.amazon-listings-stock-health .is-low {
+  background: #fff4dc;
+  color: #845b0c;
+}
+
+.amazon-listings-stock-health .is-out {
+  background: #ffedeb;
+  color: #9a392e;
+}
+
+.amazon-listings-stock-health .is-unknown {
+  background: #eef1f4;
+  color: #68737d;
+}
+
+.amazon-listings-stock-health small {
+  color: #838d96;
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.amazon-listings-clear {
+  color: #34734d !important;
+}
+
+.amazon-listings-link-button,
+.amazon-listings-issue-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #9a5c0a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.amazon-listings-issue-button {
+  display: block;
+  margin: 0 0 6px;
+  color: #a04335;
+}
+
+.amazon-listings-job-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.amazon-listings-job-list article {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 90px minmax(200px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e1e4e8;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.amazon-listings-job-list article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.amazon-listings-job-list strong {
+  color: #2f3b46;
+  font-size: 11px;
+}
+
+.amazon-listings-job-list span,
+.amazon-listings-job-list small,
+.amazon-listings-jobs-empty {
+  color: #727c86;
+  font-size: 9px;
+}
+
+.amazon-listings-job-list small {
+  color: #96382d;
+  line-height: 1.45;
+}
+
+.amazon-listings-job-status {
+  justify-content: center;
+  padding: 5px 8px;
+}
+
+.amazon-listings-job-status.is-success {
+  background: #eaf7ef;
+  color: #286d44;
+}
+
+.amazon-listings-job-status.is-error {
+  background: #fff0ee;
+  color: #99392d;
+}
+
+.amazon-listings-job-status.is-warning {
+  background: #fff5dd;
+  color: #7a5715;
+}
+
+.amazon-listings-job-status.is-working {
+  background: #edf5fa;
+  color: #35627f;
+}
+
+.amazon-listings-modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(24, 31, 38, 0.52);
+  backdrop-filter: blur(2px);
+}
+
+.amazon-listings-modal {
+  display: grid;
+  gap: 14px;
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  padding: 24px;
+  overflow: auto;
+  border: 1px solid #d7dce1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 25px 70px rgba(16, 24, 32, 0.22);
+}
+
+.amazon-listings-modal > p {
+  margin: -4px 0 2px;
+  color: #65707b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.amazon-listings-product-picker,
+.amazon-listings-issue-list {
+  display: grid;
+  gap: 8px;
+  max-height: 340px;
+  padding: 3px;
+  overflow: auto;
+}
+
+.amazon-listings-product-picker > label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid #e0e4e8;
+  border-radius: 8px;
+  background: #fafbfc;
+  cursor: pointer;
+}
+
+.amazon-listings-product-picker > label.is-selected {
+  border-color: #ce9b53;
+  background: #fff8ec;
+}
+
+.amazon-listings-product-picker input {
+  accent-color: #b76c08;
+}
+
+.amazon-listings-product-picker label > span {
+  display: grid;
+  gap: 3px;
+}
+
+.amazon-listings-product-picker strong {
+  color: #2b3742;
+  font-size: 11px;
+}
+
+.amazon-listings-product-picker small,
+.amazon-listings-product-picker > p {
+  margin: 0;
+  color: #77808a;
+  font-size: 10px;
+}
+
+.amazon-listings-issue-list article {
+  padding: 12px;
+  border-left: 3px solid #c06052;
+  background: #fff5f3;
+}
+
+.amazon-listings-issue-list article > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.amazon-listings-issue-list strong {
+  color: #913b30;
+  font-size: 10px;
+}
+
+.amazon-listings-issue-list span,
+.amazon-listings-issue-list small {
+  color: #8c5a53;
+  font-size: 9px;
+}
+
+.amazon-listings-issue-list p {
+  margin: 7px 0;
+  color: #6e3d37;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.amazon-listings-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding-top: 4px;
+}
+
+@media (max-width: 980px) {
+  .amazon-listings-header {
+    display: grid;
+  }
+
+  .amazon-listings-header-actions {
+    justify-content: flex-start;
+  }
+
+  .amazon-listings-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .amazon-listings-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .amazon-listings-job-list article {
+    grid-template-columns: 1fr auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .amazon-listings-header {
+    padding: 24px 18px;
+  }
+
+  .amazon-listings-content {
+    width: calc(100% - 28px);
+    padding-top: 18px;
+  }
+
+  .amazon-listings-header-actions button {
+    flex: 1 1 auto;
+  }
+
+  .amazon-listings-summary-grid,
+  .amazon-listings-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .amazon-listings-workspace,
+  .amazon-listings-jobs {
+    padding: 16px;
+  }
+
+  .amazon-listings-section-heading {
+    display: grid;
+  }
+
+  .amazon-listings-job-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .amazon-listings-modal {
+    padding: 18px;
+  }
+}

@@ -1,0 +1,23 @@
+HISBENEW ERP - MOBILE VOICE CALL SETUP
+
+WHY THE OLD MOBILE LINK DID NOT ASK FOR THE MICROPHONE
+Android and iPhone browsers block microphone access on normal LAN HTTP links
+such as http://192.168.x.x:5173. Voice calls require a trusted HTTPS page.
+
+ONE-TIME ANDROID SETUP
+1. Run Start-Hisbenew-Erp-Mobile.cmd on the ERP computer.
+2. The window prints two addresses: a certificate link and a secure mobile URL.
+3. Open the certificate link on the phone and download the .cer file.
+4. On Android, open Settings > Security (or Security & privacy) > More security
+   settings > Install a certificate > CA certificate, then select the downloaded
+   Hisbenew ERP certificate. Menu names vary by phone brand.
+5. Completely close Chrome, reopen it, and use the printed HTTPS mobile URL.
+6. Open ERP Messages, tap Call, and choose Allow when asked for microphone access.
+
+IMPORTANT
+- If the computer's LAN IP changes, run the launcher again and install the newly
+  printed certificate before using the new HTTPS address.
+- Keep the private .pfx file inside tmp/portable/mobile-https private. Only the
+  public .cer file is installed on phones.
+- For calls across different internet networks, configure the TURN server setting
+  described in DEPLOYMENT.md.

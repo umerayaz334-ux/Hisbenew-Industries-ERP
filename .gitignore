@@ -1,0 +1,5 @@
+backend/.secret_key
+backend/.env
+data/.secret_key
+backend/static/hisbenew-erp-mobile.cer
+tmp/portable/mobile-https/

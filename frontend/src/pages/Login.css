@@ -1,0 +1,119 @@
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+  overflow-x: hidden;
+  background: #eef3f7;
+}
+
+.login-card {
+  width: min(480px, 100%);
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 40px 36px;
+  box-shadow: var(--shadow, 0 10px 24px rgba(17, 24, 39, 0.06));
+  border: 1px solid var(--erp-border, #e1e4e8);
+}
+
+.login-card h1 {
+  margin: 0 0 10px;
+  font-size: clamp(2.4rem, 3vw, 3rem);
+  line-height: 1.05;
+  color: var(--erp-heading, #111111);
+  letter-spacing: 0;
+}
+
+.login-subtitle {
+  margin: 0 0 28px;
+  color: #475569;
+  font-size: 1rem;
+  max-width: 90%;
+}
+
+.login-form {
+  display: grid;
+  gap: 18px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 10px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.login-form input {
+  width: 100%;
+  border: 1px solid #d2dce8;
+  border-radius: 8px;
+  padding: 16px 18px;
+  font-size: 1rem;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.login-form input:focus {
+  outline: none;
+  border-color: var(--erp-primary, #202124);
+  box-shadow: 0 0 0 3px rgba(32, 33, 36, 0.12);
+  transform: translateY(-1px);
+}
+
+.login-form input::placeholder {
+  color: #94a3b8;
+}
+
+.login-button {
+  border: none;
+  background: var(--erp-primary, #202124);
+  color: white;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  box-shadow: none;
+}
+
+.login-button:hover,
+.login-button:focus-visible {
+  background: #111111;
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+
+.login-button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.login-error {
+  color: #b91c1c;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .login-shell {
+    align-items: center;
+    padding: 18px;
+  }
+
+  .login-card {
+    width: 100%;
+    max-width: 390px;
+    padding: 28px 22px;
+  }
+
+  .login-card h1 {
+    font-size: clamp(2rem, 9vw, 2.45rem);
+    overflow-wrap: anywhere;
+  }
+
+  .login-subtitle {
+    max-width: none;
+  }
+}
+

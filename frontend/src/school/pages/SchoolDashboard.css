@@ -1,0 +1,138 @@
+.school-dashboard {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  overflow: hidden;
+  padding: 48px;
+  background:
+    radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--school-accent, #fff200) 20%, transparent), transparent 27%),
+    linear-gradient(135deg, #f7f7fc, color-mix(in srgb, var(--school-primary, #191797) 7%, white));
+  isolation: isolate;
+}
+
+.school-dashboard-pattern {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background-image: radial-gradient(color-mix(in srgb, var(--school-primary, #191797) 13%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: linear-gradient(to bottom right, black, transparent 70%);
+}
+
+.school-welcome-card {
+  width: min(760px, 100%);
+  padding: 64px 56px;
+  border: 1px solid color-mix(in srgb, var(--school-primary, #191797) 15%, transparent);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 28px 80px color-mix(in srgb, var(--school-primary, #191797) 12%, transparent);
+  text-align: center;
+  backdrop-filter: blur(14px);
+}
+
+.school-emblem {
+  width: 74px;
+  height: 74px;
+  margin: 0 auto 24px;
+  border-radius: 20px;
+  object-fit: contain;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--school-primary, #191797) 24%, transparent);
+}
+
+.school-eyebrow {
+  margin: 0 0 15px;
+  color: var(--school-primary, #191797);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+}
+
+.school-welcome-card h1 {
+  margin: 0;
+  color: #17182b;
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 500;
+  letter-spacing: -2px;
+  line-height: 1.08;
+}
+
+.school-welcome-card h1 span {
+  color: var(--school-primary, #191797);
+  font-weight: 900;
+}
+
+.school-welcome-copy {
+  margin: 20px 0 0;
+  color: #626477;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.school-dashboard-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 30px;
+  padding-top: 25px;
+  border-top: 1px solid #e5e5ee;
+}
+
+.school-dashboard-summary article {
+  padding: 14px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--school-primary, #191797) 6%, white);
+}
+
+.school-dashboard-summary strong,
+.school-dashboard-summary span { display: block; }
+.school-dashboard-summary strong { color: var(--school-primary, #191797); font-size: 26px; font-weight: 900; }
+.school-dashboard-summary span { margin-top: 4px; color: #747689; font-size: 11px; font-weight: 800; }
+
+@media (max-width: 900px) {
+  .school-dashboard {
+    min-height: calc(100dvh - 74px - env(safe-area-inset-bottom, 0px));
+    padding: 24px 16px;
+  }
+
+  .school-welcome-card {
+    padding: 44px 22px;
+    border-radius: 22px;
+  }
+
+  .school-emblem {
+    width: 66px;
+    height: 66px;
+    margin-bottom: 20px;
+    border-radius: 18px;
+  }
+
+  .school-welcome-card h1 {
+    font-size: clamp(34px, 11vw, 50px);
+    letter-spacing: -1.4px;
+  }
+
+  .school-welcome-copy {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 480px) {
+  .school-dashboard-summary { gap: 6px; }
+  .school-dashboard-summary article { padding: 12px 5px; }
+  .school-dashboard-summary strong { font-size: 22px; }
+  .school-dashboard-summary span { font-size: 9px; }
+}
+
+@media (max-width: 420px) {
+  .school-dashboard {
+    padding: 16px 12px;
+  }
+
+  .school-welcome-card {
+    padding: 38px 18px;
+  }
+
+}

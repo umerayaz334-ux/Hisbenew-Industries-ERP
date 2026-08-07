@@ -1,0 +1,115 @@
+.school-splash {
+  position: fixed;
+  z-index: 10000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--school-primary, #191797);
+  color: #ffffff;
+  animation: school-splash-exit 220ms ease 1050ms both;
+}
+
+.school-splash::before {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 242, 0, 0.13), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.05), transparent 48%);
+  content: "";
+}
+
+.school-splash-inner {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  animation: school-splash-rise 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.school-splash-logo-wrap {
+  position: relative;
+  display: grid;
+  width: 128px;
+  height: 128px;
+  place-items: center;
+  margin-bottom: 24px;
+}
+
+.school-splash-logo {
+  width: 104px;
+  height: 104px;
+  border-radius: 24px;
+  object-fit: contain;
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.26);
+}
+
+.school-splash-orbit {
+  position: absolute;
+  inset: 0;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--school-accent, #fff200);
+  border-radius: 50%;
+  animation: school-splash-spin 900ms linear infinite;
+}
+
+.school-splash-inner strong {
+  font-size: clamp(28px, 5vw, 42px);
+  font-weight: 900;
+  letter-spacing: -0.8px;
+}
+
+.school-splash-inner > span:not(.school-splash-orbit) {
+  margin-top: 7px;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+}
+
+.school-splash-progress {
+  width: 180px;
+  height: 4px;
+  margin-top: 28px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.school-splash-progress i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--school-accent, #fff200);
+  transform-origin: left;
+  animation: school-splash-load 1050ms ease-out both;
+}
+
+@keyframes school-splash-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes school-splash-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes school-splash-load {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes school-splash-exit {
+  to { opacity: 0; visibility: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .school-splash,
+  .school-splash-inner,
+  .school-splash-orbit,
+  .school-splash-progress i {
+    animation-duration: 1ms;
+  }
+}

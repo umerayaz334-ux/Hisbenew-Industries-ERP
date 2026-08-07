@@ -1,0 +1,77 @@
+{
+  "enabled": false,
+  "provider": "smtp",
+  "from_name": "Hisbenew ERP",
+  "from_email": "hafizumerayaz@gmail.com",
+  "reply_to": "",
+  "admin_recipients": "",
+  "cc": "",
+  "bcc": "",
+  "smtp": {
+    "host": "",
+    "port": 587,
+    "username": "",
+    "password": "",
+    "use_tls": true,
+    "use_ssl": false
+  },
+  "api": {
+    "provider": "resend",
+    "api_key": "",
+    "endpoint": "",
+    "bearer_token": ""
+  },
+  "style": {
+    "accent_color": "#173a57",
+    "background_color": "#f6f7f9",
+    "button_label": "Open ERP",
+    "button_url": "",
+    "footer_text": "This message was sent by Hisbenew Industries ERP."
+  },
+  "events": {
+    "production_task_assigned": {
+      "label": "Production task assigned",
+      "description": "Sent when a worker is assigned to a production task.",
+      "enabled": true,
+      "recipients": "worker",
+      "subject": "New production task: {{task_name}}",
+      "preheader": "{{worker_name}}, a production task is ready for you.",
+      "heading": "New production task assigned",
+      "body": "Hi {{worker_name}},\n\nYou have been assigned {{task_name}} for {{product_name}}.\nQuantity: {{quantity}}\nBatch: {{batch_no}}\nDue: {{due_date}}\n\nPlease open ERP My Tasks to start or update this work.",
+      "custom_recipients": ""
+    },
+    "manual_task_assigned": {
+      "label": "Manual worker task assigned",
+      "description": "Sent when a manual task is created from Workers.",
+      "enabled": true,
+      "recipients": "worker",
+      "subject": "Manual task assigned: {{task_name}}",
+      "preheader": "A manual production job was assigned in ERP.",
+      "heading": "Manual task assigned",
+      "body": "Hi {{worker_name}},\n\n{{task_name}} has been assigned for {{product_name}}.\nQuantity: {{quantity}}\nDue: {{due_date}}\nNotes: {{notes}}\n\nPlease review it in ERP My Tasks.",
+      "custom_recipients": ""
+    },
+    "batch_auto_assigned": {
+      "label": "Production batch auto-assigned",
+      "description": "Sent when auto-assign selects workers for batch tasks.",
+      "enabled": false,
+      "recipients": "worker",
+      "subject": "Auto-assigned task: {{task_name}}",
+      "preheader": "ERP auto-assigned a production task to you.",
+      "heading": "Production work auto-assigned",
+      "body": "Hi {{worker_name}},\n\nERP auto-assigned {{task_name}} for {{product_name}}.\nBatch: {{batch_no}}\nQuantity: {{quantity}}\n\nOpen My Tasks to review the next step.",
+      "custom_recipients": ""
+    },
+    "order_workflow_task_assigned": {
+      "label": "Order workflow task assigned",
+      "description": "Sent when an order task is assigned to a worker.",
+      "enabled": false,
+      "recipients": "worker",
+      "subject": "Order task assigned: {{task_name}}",
+      "preheader": "An order workflow task needs attention.",
+      "heading": "Order task assigned",
+      "body": "Hi {{worker_name}},\n\nYou have a new {{task_name}} task for order {{order_no}}.\nCustomer: {{customer_name}}\nDue: {{due_date}}\n\nPlease open ERP to complete the workflow.",
+      "custom_recipients": ""
+    }
+  }
+}
