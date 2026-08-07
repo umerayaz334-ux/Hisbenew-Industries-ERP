@@ -1,0 +1,19 @@
+0 verbose cli D:\softwares installation\node.exe D:\softwares installation\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.13.0
+2 info using node@v24.16.0
+3 silly config load:file:D:\softwares installation\node_modules\npm\npmrc
+4 silly config load:file:D:\Factory Software\Hisbenew Industries ERP\frontend\.npmrc
+5 silly config load:file:C:\Users\Personal\.npmrc
+6 silly config load:file:C:\Users\Personal\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm run build
+8 verbose argv "run" "build"
+9 verbose logfile logs-max:10 dir:D:\Factory Software\Hisbenew Industries ERP\tmp\portable\npm-cache\_logs\2026-08-03T06_49_44_038Z-
+10 verbose logfile D:\Factory Software\Hisbenew Industries ERP\tmp\portable\npm-cache\_logs\2026-08-03T06_49_44_038Z-debug-0.log
+11 silly logfile start cleaning logs, removing 1 files
+12 silly logfile done cleaning log files
+13 verbose cwd D:\Factory Software\Hisbenew Industries ERP\frontend
+14 verbose os Windows_NT 10.0.22621
+15 verbose node v24.16.0
+16 verbose npm  v11.13.0
+17 verbose exit 0
+18 info ok

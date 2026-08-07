@@ -1,11 +1,52 @@
+# Environment and secrets
 backend/.secret_key
 backend/.env
+backend/.env.*
+.env
+.env.*
 data/.secret_key
 backend/static/hisbenew-erp-mobile.cer
-tmp/portable/mobile-https/
 
+# Python virtual environments and caches
 backend/.venv/
+backend/venv/
 backend/.pytest_cache/
 backend/__pycache__/
+**/__pycache__/
+**/*.py[cod]
+*.pyo
+*.pyd
+
+# Node / frontend artifacts
 frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Local runtime and generated files
+*.log
+*.out
+*.err
+*.sqlite3
+*.db
+*.db-journal
+hisbenew_industries.db
+backend/uploads/
+backend/static/uploads/
+static/uploads/
+output/
+tmp/
+.tmp/
+.tmp*/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Portable / local tool caches
+tmp/portable/
+**/node-compile-cache/
+**/python-cache/
+**/.pytest_cache/
 

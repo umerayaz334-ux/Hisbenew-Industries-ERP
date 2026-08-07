@@ -1,0 +1,33 @@
+INFO:     Started server process [12556]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:63395 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:62784 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:62295 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:61184 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:62154 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:61104 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:63223 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:53536 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:57213 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:52021 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open

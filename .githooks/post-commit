@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$REPO_ROOT" ]; then
+  exit 0
+fi
+
+cd "$REPO_ROOT"
+
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  git push origin HEAD:main 2>/dev/null || true
+fi

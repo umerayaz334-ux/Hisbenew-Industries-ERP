@@ -1,0 +1,59 @@
+INFO:     Started server process [14732]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:49353 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:61057 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:61799 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:50456 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:57805 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:52273 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:51918 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:62214 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:59652 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:60613 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:55080 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:56985 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     connection closed
+INFO:     127.0.0.1:61143 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+D:\Factory Software\Hisbenew Industries ERP\backend\venv\Lib\site-packages\openpyxl\styles\stylesheet.py:237: UserWarning: Workbook contains no default style, apply openpyxl's default
+  warn("Workbook contains no default style, apply openpyxl's default")
+INFO:     connection closed
+INFO:     127.0.0.1:62386 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:51229 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:53821 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:53150 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:60801 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
