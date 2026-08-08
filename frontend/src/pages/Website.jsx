@@ -264,9 +264,17 @@ function Website() {
               </a>
             ))}
           </nav>
-          <a className="site-header-cta" href={contactHref}>
-            {settings.secondary_cta_label}
-          </a>
+          <div className="site-header-actions">
+            <a className="site-header-link" href={contactHref}>
+              {settings.secondary_cta_label}
+            </a>
+            <a className="site-header-link" href="/login">
+              Login
+            </a>
+            <a className="site-header-cta" href="/portal">
+              Sign up
+            </a>
+          </div>
         </header>
 
         {settings.announcement_text && (
