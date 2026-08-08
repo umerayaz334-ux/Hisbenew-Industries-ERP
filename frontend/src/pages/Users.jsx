@@ -418,16 +418,20 @@ export default function Users() {
   useEffect(() => {
     let active = true;
 
-    Promise.all([
+    Promise.allSettled([
       api.get("/users"),
       api.get("/workers"),
       api.get("/role-requests"),
       api.get("/access-requests"),
       api.get("/user-access-options"),
     ])
-      .then(([usersResponse, workersResponse, requestsResponse, accessRequestsResponse, accessResponse]) => {
+      .then(([usersResult, workersResult, requestsResult, accessRequestsResult, accessResult]) => {
         if (!active) return;
-        const nextAccessOptions = accessResponse.data || EMPTY_ACCESS_OPTIONS;
+
+        const nextAccessOptions =
+          accessResult.status === "fulfilled"
+            ? accessResult.value.data || EMPTY_ACCESS_OPTIONS
+            : EMPTY_ACCESS_OPTIONS;
         const nextPrivacyRoleDefaults = Object.fromEntries(
           Object.entries(
             nextAccessOptions.privacy_role_defaults || PRIVACY_ROLE_DEFAULTS
@@ -436,27 +440,41 @@ export default function Users() {
             normalizePrivacySettings(settings, key),
           ])
         );
-        setUsers(
-          Array.isArray(usersResponse.data)
-            ? usersResponse.data.map((user) => ({
-                ...user,
-                allowed_pages: normalizePageList(user.allowed_pages || []),
-                customer_privacy_settings: normalizePrivacySettings(
-                  user.customer_privacy_settings,
-                  user.role,
-                  nextPrivacyRoleDefaults
-                ),
-              }))
+
+        if (usersResult.status === "fulfilled") {
+          setUsers(
+            Array.isArray(usersResult.value.data)
+              ? usersResult.value.data.map((user) => ({
+                  ...user,
+                  allowed_pages: normalizePageList(user.allowed_pages || []),
+                  customer_privacy_settings: normalizePrivacySettings(
+                    user.customer_privacy_settings,
+                    user.role,
+                    nextPrivacyRoleDefaults
+                  ),
+                }))
+              : []
+          );
+          setError("");
+        } else {
+          console.error("Unable to load users.", usersResult.reason);
+          setError("Unable to load users. Sign out and sign in again, then reopen Users.");
+        }
+
+        setWorkers(
+          workersResult.status === "fulfilled" && Array.isArray(workersResult.value.data)
+            ? workersResult.value.data
             : []
         );
-        setWorkers(
-          Array.isArray(workersResponse.data) ? workersResponse.data : []
-        );
         setRoleRequests(
-          Array.isArray(requestsResponse.data) ? requestsResponse.data : []
+          requestsResult.status === "fulfilled" && Array.isArray(requestsResult.value.data)
+            ? requestsResult.value.data
+            : []
         );
         setAccessRequests(
-          Array.isArray(accessRequestsResponse.data) ? accessRequestsResponse.data : []
+          accessRequestsResult.status === "fulfilled" && Array.isArray(accessRequestsResult.value.data)
+            ? accessRequestsResult.value.data
+            : []
         );
         setAccessOptions({
           ...nextAccessOptions,

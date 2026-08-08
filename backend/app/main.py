@@ -1577,30 +1577,31 @@ def list_users(db: Session = Depends(get_db)):
 
 def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
     request_method = str(method or "GET").upper()
+    clean_path = (path or "/").rstrip("/") or "/"
     return (
         request_method == "OPTIONS"
-        or path == "/"
-        or path == "/login"
-        or (request_method == "POST" and path == "/access-requests")
-        or path == "/catalog"
-        or path.startswith("/catalog/")
-        or path.startswith("/portal")
-        or path == "/school/admission/apply"
-        or path.startswith("/school/admissions/public")
-        or (request_method == "GET" and path.startswith("/website"))
-        or (request_method == "GET" and path in {"/website-settings", "/website-products"})
-        or (request_method == "GET" and path == "/products/catalog-download-file")
-        or path.startswith("/static")
-        or path.startswith("/assets")
-        or path.startswith("/favicon")
-        or path.startswith("/manifest")
-        or path.startswith("/sw.js")
-        or path.startswith("/health")
-        or path.startswith("/app-install-info")
-        or path.startswith("/local-label-printers")
-        or path.startswith("/docs")
-        or path.startswith("/redoc")
-        or path == "/openapi.json"
+        or clean_path == "/"
+        or clean_path == "/login"
+        or (request_method == "POST" and clean_path.endswith("/access-requests"))
+        or clean_path == "/catalog"
+        or clean_path.startswith("/catalog/")
+        or clean_path.startswith("/portal")
+        or clean_path == "/school/admission/apply"
+        or clean_path.startswith("/school/admissions/public")
+        or (request_method == "GET" and clean_path.startswith("/website"))
+        or (request_method == "GET" and clean_path in {"/website-settings", "/website-products"})
+        or (request_method == "GET" and clean_path == "/products/catalog-download-file")
+        or clean_path.startswith("/static")
+        or clean_path.startswith("/assets")
+        or clean_path.startswith("/favicon")
+        or clean_path.startswith("/manifest")
+        or clean_path.startswith("/sw.js")
+        or clean_path.startswith("/health")
+        or clean_path.startswith("/app-install-info")
+        or clean_path.startswith("/local-label-printers")
+        or clean_path.startswith("/docs")
+        or clean_path.startswith("/redoc")
+        or clean_path == "/openapi.json"
     )
 
 
