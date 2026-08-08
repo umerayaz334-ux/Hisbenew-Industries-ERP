@@ -9,6 +9,31 @@ TSPL_PRINTER_MARKERS = ("gainscha", "tsc", "xprinter", "gprinter", "hprt")
 DEFAULT_THERMAL_DPI = 203
 MM_PER_INCH = 25.4
 ARIAL_BOLD_PATH = Path(r"C:\Windows\Fonts\arialbd.ttf")
+BLOCKING_PRINTER_STATUS_FLAGS = (
+    ("PRINTER_STATUS_PAUSED", 0x00000001, "Paused"),
+    ("PRINTER_STATUS_OFFLINE", 0x00000080, "Offline"),
+    ("PRINTER_STATUS_NOT_AVAILABLE", 0x00001000, "Not available"),
+    ("PRINTER_STATUS_ERROR", 0x00000002, "Error"),
+    ("PRINTER_STATUS_PAPER_JAM", 0x00000008, "Paper jam"),
+    ("PRINTER_STATUS_PAPER_OUT", 0x00000010, "Paper out"),
+    ("PRINTER_STATUS_MANUAL_FEED", 0x00000020, "Manual feed"),
+    ("PRINTER_STATUS_PAPER_PROBLEM", 0x00000040, "Paper problem"),
+    ("PRINTER_STATUS_NO_TONER", 0x00040000, "No toner"),
+    ("PRINTER_STATUS_OUTPUT_BIN_FULL", 0x00000800, "Output bin full"),
+    ("PRINTER_STATUS_DOOR_OPEN", 0x00400000, "Door open"),
+    ("PRINTER_STATUS_USER_INTERVENTION", 0x00100000, "Needs attention"),
+    ("PRINTER_STATUS_SERVER_UNKNOWN", 0x00800000, "Unknown"),
+)
+NON_BLOCKING_PRINTER_STATUS_FLAGS = (
+    ("PRINTER_STATUS_BUSY", 0x00000200, "Busy"),
+    ("PRINTER_STATUS_PRINTING", 0x00000400, "Printing"),
+    ("PRINTER_STATUS_WAITING", 0x00002000, "Waiting"),
+    ("PRINTER_STATUS_PROCESSING", 0x00004000, "Processing"),
+    ("PRINTER_STATUS_INITIALIZING", 0x00008000, "Initializing"),
+    ("PRINTER_STATUS_WARMING_UP", 0x00010000, "Warming up"),
+    ("PRINTER_STATUS_TONER_LOW", 0x00020000, "Toner low"),
+    ("PRINTER_STATUS_POWER_SAVE", 0x01000000, "Power save"),
+)
 
 
 class LabelPrintError(RuntimeError):
@@ -89,26 +114,77 @@ def _dots_per_mm(printer_dpi: object | None = None) -> float:
     return _normalize_printer_dpi(printer_dpi) / MM_PER_INCH
 
 
+def _status_matches(win32print: object, status: int, flags: tuple[tuple[str, int, str], ...]) -> list[str]:
+    labels = []
+    for constant_name, fallback_value, label in flags:
+        if status & int(getattr(win32print, constant_name, fallback_value)):
+            labels.append(label)
+    return labels
+
+
+def _printer_connection_status(printer_name: str) -> dict:
+    win32print = _win32print()
+    try:
+        handle = win32print.OpenPrinter(printer_name)
+    except Exception as exc:
+        return {
+            "is_connected": False,
+            "status": "Unavailable",
+            "status_detail": _text(exc) or "Windows could not open this printer.",
+            "jobs": 0,
+        }
+
+    try:
+        info = win32print.GetPrinter(handle, 2)
+    except Exception as exc:
+        return {
+            "is_connected": False,
+            "status": "Unavailable",
+            "status_detail": _text(exc) or "Windows could not read this printer status.",
+            "jobs": 0,
+        }
+    finally:
+        try:
+            win32print.ClosePrinter(handle)
+        except Exception:
+            pass
+
+    status_value = int(info.get("Status") or 0) if isinstance(info, Mapping) else 0
+    jobs = int(info.get("cJobs") or 0) if isinstance(info, Mapping) else 0
+    blocking_statuses = _status_matches(win32print, status_value, BLOCKING_PRINTER_STATUS_FLAGS)
+    active_statuses = _status_matches(win32print, status_value, NON_BLOCKING_PRINTER_STATUS_FLAGS)
+    status_labels = blocking_statuses + active_statuses
+    return {
+        "is_connected": not blocking_statuses,
+        "status": ", ".join(status_labels) if status_labels else "Ready",
+        "status_detail": "",
+        "jobs": jobs,
+    }
+
 def list_label_printers() -> dict:
     win32print = _win32print()
     flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
-    default_printer = win32print.GetDefaultPrinter()
+    try:
+        default_printer = win32print.GetDefaultPrinter()
+    except Exception:
+        default_printer = ""
     printers = []
     for entry in win32print.EnumPrinters(flags):
         name = entry[2]
+        status = _printer_connection_status(name)
         printers.append(
             {
                 "name": name,
                 "is_default": name == default_printer,
                 "supports_direct_labels": _is_tspl_printer(name),
+                **status,
             }
         )
     return {
         "default_printer": default_printer,
-        "default_printer_dpi": _printer_dpi(default_printer),
+        "default_printer_dpi": _printer_dpi(default_printer) if default_printer else DEFAULT_THERMAL_DPI,
         "printers": printers,
     }
-
 
 def _code128_unit(character: str) -> int:
     if "a" <= character <= "z":
@@ -147,15 +223,19 @@ def _resolve_printer(printer_name: object | None) -> str:
     requested = _text(printer_name)
     available = list_label_printers()["printers"]
     if requested:
-        if not any(printer["name"] == requested for printer in available):
+        selected = next((printer for printer in available if printer["name"] == requested), None)
+        if not selected:
             raise LabelPrintError("The selected label printer is not available on this computer.")
         name = requested
     else:
         name = win32print.GetDefaultPrinter()
+        selected = next((printer for printer in available if printer["name"] == name), None)
+    if selected and selected.get("is_connected") is False:
+        detail = selected.get("status") or "not connected"
+        raise LabelPrintError(f"The selected label printer is {str(detail).lower()}. Check the cable, power, and Windows printer queue.")
     if not _is_tspl_printer(name):
         raise LabelPrintError("Direct label printing needs a TSPL-compatible thermal printer such as Gainscha.")
     return name
-
 
 def _offset(item: Mapping[str, object], layer_id: str, dots_per_mm: float) -> int:
     offsets = item.get("layerOffsets")

@@ -48,6 +48,7 @@ const menuItems = [
   { name: "Amazon Pricing", label: "Amazon Pricing", icon: "wallet" },
   { name: "Quotes", icon: "quote" },
   { name: "Website", icon: "spark" },
+  { name: "Deployment", icon: "deployment" },
   { name: "Users", icon: "users" },
   { name: "TempData", label: "Temp Data", icon: "database" },
   { name: "Messages", icon: "message" },
@@ -79,6 +80,7 @@ const roleAllowedPages = {
     "Worker Payouts",
     "Reports",
     "Website",
+    "Deployment",
     "Users",
     "Settings",
     "Amazon Settings",
@@ -172,6 +174,7 @@ const secondaryMenuOrder = [
   "Reports",
   "Quotes",
   "Website",
+  "Deployment",
   "Messages",
   "Copy Clipboard",
   "Inspiration",
@@ -396,6 +399,14 @@ function SidebarIcon({ name }) {
         <path d="M9 4h6v4H9z" />
         <path d="M8 12h8" />
         <path d="M8 16h6" />
+      </>
+    ),
+    deployment: (
+      <>
+        <path d="M4 7h16" />
+        <path d="M7 7v10a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V7" />
+        <path d="M9 4h6l2 3H7l2-3Z" />
+        <path d="m9 13 2 2 4-5" />
       </>
     ),
     amazon: (

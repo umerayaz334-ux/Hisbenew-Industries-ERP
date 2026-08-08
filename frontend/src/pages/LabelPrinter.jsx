@@ -404,6 +404,8 @@ function LabelPrinter() {
   const [designClipboard, setDesignClipboard] = useState(null);
   const [directPrinter, setDirectPrinter] = useState("");
   const [directPrinting, setDirectPrinting] = useState(false);
+  const [printerOptions, setPrinterOptions] = useState([]);
+  const [printerStatus, setPrinterStatus] = useState({ loading: true, error: "" });
 
   useEffect(() => {
     let active = true;
@@ -423,19 +425,31 @@ function LabelPrinter() {
     };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    api
-      .get("/label-printers")
-      .then((response) => {
-        if (active) setDirectPrinter(response.data?.default_printer || "");
-      })
-      .catch(() => {
-        if (active) setDirectPrinter("");
+  const loadLabelPrinters = async ({ showNotice = false } = {}) => {
+    setPrinterStatus({ loading: true, error: "" });
+    try {
+      const response = await api.get("/label-printers");
+      const printers = Array.isArray(response.data?.printers) ? response.data.printers : [];
+      setPrinterOptions(printers);
+      setDirectPrinter((current) => {
+        if (current && printers.some((printer) => printer.name === current)) return current;
+        return response.data?.default_printer || printers.find((printer) => printer.is_default)?.name || printers[0]?.name || "";
       });
-    return () => {
-      active = false;
-    };
+      setPrinterStatus({ loading: false, error: "" });
+      if (showNotice) {
+        const connectedCount = printers.filter((printer) => printer.is_connected).length;
+        setNotice(printers.length ? `${connectedCount} of ${printers.length} printer${printers.length === 1 ? "" : "s"} connected.` : "No printers were found on this computer.");
+      }
+    } catch (error) {
+      setPrinterOptions([]);
+      setDirectPrinter("");
+      setPrinterStatus({ loading: false, error: error?.response?.data?.detail || "Printer status could not be checked." });
+      if (showNotice) setNotice(error?.response?.data?.detail || "Printer status could not be checked.");
+    }
+  };
+
+  useEffect(() => {
+    loadLabelPrinters();
   }, []);
 
   useEffect(() => {
@@ -521,6 +535,38 @@ function LabelPrinter() {
   }, [productSearch, products]);
 
   const totalLabels = queue.reduce((total, item) => total + getLabelPrintCount(item), 0);
+  const selectedPrinter = printerOptions.find((printer) => printer.name === directPrinter) || null;
+  const connectedPrinterCount = printerOptions.filter((printer) => printer.is_connected).length;
+  const selectedPrinterOffline = selectedPrinter?.is_connected === false;
+  const selectedPrinterUnsupported = selectedPrinter && !selectedPrinter.supports_direct_labels;
+  const directPrintDisabled = directPrinting || !directPrinter || !selectedPrinter || selectedPrinterOffline || selectedPrinterUnsupported;
+  const printerStatusClass = printerStatus.loading
+    ? "is-checking"
+    : printerStatus.error || selectedPrinterOffline
+      ? "is-error"
+      : selectedPrinter?.is_connected
+        ? "is-connected"
+        : "is-offline";
+  const printerConnectionText = printerStatus.loading
+    ? "Checking printers"
+    : printerStatus.error
+      ? "Printer status unavailable"
+      : !printerOptions.length
+        ? "No printers found"
+        : !directPrinter || !selectedPrinter
+          ? "Choose printer"
+          : selectedPrinterOffline
+            ? selectedPrinter.status || "Not connected"
+            : selectedPrinterUnsupported
+              ? "Connected, dialog only"
+              : selectedPrinter.status || "Connected";
+  const directPrintTitle = !directPrinter
+    ? "Choose a connected TSPL label printer"
+    : selectedPrinterOffline
+      ? "Selected printer is not connected"
+      : selectedPrinterUnsupported
+        ? "Use Print with dialog for non-TSPL printers"
+        : "Send labels directly to the selected thermal printer";
 
   const openInEditor = (product = null) => {
     const baseItem = createQueueItem(product);
@@ -711,21 +757,35 @@ function LabelPrinter() {
       setNotice("Add at least one product or custom label to print.");
       return;
     }
+    if (!directPrinter || !selectedPrinter) {
+      setNotice("Choose a connected label printer before sending a direct print job.");
+      return;
+    }
+    if (selectedPrinterOffline) {
+      setNotice(`${selectedPrinter.name} is ${selectedPrinter.status || "not connected"}. Check the cable, power, and Windows printer queue.`);
+      loadLabelPrinters();
+      return;
+    }
+    if (selectedPrinterUnsupported) {
+      setNotice(`${selectedPrinter.name} is connected, but direct printing needs a TSPL-compatible thermal printer. Use Print with dialog for this printer.`);
+      return;
+    }
     setDirectPrinting(true);
     try {
       const response = await api.post("/label-printers/print", {
         labels: items,
         size: { width: activeSize.width, height: activeSize.height, gap: activeSize.gap },
-        printer_name: directPrinter || undefined,
+        printer_name: directPrinter,
       });
       setNotice(`Sent ${response.data.label_count} label${response.data.label_count === 1 ? "" : "s"} directly to ${response.data.printer}.`);
+      loadLabelPrinters();
     } catch (error) {
       setNotice(error?.response?.data?.detail || "The direct label job could not be sent to the printer.");
+      loadLabelPrinters();
     } finally {
       setDirectPrinting(false);
     }
   };
-
   const printLabels = (items = queue) => {
     if (!items.length) {
       setNotice("Add at least one product or custom label to print.");
@@ -761,14 +821,64 @@ function LabelPrinter() {
           <p>Build product labels, set the exact media size, and print straight to your label printer.</p>
         </div>
         <div className="label-printer-header-actions">
-          <span className="label-printer-count">{totalLabels} labels queued</span>
-          <button className="label-printer-primary" disabled={directPrinting} onClick={() => printDirectLabels()} type="button">
-            {directPrinting ? "Sending labels..." : "Print queued labels"}
-          </button>
+          <div className="label-printer-printer-panel">
+            <label className="label-printer-printer-select">
+              <span>Printer</span>
+              <select
+                aria-label="Connected printer"
+                disabled={printerStatus.loading || printerOptions.length === 0}
+                onChange={(event) => setDirectPrinter(event.target.value)}
+                value={directPrinter}
+              >
+                <option value="">Select printer</option>
+                {printerOptions.map((printer) => (
+                  <option key={printer.name} value={printer.name}>
+                    {`${printer.name}${printer.is_default ? " (default)" : ""}${printer.is_connected ? "" : " - offline"}${printer.supports_direct_labels ? "" : " - dialog only"}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="label-printer-printer-meta">
+              <span className={`label-printer-printer-status ${printerStatusClass}`} title={selectedPrinter?.status_detail || printerStatus.error || ""}>
+                <span aria-hidden="true" />
+                {printerConnectionText}
+              </span>
+              <span>{connectedPrinterCount}/{printerOptions.length || 0} connected</span>
+              <button className="label-printer-secondary" disabled={printerStatus.loading} onClick={() => loadLabelPrinters({ showNotice: true })} type="button">
+                {printerStatus.loading ? "Checking" : "Refresh"}
+              </button>
+            </div>
+          </div>
+          <div className="label-printer-print-actions">
+            <span className="label-printer-count">{totalLabels} labels queued</span>
+            <button className="label-printer-secondary" disabled={!queue.length} onClick={() => printLabels()} type="button">
+              Print with dialog
+            </button>
+            <button className="label-printer-primary" disabled={directPrintDisabled} onClick={() => printDirectLabels()} title={directPrintTitle} type="button">
+              {directPrinting ? "Sending labels..." : "Send direct"}
+            </button>
+          </div>
         </div>
       </header>
 
       {notice ? <div className="label-printer-notice" role="status">{notice}</div> : null}
+
+      <section className="label-printer-status-strip" aria-label="Printer connection status">
+        <div>
+          <span className={`label-printer-printer-status ${printerStatusClass}`} title={selectedPrinter?.status_detail || printerStatus.error || ""}>
+            <span aria-hidden="true" />
+            {printerConnectionText}
+          </span>
+          <strong>{selectedPrinter?.name || "No printer selected"}</strong>
+          {selectedPrinter?.jobs ? <small>{selectedPrinter.jobs} job{selectedPrinter.jobs === 1 ? "" : "s"} in queue</small> : null}
+        </div>
+        <div>
+          <span>{connectedPrinterCount}/{printerOptions.length || 0} connected</span>
+          <button className="label-printer-secondary" disabled={printerStatus.loading} onClick={() => loadLabelPrinters({ showNotice: true })} type="button">
+            {printerStatus.loading ? "Checking" : "Refresh printers"}
+          </button>
+        </div>
+      </section>
 
       <section className="label-printer-layout">
         <aside className="label-printer-products">
@@ -1081,7 +1191,7 @@ function LabelPrinter() {
                       <span className="label-printer-queue-print-count">Print count: {printCount} label{printCount === 1 ? "" : "s"}</span>
                     </small>
                   </button>
-                  <button className="label-printer-row-print" disabled={directPrinting} onClick={() => printDirectLabels([item])} type="button">Print</button>
+                  <button className="label-printer-row-print" disabled={directPrintDisabled} onClick={() => printDirectLabels([item])} type="button">Print</button>
                   <button aria-label={`Remove ${item.title || "label"}`} className="label-printer-row-remove" onClick={() => removeQueueItem(item.id)} title="Remove" type="button">x</button>
                 </div>
               );

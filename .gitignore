@@ -7,6 +7,21 @@ backend/.env.*
 data/.secret_key
 backend/static/hisbenew-erp-mobile.cer
 
+backend/.venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Python
+backend/.venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
 # Python virtual environments and caches
 backend/.venv/
 backend/venv/

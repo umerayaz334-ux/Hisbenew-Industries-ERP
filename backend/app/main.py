@@ -54,6 +54,7 @@ from .integrations.amazon.models import (
 )
 from .school import ensure_default_school_foundation, router as school_router
 from .service_takers import router as service_taker_router
+from .deployment_control import router as deployment_router
 from .security import (
     create_access_token,
     decode_access_token,
@@ -129,6 +130,7 @@ app = FastAPI(title="Hisbenew Industries ERP")
 app.include_router(school_router)
 app.include_router(amazon_router)
 app.include_router(service_taker_router)
+app.include_router(deployment_router)
 app.router.add_event_handler("startup", realtime_hub.start)
 app.router.add_event_handler("shutdown", realtime_hub.stop)
 app.router.add_event_handler("startup", amazon_auto_sync_service.start)
@@ -164,6 +166,7 @@ ALL_ERP_PAGES = [
     "Worker Payouts",
     "Reports",
     "Website",
+    "Deployment",
     "Settings",
     "Amazon Settings",
     "Amazon Listings",
@@ -597,6 +600,7 @@ PAGE_PARENT_MAP = {
     "Quotes": "Settings",
     "Users": "Settings",
     "Website": "Settings",
+    "Deployment": "Settings",
     "Amazon Settings": "Settings",
     "Amazon Listings": "Products",
     "Amazon FBA Orders": "Products",
@@ -628,6 +632,7 @@ def normalize_allowed_pages(role: str, pages: list[str] | None) -> list[str]:
         normalized.append(page)
 
     for admin_page in (
+        "Deployment",
         "Amazon Settings",
         "Amazon Listings",
         "Amazon FBA Orders",

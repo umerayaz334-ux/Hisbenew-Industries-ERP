@@ -38,6 +38,7 @@ const MyTasks = lazy(() => import("./pages/MyTasks"));
 const Reports = lazy(() => import("./pages/Reports"));
 const Website = lazy(() => import("./pages/Website"));
 const WebsiteAdmin = lazy(() => import("./pages/WebsiteAdmin"));
+const Deployment = lazy(() => import("./pages/Deployment"));
 const WebsiteCatalog = lazy(() => import("./pages/WebsiteCatalog"));
 const Settings = lazy(() => import("./pages/Settings"));
 const AmazonSettings = lazy(() => import("./pages/AmazonSettings"));
@@ -66,6 +67,7 @@ const pagePaths = {
   Inspiration: "/portal/inspiration",
   Quotes: "/portal/quotes",
   Website: "/portal/website",
+  Deployment: "/portal/deployment",
   WebsiteStorefront: "/website",
   WebsiteCatalog: "/website/catalog",
   TempData: "/portal/temp-data",
@@ -156,6 +158,7 @@ const rolePages = {
     "Users",
     "Inspiration",
     "Website",
+    "Deployment",
     "TempData",
     "Messages",
     "Copy Clipboard",
@@ -258,6 +261,7 @@ const normalizeClientAllowedPages = (pages = [], role = "") => {
     if (!normalized.includes(page)) normalized.push(page);
   });
 
+  if (role === "admin" && !normalized.includes("Deployment")) normalized.push("Deployment");
   if (!normalized.includes("Dashboard")) normalized.unshift("Dashboard");
   return normalized;
 };
@@ -806,6 +810,7 @@ function App() {
     }
     if (activePage === "Reports") return <Reports />;
     if (activePage === "Website") return <WebsiteAdmin />;
+    if (activePage === "Deployment") return <Deployment />;
     if (activePage === "Workers") return <Workers />;
     if (activePage === "Users") return <Users />;
     if (activePage === "Copy Clipboard") return <CopyClipboard />;

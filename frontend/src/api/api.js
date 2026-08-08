@@ -1,4 +1,4 @@
-import axios from "axios";
+﻿import axios from "axios";
 
 const normalizeApiBase = (value) => String(value || "").trim().replace(/\/+$/, "");
 
@@ -148,7 +148,7 @@ export const apiFetch = (url, options = {}) =>
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 5000,
+  timeout: 30000,
 });
 
 api.interceptors.request.use((config) => {
@@ -164,3 +164,4 @@ api.interceptors.request.use((config) => {
 });
 
 export default api;
+

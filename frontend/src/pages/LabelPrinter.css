@@ -72,6 +72,93 @@
   justify-content: flex-end;
 }
 
+.label-printer-printer-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 360px;
+  max-width: 520px;
+  padding: 10px 11px;
+  border: 1px solid #cfdcd5;
+  border-radius: 7px;
+  background: #f9fbfa;
+}
+
+.label-printer-printer-select {
+  display: grid;
+  gap: 5px;
+  color: var(--lp-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.label-printer-printer-select select {
+  padding: 0 8px;
+}
+
+.label-printer-printer-meta,
+.label-printer-print-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.label-printer-printer-meta {
+  color: var(--lp-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.label-printer-print-actions {
+  justify-content: flex-end;
+}
+
+.label-printer-printer-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid #cfdbd5;
+  border-radius: 999px;
+  background: #fff;
+  color: #53645e;
+  white-space: nowrap;
+}
+
+.label-printer-printer-status > span:first-child {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #93a29c;
+}
+
+.label-printer-printer-status.is-connected {
+  border-color: #b8d8c7;
+  background: #eff8f2;
+  color: #236044;
+}
+
+.label-printer-printer-status.is-connected > span:first-child {
+  background: #1f9d55;
+}
+
+.label-printer-printer-status.is-error {
+  border-color: #e0b8ae;
+  background: #fff2ef;
+  color: #9b3f2f;
+}
+
+.label-printer-printer-status.is-error > span:first-child {
+  background: #cf4d35;
+}
+
+.label-printer-printer-status.is-checking > span:first-child {
+  background: #c87922;
+}
+
 .label-printer-count {
   color: var(--lp-muted);
   font-size: 12px;
@@ -105,6 +192,12 @@
   background: #17453f;
 }
 
+.label-printer-primary:disabled,
+.label-printer-secondary:disabled,
+.label-printer-row-print:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
 .label-printer-secondary,
 .label-printer-delete-size,
 .label-printer-row-print {
@@ -129,6 +222,57 @@
   font-size: 12px;
 }
 
+.label-printer-status-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 1680px;
+  margin: 0 auto 14px;
+  padding: 10px 12px;
+  border: 1px solid #cfdcd5;
+  border-radius: 7px;
+  background: #f9fbfa;
+}
+
+.label-printer-status-strip > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.label-printer-status-strip strong {
+  min-width: 0;
+  color: var(--lp-ink);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label-printer-status-strip small,
+.label-printer-status-strip > div:last-child > span {
+  color: var(--lp-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+@media (max-width: 640px) {
+  .label-printer-status-strip {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .label-printer-status-strip > div:last-child {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .label-printer-status-strip .label-printer-secondary {
+    width: 100%;
+  }
+}
 .label-printer-notice {
   max-width: 1680px;
   margin: 0 auto 14px;
@@ -202,6 +346,7 @@
 }
 
 .label-printer-search input,
+.label-printer-printer-select select,
 .label-printer-size-bar select,
 .label-printer-new-size input,
 .label-printer-editor input {
@@ -223,6 +368,7 @@
 }
 
 .label-printer-search input:focus,
+.label-printer-printer-select select:focus,
 .label-printer-size-bar select:focus,
 .label-printer-new-size input:focus,
 .label-printer-editor input:focus {
@@ -730,6 +876,15 @@
     justify-content: space-between;
   }
 
+  .label-printer-printer-panel,
+  .label-printer-print-actions {
+    width: 100%;
+  }
+
+  .label-printer-print-actions {
+    justify-content: flex-start;
+  }
+
   .label-printer-layout {
     grid-template-columns: 1fr;
   }
@@ -768,6 +923,22 @@
   .label-printer-header-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .label-printer-printer-panel {
+    min-width: 0;
+  }
+
+  .label-printer-printer-meta,
+  .label-printer-print-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .label-printer-printer-meta .label-printer-secondary,
+  .label-printer-print-actions .label-printer-secondary,
+  .label-printer-print-actions .label-printer-primary {
+    width: 100%;
   }
 
   .label-printer-primary {

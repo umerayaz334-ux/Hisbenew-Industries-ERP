@@ -669,3 +669,79 @@ INFO:     connection closed
 INFO:     connection closed
 INFO:     127.0.0.1:53856 - "WebSocket /ws/realtime" [accepted]
 INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:52144 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:54945 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     connection closed
+INFO:     127.0.0.1:50292 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:64111 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:49379 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:51811 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:55593 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:62076 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:52864 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:62575 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:53169 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:58259 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:56255 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     192.168.10.4:51728 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     192.168.10.4:51762 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     192.168.10.4:51773 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     connection closed
+INFO:     127.0.0.1:58044 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     192.168.10.4:51928 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     connection closed
+INFO:     connection closed
+INFO:     127.0.0.1:54081 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:50432 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     connection closed
+INFO:     127.0.0.1:56370 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     127.0.0.1:53769 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:53244 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     connection closed
+INFO:     127.0.0.1:62124 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
+INFO:     127.0.0.1:57753 - "WebSocket /ws/realtime" [accepted]
+INFO:     connection open
+INFO:     connection closed
