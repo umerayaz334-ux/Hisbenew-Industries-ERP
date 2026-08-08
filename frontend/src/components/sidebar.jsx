@@ -26,7 +26,7 @@ const menuItems = [
   { name: "Follow Ups", icon: "message" },
   { name: "Products", icon: "box" },
   { name: "Inventory", icon: "inventory" },
-  { name: "Label Printer", icon: "inventory" },
+  { name: "Label Printer", label: "Label Printer 1", icon: "inventory" },
   { name: "Inspiration", label: "Inspirations", icon: "spark" },
   { name: "Suppliers", label: "Accounts", icon: "suppliers" },
   { name: "Manufacturing", icon: "factory" },
