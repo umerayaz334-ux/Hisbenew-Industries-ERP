@@ -4,6 +4,16 @@ import {
   DEFAULT_WEBSITE_SETTINGS,
   normalizeWebsiteSettings,
 } from "../utils/websiteSettings";
+import {
+  addProductToCart,
+  cartSummary,
+  checkoutMessage,
+  formatUsdPrice,
+  readStorefrontCart,
+  removeCartItem,
+  setCartItemQuantity,
+  writeStorefrontCart,
+} from "../utils/storefrontCommerce";
 import "./Website.css";
 
 const fallbackCatalogImage =
@@ -52,6 +62,20 @@ const sortProducts = (products, settings) => {
     });
 };
 
+const checkoutHrefForSettings = (settings, cartItems, checkoutForm) => {
+  if (!cartItems.length) return "#checkout";
+  const message = checkoutMessage(cartItems, checkoutForm);
+  const encodedMessage = encodeURIComponent(message);
+  if (settings.whatsapp) {
+    return `https://wa.me/${String(settings.whatsapp).replace(/\D/g, "")}?text=${encodedMessage}`;
+  }
+  if (settings.email) {
+    return `mailto:${settings.email}?subject=${encodeURIComponent("Hisbenew website order request")}&body=${encodedMessage}`;
+  }
+  if (settings.phone) return `tel:${settings.phone}`;
+  return "/#contact";
+};
+
 function WebsiteCatalog() {
   const [products, setProducts] = useState([]);
   const [settings, setSettings] = useState(DEFAULT_WEBSITE_SETTINGS);
@@ -59,6 +83,14 @@ function WebsiteCatalog() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
+  const [cartItems, setCartItems] = useState([]);
+  const [checkoutForm, setCheckoutForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    notes: "",
+  });
+  const [checkoutNotice, setCheckoutNotice] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -93,6 +125,10 @@ function WebsiteCatalog() {
   useEffect(() => {
     applyCatalogSeo(settings);
   }, [settings]);
+
+  useEffect(() => {
+    setCartItems(readStorefrontCart());
+  }, []);
 
   const sortedProducts = useMemo(
     () => sortProducts(products, settings),
@@ -138,6 +174,46 @@ function WebsiteCatalog() {
     settings.hero_image_url ||
     fallbackCatalogImage;
 
+  const summary = useMemo(() => cartSummary(cartItems), [cartItems]);
+  const checkoutHref = useMemo(
+    () => checkoutHrefForSettings(settings, cartItems, checkoutForm),
+    [cartItems, checkoutForm, settings]
+  );
+  const checkoutTarget = checkoutHref.startsWith("http") ? "_blank" : undefined;
+
+  const persistCart = (nextItems) => {
+    const savedItems = writeStorefrontCart(nextItems);
+    setCartItems(savedItems);
+    return savedItems;
+  };
+
+  const handleAddToCart = (product) => {
+    persistCart(addProductToCart(cartItems, product));
+    setCheckoutNotice(`${product.name || product.article_no || "Product"} added to cart.`);
+  };
+
+  const updateQuantity = (productId, quantity) => {
+    persistCart(setCartItemQuantity(cartItems, productId, quantity));
+  };
+
+  const removeItem = (productId) => {
+    persistCart(removeCartItem(cartItems, productId));
+  };
+
+  const updateCheckoutForm = (field, value) => {
+    setCheckoutNotice("");
+    setCheckoutForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleCheckoutClick = (event) => {
+    if (!cartItems.length) {
+      event.preventDefault();
+      setCheckoutNotice("Add at least one product before checkout.");
+      return;
+    }
+    setCheckoutNotice("Checkout request ready. Send it through the contact window that opens.");
+  };
+
   return (
     <main className="website-page catalog-page">
       <header className="catalog-header">
@@ -149,10 +225,11 @@ function WebsiteCatalog() {
           <a href="/">Home</a>
           <a href="/catalog">Catalog</a>
           <a href="#products">Products</a>
+          <a href="#checkout">Checkout {summary.count ? `(${summary.count})` : ""}</a>
           <a href="#contact">Contact</a>
         </nav>
-        <a className="catalog-product-link" href="/#contact">
-          {settings.contact_button_label}
+        <a className="catalog-product-link" href="#checkout">
+          Cart {summary.count ? `(${summary.count})` : ""}
         </a>
       </header>
 
@@ -163,8 +240,8 @@ function WebsiteCatalog() {
         <span className="catalog-eyebrow">Live catalog</span>
         <h1>{settings.primary_cta_label}</h1>
         <p>
-          Browse current products synced from ERP inventory. Filter by category,
-          compare prices, and contact sales for wholesale or custom quantities.
+          Browse current products synced from ERP inventory. Add products to a
+          cart, review the USD checkout total, and send your order request.
         </p>
       </section>
 
@@ -212,41 +289,168 @@ function WebsiteCatalog() {
           </div>
         )}
 
-        <div className="catalog-product-grid">
-          {filteredProducts.map((product) => {
-            const imageUrl = productImageUrl(product);
-            return (
-              <article className="catalog-product-card" key={product.id}>
-                <a className="catalog-product-media" href="#contact">
-                  {imageUrl ? (
-                    <img src={imageUrl} alt={product.name || product.article_no || "Knife"} />
-                  ) : (
-                    <span>{product.article_no || "Knife"}</span>
-                  )}
-                </a>
-                <div className="catalog-product-copy">
-                  <span>{product.category || "Knife"}</span>
-                  <h3>{product.name || product.article_no || "Handmade knife"}</h3>
-                  <p>{product.notes || "Premium blade sourced from live ERP inventory."}</p>
+        <div className="catalog-shop-layout">
+          <div className="catalog-product-grid">
+            {filteredProducts.map((product) => {
+              const imageUrl = productImageUrl(product);
+              const stockLabel = Number(product.available_stock || 0) > 0 ? "Available" : "Inquiry";
+              return (
+                <article className="catalog-product-card" key={product.id}>
+                  <a className="catalog-product-media" href="#checkout">
+                    {imageUrl ? (
+                      <img src={imageUrl} alt={product.name || product.article_no || "Knife"} />
+                    ) : (
+                      <span>{product.article_no || "Knife"}</span>
+                    )}
+                  </a>
+                  <div className="catalog-product-copy">
+                    <span>{product.category || "Knife"}</span>
+                    <h3>{product.name || product.article_no || "Handmade knife"}</h3>
+                    <p>{product.notes || "Premium blade sourced from live ERP inventory."}</p>
+                  </div>
+                  <div className="catalog-product-meta">
+                    {settings.show_prices && <strong>{formatUsdPrice(product.selling_price)}</strong>}
+                    {settings.show_stock_badges && (
+                      <span className="catalog-product-stock">{stockLabel}</span>
+                    )}
+                  </div>
+                  <div className="catalog-product-actions">
+                    <button
+                      className="catalog-add-cart"
+                      onClick={() => handleAddToCart(product)}
+                      type="button"
+                    >
+                      Add to cart
+                    </button>
+                    <a className="catalog-product-link" href="#checkout">
+                      Checkout
+                    </a>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <aside className="catalog-checkout-panel" id="checkout" aria-label="Checkout cart">
+            <header>
+              <span>Checkout</span>
+              <h2>Your cart</h2>
+              <p>{summary.count ? `${summary.count} item${summary.count === 1 ? "" : "s"} ready` : "Add products to start an order."}</p>
+            </header>
+
+            <div className="catalog-cart-list">
+              {cartItems.length === 0 ? (
+                <div className="catalog-cart-empty">
+                  <strong>No products yet</strong>
+                  <span>Add items from the catalog and checkout here.</span>
                 </div>
-                <div className="catalog-product-meta">
-                  {settings.show_prices && (
-                    <strong>
-                      PKR {Number(product.selling_price || 0).toLocaleString("en-PK")}
-                    </strong>
-                  )}
-                  {settings.show_stock_badges && (
-                    <span className="catalog-product-stock">
-                      {Number(product.available_stock || 0) > 0 ? "Available" : "Inquiry"}
-                    </span>
-                  )}
-                </div>
-                <a className="catalog-product-link" href="/#contact">
-                  Request quote
-                </a>
-              </article>
-            );
-          })}
+              ) : (
+                cartItems.map((item) => (
+                  <article className="catalog-cart-item" key={item.id}>
+                    <div className="catalog-cart-thumb">
+                      {item.image_url ? (
+                        <img src={getStaticUrl(item.image_url)} alt="" />
+                      ) : (
+                        <span>{item.article_no || "HI"}</span>
+                      )}
+                    </div>
+                    <div>
+                      <strong>{item.name}</strong>
+                      <small>{item.article_no || item.category}</small>
+                      <span>{formatUsdPrice(item.price)} each</span>
+                    </div>
+                    <div className="catalog-cart-controls">
+                      <button
+                        aria-label={`Decrease ${item.name}`}
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        type="button"
+                      >
+                        -
+                      </button>
+                      <input
+                        aria-label={`${item.name} quantity`}
+                        inputMode="numeric"
+                        min="1"
+                        onChange={(event) => updateQuantity(item.id, event.target.value)}
+                        value={item.quantity}
+                      />
+                      <button
+                        aria-label={`Increase ${item.name}`}
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        type="button"
+                      >
+                        +
+                      </button>
+                      <button
+                        className="is-remove"
+                        onClick={() => removeItem(item.id)}
+                        type="button"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+
+            <div className="catalog-checkout-total">
+              <span>Subtotal</span>
+              <strong>{formatUsdPrice(summary.subtotal)}</strong>
+            </div>
+
+            <div className="catalog-checkout-form">
+              <label>
+                Name
+                <input
+                  onChange={(event) => updateCheckoutForm("name", event.target.value)}
+                  placeholder="Buyer name"
+                  value={checkoutForm.name}
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  onChange={(event) => updateCheckoutForm("email", event.target.value)}
+                  placeholder="buyer@example.com"
+                  type="email"
+                  value={checkoutForm.email}
+                />
+              </label>
+              <label>
+                Phone
+                <input
+                  onChange={(event) => updateCheckoutForm("phone", event.target.value)}
+                  placeholder="Phone or WhatsApp"
+                  value={checkoutForm.phone}
+                />
+              </label>
+              <label>
+                Notes
+                <textarea
+                  onChange={(event) => updateCheckoutForm("notes", event.target.value)}
+                  placeholder="Quantity details, delivery location, or custom request"
+                  rows="3"
+                  value={checkoutForm.notes}
+                />
+              </label>
+            </div>
+
+            {checkoutNotice && <p className="catalog-checkout-notice">{checkoutNotice}</p>}
+
+            <a
+              className={`catalog-checkout-button ${cartItems.length ? "" : "is-disabled"}`}
+              href={checkoutHref}
+              onClick={handleCheckoutClick}
+              rel={checkoutTarget ? "noreferrer" : undefined}
+              target={checkoutTarget}
+            >
+              Checkout order request
+            </a>
+            <small className="catalog-checkout-footnote">
+              Checkout sends the cart to sales for confirmation before payment and dispatch.
+            </small>
+          </aside>
         </div>
       </section>
 

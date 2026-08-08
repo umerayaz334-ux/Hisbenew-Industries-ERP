@@ -5,6 +5,13 @@ import {
   getVisibleSectionOrder,
   normalizeWebsiteSettings,
 } from "../utils/websiteSettings";
+import {
+  addProductToCart,
+  cartSummary,
+  formatUsdPrice,
+  readStorefrontCart,
+  writeStorefrontCart,
+} from "../utils/storefrontCommerce";
 import "./Website.css";
 
 const fallbackHeroImage =
@@ -123,6 +130,7 @@ function Website() {
   const [products, setProducts] = useState([]);
   const [settings, setSettings] = useState(DEFAULT_WEBSITE_SETTINGS);
   const [loading, setLoading] = useState(true);
+  const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -156,6 +164,10 @@ function Website() {
   useEffect(() => {
     applyWebsiteSeo(settings);
   }, [settings]);
+
+  useEffect(() => {
+    setCartCount(cartSummary(readStorefrontCart()).count);
+  }, []);
 
   const visibleProducts = useMemo(
     () => sortProductsForSite(products, settings),
@@ -214,6 +226,11 @@ function Website() {
           ? `tel:${settings.phone}`
           : "/catalog";
 
+  const handleAddToCart = (product) => {
+    const nextCart = writeStorefrontCart(addProductToCart(readStorefrontCart(), product));
+    setCartCount(cartSummary(nextCart).count);
+  };
+
   const renderProductCard = (product) => {
     const imageUrl = productImageUrl(product);
     return (
@@ -233,12 +250,21 @@ function Website() {
         <div className="site-product-meta">
           {settings.show_prices && (
             <strong>
-              PKR {Number(product.selling_price || 0).toLocaleString("en-PK")}
+              {formatUsdPrice(product.selling_price)}
             </strong>
           )}
           {settings.show_stock_badges && (
             <small>{Number(product.available_stock || 0) > 0 ? "Available" : "Inquiry only"}</small>
           )}
+        </div>
+        <div className="site-product-actions">
+          <button
+            onClick={() => handleAddToCart(product)}
+            type="button"
+          >
+            Add to cart
+          </button>
+          <a href="/catalog#checkout">Checkout</a>
         </div>
       </article>
     );
@@ -270,6 +296,9 @@ function Website() {
             </a>
             <a className="site-header-link" href="/login">
               Login
+            </a>
+            <a className="site-header-link" href="/catalog#checkout">
+              Cart {cartCount ? `(${cartCount})` : ""}
             </a>
             <a className="site-header-cta" href="/login?mode=signup">
               Sign up
