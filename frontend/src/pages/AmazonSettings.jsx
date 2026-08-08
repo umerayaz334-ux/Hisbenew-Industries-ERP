@@ -554,9 +554,11 @@ function AmazonSettings({ authenticatedUser }) {
               <section className="amazon-notice is-warning" role="alert">
                 <strong>Credential encryption key required</strong>
                 <p>
-                  Set <code>AMAZON_CREDENTIALS_ENCRYPTION_KEY</code> in{" "}
-                  <code>backend/.env</code> before saving credentials. The key
-                  never belongs in the browser or source control.
+                  Set <code>AMAZON_CREDENTIALS_ENCRYPTION_KEY</code> in the
+                  server environment before saving credentials. Docker VPS
+                  installs should set it in the root <code>.env</code>; local
+                  runs can use <code>backend/.env</code>. The key never belongs
+                  in the browser or source control.
                 </p>
               </section>
             )}

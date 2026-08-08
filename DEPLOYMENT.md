@@ -14,7 +14,9 @@ The Windows portable launcher still uses one process and SQLite. It is intended 
 
 1. Copy `.env.example` to `.env`.
 2. Set a strong `POSTGRES_PASSWORD` and `SECRET_KEY`.
-3. Set your public domain:
+3. If you use Amazon Seller Central, set `AMAZON_CREDENTIALS_ENCRYPTION_KEY`.
+   Keep the same value when moving an existing encrypted Amazon database to a new server.
+4. Set your public domain:
 
 ```env
 CORS_ALLOW_ORIGINS=https://erp.yourdomain.com
@@ -23,13 +25,13 @@ HOST_PORT=8000
 WEB_CONCURRENCY=4
 ```
 
-4. Build and start the stack:
+5. Build and start the stack:
 
 ```bash
 docker compose up -d --build
 ```
 
-5. Check service health:
+6. Check service health:
 
 ```bash
 docker compose ps
