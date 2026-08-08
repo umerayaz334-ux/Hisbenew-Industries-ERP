@@ -1,6 +1,9 @@
 """Admin-only Amazon settings, listing import, and product-mapping API."""
 
 from datetime import date, datetime, timedelta
+from time import monotonic
+
+import requests
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func
@@ -24,6 +27,9 @@ from .constants import (
     CONNECTION_TESTING,
     DEFAULT_MARKETPLACE_ID,
     DEFAULT_REGION,
+    LWA_TOKEN_URL,
+    REGION_ENDPOINTS,
+    SELLERS_MARKETPLACE_PARTICIPATIONS_PATH,
     JOB_TYPE_FBA_INVENTORY_SYNC,
     JOB_TYPE_FBA_INBOUND_PLAN_SYNC,
     JOB_TYPE_FBA_INBOUND_PLANS_SYNC,
@@ -151,7 +157,7 @@ from .schemas import (
     AmazonSyncJobResponse,
     ConfirmAmazonAction,
 )
-from .security import sanitize_external_message
+from .security import CredentialCipher, encryption_is_configured, sanitize_external_message
 
 router = APIRouter(prefix="/amazon", tags=["Amazon Seller Central"])
 
@@ -179,6 +185,189 @@ def require_amazon_admin(request: Request, db: Session = Depends(get_db)) -> Use
             detail="Only administrators can manage Amazon Seller Central settings.",
         )
     return user
+
+
+def _diagnostic_result(key: str, label: str, status: str, detail: str, **extra) -> dict:
+    result = {
+        "key": key,
+        "label": label,
+        "status": status,
+        "detail": detail,
+    }
+    result.update(extra)
+    return result
+
+
+def _probe_amazon_endpoint(key: str, label: str, url: str, *, method: str = "GET") -> dict:
+    started_at = monotonic()
+    try:
+        response = requests.request(
+            method,
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "HisbenewIndustriesERP/diagnostics",
+            },
+            timeout=(4, 8),
+        )
+    except requests.Timeout as exc:
+        return _diagnostic_result(
+            key,
+            label,
+            "failed",
+            "The VPS timed out while reaching this Amazon endpoint.",
+            duration_ms=int((monotonic() - started_at) * 1000),
+            error=sanitize_external_message(exc, fallback="Amazon endpoint timed out."),
+        )
+    except requests.RequestException as exc:
+        return _diagnostic_result(
+            key,
+            label,
+            "failed",
+            "The VPS could not reach this Amazon endpoint.",
+            duration_ms=int((monotonic() - started_at) * 1000),
+            error=sanitize_external_message(exc, fallback="Amazon endpoint unreachable."),
+        )
+
+    duration_ms = int((monotonic() - started_at) * 1000)
+    status = "ok" if response.status_code < 500 else "warning"
+    detail = (
+        "The VPS can reach this Amazon endpoint."
+        if status == "ok"
+        else "Amazon responded, but the endpoint returned a server-side error."
+    )
+    return _diagnostic_result(
+        key,
+        label,
+        status,
+        detail,
+        http_status=response.status_code,
+        duration_ms=duration_ms,
+        amazon_request_id=response.headers.get("x-amzn-requestid"),
+    )
+
+
+def _credential_decryption_check(account) -> dict:
+    if not account:
+        return _diagnostic_result(
+            "credential_decryption",
+            "Credential decryption",
+            "skipped",
+            "Save Amazon settings on this backend first.",
+        )
+    if not credentials_complete(account):
+        return _diagnostic_result(
+            "credential_decryption",
+            "Credential decryption",
+            "skipped",
+            "All required Amazon credentials are not saved yet.",
+        )
+    try:
+        cipher = CredentialCipher()
+        for value in (
+            account.encrypted_lwa_client_id,
+            account.encrypted_lwa_client_secret,
+            account.encrypted_refresh_token,
+            account.encrypted_seller_id,
+        ):
+            cipher.decrypt(value)
+    except AmazonIntegrationError as exc:
+        return _diagnostic_result(
+            "credential_decryption",
+            "Credential decryption",
+            "failed",
+            "The VPS cannot decrypt the saved Amazon credentials with its current encryption key.",
+            error_code=exc.error_code,
+        )
+
+    return _diagnostic_result(
+        "credential_decryption",
+        "Credential decryption",
+        "ok",
+        "Saved Amazon credentials decrypt successfully on this backend.",
+    )
+
+
+@router.get("/settings/diagnostics")
+def amazon_settings_diagnostics(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_amazon_admin),
+):
+    account = get_amazon_account(db)
+    checks: list[dict] = []
+
+    try:
+        CredentialCipher()
+        checks.append(
+            _diagnostic_result(
+                "encryption_key",
+                "Encryption key",
+                "ok",
+                "Amazon credential encryption key is configured on this backend.",
+            )
+        )
+    except AmazonIntegrationError as exc:
+        checks.append(
+            _diagnostic_result(
+                "encryption_key",
+                "Encryption key",
+                "failed",
+                exc.safe_message,
+                error_code=exc.error_code,
+            )
+        )
+
+    checks.append(
+        _diagnostic_result(
+            "account_record",
+            "Account record",
+            "ok" if account else "failed",
+            "Amazon settings exist in this backend database."
+            if account
+            else "No Amazon settings are saved in this backend database.",
+        )
+    )
+    checks.append(
+        _diagnostic_result(
+            "credentials_complete",
+            "Saved credentials",
+            "ok" if credentials_complete(account) else "failed",
+            "All required encrypted Amazon credentials are saved."
+            if credentials_complete(account)
+            else "Client identifier, client secret, app ID, refresh token, and seller ID must be saved on this backend.",
+        )
+    )
+    checks.append(_credential_decryption_check(account))
+
+    endpoint = (account.endpoint if account else None) or REGION_ENDPOINTS[DEFAULT_REGION]
+    checks.append(
+        _probe_amazon_endpoint(
+            "lwa_endpoint",
+            "LWA token endpoint",
+            LWA_TOKEN_URL,
+            method="POST",
+        )
+    )
+    checks.append(
+        _probe_amazon_endpoint(
+            "sp_api_endpoint",
+            "SP-API endpoint",
+            f"{endpoint.rstrip('/')}{SELLERS_MARKETPLACE_PARTICIPATIONS_PATH}",
+        )
+    )
+
+    return {
+        "server_time": datetime.utcnow().isoformat(),
+        "account_saved": bool(account),
+        "credentials_complete": credentials_complete(account),
+        "encryption_key_configured": encryption_is_configured(),
+        "connection_status": account.connection_status if account else CONNECTION_MISSING_CREDENTIALS,
+        "last_error": account.sanitized_last_error if account else None,
+        "marketplace_id": account.marketplace_id if account else DEFAULT_MARKETPLACE_ID,
+        "region": account.region if account else DEFAULT_REGION,
+        "endpoint": endpoint,
+        "checks": checks,
+    }
 
 
 @router.get("/settings", response_model=AmazonSettingsResponse)

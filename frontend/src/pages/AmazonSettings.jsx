@@ -70,6 +70,20 @@ const syncJobTone = (status) => {
   return "is-working";
 };
 
+const diagnosticTone = (status) => {
+  if (status === "ok") return "is-ok";
+  if (status === "warning") return "is-warning";
+  if (status === "skipped") return "is-skipped";
+  return "is-failed";
+};
+
+const diagnosticLabel = (status) => {
+  if (status === "ok") return "OK";
+  if (status === "warning") return "Warning";
+  if (status === "skipped") return "Skipped";
+  return "Failed";
+};
+
 const getRotationWarning = (value, referenceTime) => {
   if (!value) return "";
   const dueDate = new Date(value);
@@ -113,6 +127,9 @@ function AmazonSettings({ authenticatedUser }) {
   const [showRefreshToken, setShowRefreshToken] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [diagnostics, setDiagnostics] = useState(null);
+  const [diagnosticsError, setDiagnosticsError] = useState("");
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
   const [syncJobs, setSyncJobs] = useState([]);
   const [autoSyncForm, setAutoSyncForm] = useState({
     enabled: true,
@@ -170,6 +187,27 @@ function AmazonSettings({ authenticatedUser }) {
     }
   }, [applySettings]);
 
+  const loadDiagnostics = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setDiagnosticsLoading(true);
+    try {
+      const response = await api.get("/amazon/settings/diagnostics");
+      setDiagnostics(response.data || null);
+      setDiagnosticsError("");
+      return response.data;
+    } catch (diagnosticError) {
+      setDiagnostics(null);
+      setDiagnosticsError(
+        responseError(
+          diagnosticError,
+          "Amazon VPS diagnostics could not be loaded."
+        )
+      );
+      return null;
+    } finally {
+      if (!quiet) setDiagnosticsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isAdmin) return undefined;
     let cancelled = false;
@@ -179,6 +217,7 @@ function AmazonSettings({ authenticatedUser }) {
         if (cancelled) return;
         applySettings(response.data || {});
         setError("");
+        loadDiagnostics({ quiet: true });
       })
       .catch((loadError) => {
         if (cancelled) return;
@@ -195,7 +234,7 @@ function AmazonSettings({ authenticatedUser }) {
     return () => {
       cancelled = true;
     };
-  }, [applySettings, isAdmin]);
+  }, [applySettings, isAdmin, loadDiagnostics]);
 
   const updateField = (field, value) => {
     setForm((current) => {
@@ -225,6 +264,7 @@ function AmazonSettings({ authenticatedUser }) {
       setReauthorizing(false);
       setShowClientSecret(false);
       setShowRefreshToken(false);
+      loadDiagnostics({ quiet: true });
       setMessage(
         reauthorizing
           ? "Amazon authorization credentials updated. Test the connection to confirm access."
@@ -246,11 +286,13 @@ function AmazonSettings({ authenticatedUser }) {
     try {
       const response = await api.post("/amazon/settings/test-connection");
       applySettings(response.data);
+      loadDiagnostics({ quiet: true });
       setMessage(
         "Amazon Seller Central connected successfully through the Sellers API."
       );
     } catch (testError) {
       await loadSettings({ quiet: true });
+      loadDiagnostics({ quiet: true });
       setError(
         responseError(
           testError,
@@ -434,6 +476,10 @@ function AmazonSettings({ authenticatedUser }) {
     settings?.lwa_secret_rotation_due_date,
     rotationReferenceTime
   );
+  const diagnosticChecks = diagnostics?.checks || [];
+  const failedDiagnosticCount = diagnosticChecks.filter((check) =>
+    ["failed", "warning"].includes(check.status)
+  ).length;
   const completedSyncJobs = syncJobs.filter((job) =>
     TERMINAL_SYNC_STATUSES.has(job.status)
   ).length;
@@ -655,6 +701,57 @@ function AmazonSettings({ authenticatedUser }) {
               </section>
             )}
 
+            <section className="amazon-diagnostics-panel">
+              <div className="amazon-section-heading">
+                <div>
+                  <span className="amazon-eyebrow">VPS diagnostics</span>
+                  <h2>Amazon connection checks</h2>
+                  <p>
+                    {!diagnosticChecks.length
+                      ? "Refresh checks to inspect this backend."
+                      : failedDiagnosticCount
+                        ? `${failedDiagnosticCount} check${failedDiagnosticCount === 1 ? "" : "s"} need attention on this backend.`
+                        : "Backend settings and Amazon network checks are clear."}
+                  </p>
+                </div>
+                <button
+                  className="amazon-secondary-button"
+                  disabled={diagnosticsLoading}
+                  onClick={() => loadDiagnostics()}
+                  type="button"
+                >
+                  {diagnosticsLoading ? "Checking..." : "Refresh checks"}
+                </button>
+              </div>
+              {diagnosticsError ? (
+                <div className="amazon-safe-error" role="alert">
+                  <strong>Diagnostics unavailable</strong>
+                  <p>{diagnosticsError}</p>
+                </div>
+              ) : null}
+              <div className="amazon-diagnostics-grid">
+                {diagnosticChecks.map((check) => (
+                  <article className={diagnosticTone(check.status)} key={check.key}>
+                    <span>{check.label}</span>
+                    <strong>{diagnosticLabel(check.status)}</strong>
+                    <small>{check.detail}</small>
+                    {check.http_status || check.duration_ms ? (
+                      <em>
+                        {check.http_status ? `HTTP ${check.http_status}` : "No HTTP status"}
+                        {check.duration_ms ? ` | ${check.duration_ms} ms` : ""}
+                      </em>
+                    ) : null}
+                  </article>
+                ))}
+                {!diagnosticsLoading && diagnosticChecks.length === 0 ? (
+                  <article className="is-skipped">
+                    <span>Diagnostics</span>
+                    <strong>Not checked</strong>
+                    <small>Refresh checks to inspect this backend.</small>
+                  </article>
+                ) : null}
+              </div>
+            </section>
             <section className="amazon-overview-grid">
               <article className="amazon-connection-card">
                 <div className="amazon-card-heading">

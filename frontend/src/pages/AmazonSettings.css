@@ -130,6 +130,7 @@
 .amazon-security-card,
 .amazon-settings-form,
 .amazon-actions-panel,
+.amazon-diagnostics-panel,
 .amazon-auto-sync-panel,
 .amazon-sync-all-panel {
   min-width: 0;
@@ -148,6 +149,94 @@
 .amazon-auto-sync-panel {
   display: grid;
   gap: 18px;
+}
+.amazon-diagnostics-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.amazon-diagnostics-panel .amazon-section-heading p {
+  max-width: 580px;
+  margin-top: 6px;
+  color: #68737e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.amazon-diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.amazon-diagnostics-grid article {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid #e0e4e8;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.amazon-diagnostics-grid article > span {
+  color: #68737e;
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.amazon-diagnostics-grid article > strong {
+  width: fit-content;
+  font-size: 11px;
+}
+
+.amazon-diagnostics-grid article > small,
+.amazon-diagnostics-grid article > em {
+  min-width: 0;
+  color: #596572;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.amazon-diagnostics-grid article > em {
+  color: #7b858f;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.amazon-diagnostics-grid article.is-ok {
+  border-color: #b9ddc7;
+  background: #f0faf4;
+}
+
+.amazon-diagnostics-grid article.is-ok > strong {
+  color: #247447;
+}
+
+.amazon-diagnostics-grid article.is-warning {
+  border-color: #e6cf9d;
+  background: #fff8e8;
+}
+
+.amazon-diagnostics-grid article.is-warning > strong,
+.amazon-diagnostics-grid article.is-skipped > strong {
+  color: #8a5c0a;
+}
+
+.amazon-diagnostics-grid article.is-failed {
+  border-color: #e4bbb6;
+  background: #fff1ef;
+}
+
+.amazon-diagnostics-grid article.is-failed > strong {
+  color: #9a392e;
+}
+
+.amazon-diagnostics-grid article.is-skipped {
+  border-color: #d9dde2;
+  background: #f4f5f7;
 }
 
 .amazon-auto-sync-status {
@@ -723,7 +812,8 @@
   .amazon-form-grid,
   .amazon-facts-grid,
   .amazon-credential-grid,
-  .amazon-sync-job-grid {
+  .amazon-sync-job-grid,
+  .amazon-diagnostics-grid {
     grid-template-columns: 1fr;
   }
 
