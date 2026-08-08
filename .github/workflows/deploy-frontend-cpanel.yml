@@ -1,0 +1,56 @@
+name: Deploy frontend to cPanel
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-frontend-cpanel.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: frontend-cpanel-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build and upload frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      VITE_API_BASE_URL: "${{ vars.VITE_API_BASE_URL || 'https://api.hisbenew.com' }}"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Deploy dist to cPanel
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: ${{ secrets.CPANEL_FTP_SERVER }}
+          username: ${{ secrets.CPANEL_FTP_USERNAME }}
+          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
+          protocol: ${{ vars.CPANEL_FTP_PROTOCOL || 'ftps' }}
+          local-dir: frontend/dist/
+          server-dir: ${{ vars.CPANEL_PUBLIC_HTML_DIR || 'public_html/' }}
+
+      - name: Verify live frontend
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 10 https://hisbenew.com/
