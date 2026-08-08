@@ -411,6 +411,38 @@ def _deployment_status() -> dict:
             "public_api_health_url": PUBLIC_API_HEALTH_URL,
             "local_api_health_url": LOCAL_API_HEALTH_URL,
             "local_backend_deploy_enabled": _truthy(os.getenv("ERP_ENABLE_LOCAL_DEPLOY_ACTIONS")),
+            "required_github_secrets": [
+                "CPANEL_FTP_SERVER",
+                "CPANEL_FTP_USERNAME",
+                "CPANEL_FTP_PASSWORD",
+            ],
+            "required_github_variables": [
+                {"name": "VITE_API_BASE_URL", "value": "https://api.hisbenew.com"},
+                {"name": "CPANEL_FTP_PROTOCOL", "value": "ftps"},
+                {"name": "CPANEL_PUBLIC_HTML_DIR", "value": "public_html/"},
+            ],
+            "backend_environment": [
+                {
+                    "name": "GITHUB_DEPLOY_TOKEN",
+                    "purpose": "Allows ERP buttons to trigger GitHub Actions workflows.",
+                    "configured": bool(_github_token()),
+                },
+                {
+                    "name": "ERP_ENABLE_LOCAL_DEPLOY_ACTIONS",
+                    "purpose": "Allows the VPS to run scripts/deploy-backend.ps1 from ERP.",
+                    "configured": _truthy(os.getenv("ERP_ENABLE_LOCAL_DEPLOY_ACTIONS")),
+                },
+                {
+                    "name": "ERP_BACKEND_HEALTH_URL",
+                    "purpose": "Overrides the local FastAPI health check URL.",
+                    "configured": bool(os.getenv("ERP_BACKEND_HEALTH_URL")),
+                },
+                {
+                    "name": "ERP_PUBLIC_API_HEALTH_URL",
+                    "purpose": "Overrides the public API health check URL.",
+                    "configured": bool(os.getenv("ERP_PUBLIC_API_HEALTH_URL")),
+                },
+            ],
         },
         "checklist": checklist,
     }

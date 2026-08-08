@@ -90,9 +90,12 @@ function Deployment() {
       const response = await api.get("/admin/deployment/status");
       setStatus(response.data || null);
     } catch (requestError) {
+      const statusCode = requestError.response?.status;
       setError(
-        requestError.response?.data?.detail ||
-          "Deployment status could not be loaded."
+        statusCode === 404
+          ? "Deployment API is not live on the backend yet. Deploy the backend update on the VPS, then refresh this page."
+          : requestError.response?.data?.detail ||
+            "Deployment status could not be loaded."
       );
     } finally {
       setLoading(false);
@@ -143,6 +146,7 @@ function Deployment() {
   const localFrontend = status?.local_frontend || {};
   const health = status?.health || {};
   const githubActions = status?.github_actions || {};
+  const setup = status?.settings || {};
 
   const liveBundleMatches = useMemo(
     () =>
@@ -327,6 +331,39 @@ function Deployment() {
             </article>
           </section>
 
+          <section className="deployment-panel deployment-panel-full">
+            <div className="deployment-panel-heading">
+              <div>
+                <span className="deployment-eyebrow">Setup</span>
+                <h2>Connection requirements</h2>
+              </div>
+            </div>
+            <div className="deployment-requirements">
+              <div>
+                <strong>GitHub secrets</strong>
+                {(setup.required_github_secrets || []).map((name) => (
+                  <code key={name}>{name}</code>
+                ))}
+              </div>
+              <div>
+                <strong>GitHub variables</strong>
+                {(setup.required_github_variables || []).map((item) => (
+                  <code key={item.name}>
+                    {item.name}={item.value}
+                  </code>
+                ))}
+              </div>
+              <div>
+                <strong>Backend server variables</strong>
+                {(setup.backend_environment || []).map((item) => (
+                  <span key={item.name}>
+                    <code>{item.name}</code>
+                    <small>{item.configured ? "Configured" : item.purpose}</small>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </section>
           <section className="deployment-panel deployment-panel-full">
             <div className="deployment-panel-heading">
               <div>
