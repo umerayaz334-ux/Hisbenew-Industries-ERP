@@ -212,13 +212,13 @@ function Website() {
         ? `mailto:${settings.email}`
         : settings.phone
           ? `tel:${settings.phone}`
-          : "/website/catalog";
+          : "/catalog";
 
   const renderProductCard = (product) => {
     const imageUrl = productImageUrl(product);
     return (
       <article className="site-product-card" key={product.id}>
-        <a className="site-product-media" href="/website/catalog">
+        <a className="site-product-media" href="/catalog">
           {imageUrl ? (
             <img src={imageUrl} alt={product.name || product.article_no || "Knife"} />
           ) : (
@@ -253,7 +253,7 @@ function Website() {
         style={{ backgroundImage: `linear-gradient(90deg, rgba(10, 14, 20, 0.86), rgba(10, 14, 20, 0.42)), url(${heroImage})` }}
       >
         <header className="site-header">
-          <a className="site-brand" href="/website">
+          <a className="site-brand" href="/">
             <strong>{settings.brand_name}</strong>
             <span>{settings.tagline}</span>
           </a>
@@ -286,7 +286,7 @@ function Website() {
           <h1>{settings.hero_title}</h1>
           <p>{settings.hero_subtitle}</p>
           <div className="site-hero-actions">
-            <a href="/website/catalog">{settings.primary_cta_label}</a>
+            <a href="/catalog">{settings.primary_cta_label}</a>
             <a href={contactHref}>{settings.secondary_cta_label}</a>
           </div>
         </div>
@@ -315,7 +315,7 @@ function Website() {
         </div>
         <div className="site-collection-grid">
           {categories.map((category) => (
-            <a className="site-collection-card" href="/website/catalog" key={category.id}>
+            <a className="site-collection-card" href="/catalog" key={category.id}>
               {category.image && <img src={category.image} alt={category.title} />}
               <div>
                 <h3>{category.title}</h3>
@@ -338,7 +338,7 @@ function Website() {
             <h2>{settings.featured_heading}</h2>
             <p>{settings.featured_text}</p>
           </div>
-          <a href="/website/catalog">Open full catalog</a>
+          <a href="/catalog">Open full catalog</a>
         </div>
         <div className="site-product-grid">
           {featuredProducts.map(renderProductCard)}

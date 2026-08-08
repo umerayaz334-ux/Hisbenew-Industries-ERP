@@ -68,8 +68,8 @@ const pagePaths = {
   Quotes: "/portal/quotes",
   Website: "/portal/website",
   Deployment: "/portal/deployment",
-  WebsiteStorefront: "/website",
-  WebsiteCatalog: "/website/catalog",
+  WebsiteStorefront: "/",
+  WebsiteCatalog: "/catalog",
   TempData: "/portal/temp-data",
   Messages: "/portal/messages",
   "Copy Clipboard": "/portal/copy-clipboard",
@@ -218,6 +218,8 @@ const pathToPage = Object.fromEntries(
 pathToPage["/portal/payments"] = "Billings";
 pathToPage["/portal/amazon/fba-inventory"] = "Products";
 pathToPage["/portal/service-taker"] = "Service Dashboard";
+pathToPage["/website"] = "WebsiteStorefront";
+pathToPage["/website/catalog"] = "WebsiteCatalog";
 
 const schoolWorkspacePages = new Set([
   "School ERP",

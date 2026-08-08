@@ -141,17 +141,17 @@ function WebsiteCatalog() {
   return (
     <main className="website-page catalog-page">
       <header className="catalog-header">
-        <a className="catalog-brand" href="/website">
+        <a className="catalog-brand" href="/">
           <strong>{settings.brand_name}</strong>
           <span>{settings.tagline}</span>
         </a>
         <nav className="catalog-nav" aria-label="Catalog navigation">
-          <a href="/website">Home</a>
-          <a href="/website/catalog">Catalog</a>
+          <a href="/">Home</a>
+          <a href="/catalog">Catalog</a>
           <a href="#products">Products</a>
           <a href="#contact">Contact</a>
         </nav>
-        <a className="catalog-product-link" href="/website#contact">
+        <a className="catalog-product-link" href="/#contact">
           {settings.contact_button_label}
         </a>
       </header>
@@ -241,7 +241,7 @@ function WebsiteCatalog() {
                     </span>
                   )}
                 </div>
-                <a className="catalog-product-link" href="/website#contact">
+                <a className="catalog-product-link" href="/#contact">
                   Request quote
                 </a>
               </article>
@@ -256,7 +256,7 @@ function WebsiteCatalog() {
           <h2>{settings.contact_heading}</h2>
           <p>{settings.contact_text}</p>
         </div>
-        <a href="/website#contact">{settings.contact_button_label}</a>
+        <a href="/#contact">{settings.contact_button_label}</a>
       </section>
     </main>
   );

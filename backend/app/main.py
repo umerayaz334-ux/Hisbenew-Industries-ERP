@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form, Request, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session
@@ -1546,6 +1546,8 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
         request_method == "OPTIONS"
         or path == "/"
         or path == "/login"
+        or path == "/catalog"
+        or path.startswith("/catalog/")
         or path.startswith("/portal")
         or path == "/school/admission/apply"
         or path.startswith("/school/admissions/public")
@@ -15174,12 +15176,22 @@ def frontend_response(path: str = ""):
         return FileResponse(requested_file)
 
     first_segment = path.split("/", 1)[0]
-    if path in ("", "index.html") or first_segment in {"portal", "login", "website", "school"}:
+    if path in ("", "index.html") or first_segment in {"portal", "login", "catalog", "website", "school"}:
         index_file = FRONTEND_DIST_DIR / "index.html"
         if index_file.is_file():
             return FileResponse(index_file)
 
     raise HTTPException(status_code=404, detail="File not found")
+
+
+@app.get("/website", include_in_schema=False)
+def redirect_legacy_website_root():
+    return RedirectResponse(url="/", status_code=308)
+
+
+@app.get("/website/catalog", include_in_schema=False)
+def redirect_legacy_website_catalog():
+    return RedirectResponse(url="/catalog", status_code=308)
 
 
 @app.get("/", include_in_schema=False)

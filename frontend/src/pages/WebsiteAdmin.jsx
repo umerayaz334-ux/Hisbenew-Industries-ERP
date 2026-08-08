@@ -261,7 +261,7 @@ function WebsiteAdmin() {
     setError("");
   };
 
-  const openPreview = (path = "/website") => {
+  const openPreview = (path = "/") => {
     const url = new URL(path, previewUrl);
     window.open(url.toString(), "_blank", "noopener,noreferrer");
   };
@@ -467,7 +467,7 @@ function WebsiteAdmin() {
       </div>
       <div className="website-admin-grid">{seoFields.map(renderField)}</div>
       <div className="website-serp-preview">
-        <span>{settings.canonical_url || `${previewUrl}/website`}</span>
+        <span>{settings.canonical_url || previewUrl}</span>
         <strong>{settings.meta_title}</strong>
         <p>{settings.meta_description}</p>
       </div>
@@ -564,10 +564,10 @@ function WebsiteAdmin() {
           <p>Control storefront content, SEO, product visibility, and homepage sections.</p>
         </div>
         <div className="website-admin-actions">
-          <button className="website-admin-secondary" onClick={() => openPreview("/website/catalog")} type="button">
+          <button className="website-admin-secondary" onClick={() => openPreview("/catalog")} type="button">
             Preview catalog
           </button>
-          <button className="website-admin-primary" onClick={() => openPreview("/website")} type="button">
+          <button className="website-admin-primary" onClick={() => openPreview("/")} type="button">
             Preview website
           </button>
         </div>

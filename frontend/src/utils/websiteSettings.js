@@ -148,6 +148,6 @@ export const getVisibleSectionOrder = (settings = DEFAULT_WEBSITE_SETTINGS) => {
 };
 
 export const websitePreviewUrl = () => {
-  if (typeof window === "undefined") return "/website";
-  return `${window.location.origin}/website`;
+  if (typeof window === "undefined") return "/";
+  return window.location.origin;
 };
