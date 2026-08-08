@@ -2,16 +2,50 @@ import { useState } from "react";
 import api, { API_BASE_URL } from "../api/api";
 import "./Login.css";
 
+const providerOptions = [
+  { name: "Google", mark: "G" },
+  { name: "Apple", mark: "A" },
+  { name: "Microsoft", mark: "M" },
+  { name: "Passkey", mark: "P" },
+];
+
+const accessTemplate = ({ fullName, workEmail, phone, role }) =>
+  [
+    "Hisbenew ERP access request",
+    `Name: ${fullName.trim()}`,
+    `Email: ${workEmail.trim() || "Not provided"}`,
+    `Phone: ${phone.trim() || "Not provided"}`,
+    `Requested workspace: ${role}`,
+  ].join("\n");
+
 export default function Login({ onLogin, message, onClearMessage }) {
+  const [mode, setMode] = useState("signin");
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
+  const [accessForm, setAccessForm] = useState({
+    fullName: "",
+    workEmail: "",
+    phone: "",
+    role: "Factory operations",
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const clearFeedback = () => {
+    onClearMessage?.();
+    setError("");
+    setNotice("");
+  };
+
+  const switchMode = (nextMode) => {
+    clearFeedback();
+    setMode(nextMode);
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    onClearMessage?.();
-    setError("");
+    clearFeedback();
 
     if (!username.trim()) {
       setError("Enter username.");
@@ -45,54 +79,230 @@ export default function Login({ onLogin, message, onClearMessage }) {
     }
   };
 
+  const handleProviderSelect = (providerName) => {
+    clearFeedback();
+    setNotice(
+      `${providerName} sign-in is ready for SSO setup. Use username and PIN until an admin connects this provider.`
+    );
+  };
+
+  const updateAccessForm = (field, value) => {
+    clearFeedback();
+    setAccessForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleAccessRequest = async (event) => {
+    event.preventDefault();
+    clearFeedback();
+    if (!accessForm.fullName.trim()) {
+      setError("Enter your full name.");
+      return;
+    }
+    if (!accessForm.workEmail.trim() && !accessForm.phone.trim()) {
+      setError("Add an email or phone number.");
+      return;
+    }
+
+    const requestText = accessTemplate(accessForm);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(requestText);
+        setNotice("Access request copied. Send it to an ERP admin for account approval.");
+        return;
+      }
+    } catch (copyError) {
+      console.warn("Access request could not be copied.", copyError);
+    }
+    setNotice("Access request is ready. Send your details to an ERP admin for account approval.");
+  };
+
+  const feedback = error || notice || message;
+  const feedbackTone = error ? "is-error" : "is-info";
+
   return (
     <div className="login-shell">
-      <div className="login-card">
-        <h1>
-          Welcome to<br />
-          Hisbenew Industries
-        </h1>
-        <p className="login-subtitle">Login to continue and access your workspace.</p>
+      <section className="login-stage" aria-label="Hisbenew ERP access">
+        <aside className="login-brand-panel">
+          <a className="login-mark" href="/" aria-label="Hisbenew website">
+            HI
+          </a>
+          <div>
+            <span className="login-eyebrow">Secure command center</span>
+            <h1>Hisbenew Industries ERP</h1>
+            <p>
+              Factory operations, inventory, fulfillment, Amazon, finance, and
+              teams in one private workspace.
+            </p>
+          </div>
+          <div className="login-proof-grid" aria-label="Workspace highlights">
+            <article>
+              <strong>Portal</strong>
+              <span>Role based access</span>
+            </article>
+            <article>
+              <strong>Storefront</strong>
+              <span>Live website at root</span>
+            </article>
+            <article>
+              <strong>Security</strong>
+              <span>PIN plus managed users</span>
+            </article>
+          </div>
+        </aside>
 
-        <form className="login-form" onSubmit={handleSubmit}>
-          <label>
-            Username
-            <input
-              value={username}
-              onChange={(e) => {
-                onClearMessage?.();
-                setUsername(e.target.value);
-              }}
-              placeholder="admin"
-              autoFocus
-            />
-          </label>
+        <main className="login-card">
+          <div className="login-card-top">
+            <span>Account access</span>
+            <a href="/">View website</a>
+          </div>
 
-          <label>
-            4-digit PIN
-            <input
-              type="password"
-              inputMode="numeric"
-              pattern="\d{4}"
-              maxLength={4}
-              value={pin}
-              onChange={(e) => {
-                onClearMessage?.();
-                setPin(e.target.value.replace(/\D/g, ""));
-              }}
-              placeholder="0000"
-            />
-          </label>
+          <div className="login-tabs" role="tablist" aria-label="Login mode">
+            <button
+              aria-selected={mode === "signin"}
+              className={mode === "signin" ? "is-active" : ""}
+              onClick={() => switchMode("signin")}
+              role="tab"
+              type="button"
+            >
+              Sign in
+            </button>
+            <button
+              aria-selected={mode === "signup"}
+              className={mode === "signup" ? "is-active" : ""}
+              onClick={() => switchMode("signup")}
+              role="tab"
+              type="button"
+            >
+              Sign up
+            </button>
+          </div>
 
-          <button type="submit" className="login-button" disabled={loading}>
-            {loading ? "Signing in..." : "Sign in"}
-          </button>
+          <header className="login-heading">
+            <span>{mode === "signin" ? "Welcome back" : "New account"}</span>
+            <h2>{mode === "signin" ? "Sign in to your portal" : "Request ERP access"}</h2>
+            <p>
+              {mode === "signin"
+                ? "Use your ERP username and 4-digit PIN."
+                : "Accounts are approved by an ERP admin before activation."}
+            </p>
+          </header>
 
-          {(error || message) && (
-            <p className="login-error">{error || message}</p>
+          <div className="login-provider-grid" aria-label="Single sign-on options">
+            {providerOptions.map((provider) => (
+              <button
+                key={provider.name}
+                onClick={() => handleProviderSelect(provider.name)}
+                type="button"
+              >
+                <span aria-hidden="true">{provider.mark}</span>
+                {provider.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="login-divider">
+            <span>{mode === "signin" ? "or continue with ERP PIN" : "or prepare a request"}</span>
+          </div>
+
+          {mode === "signin" ? (
+            <form className="login-form" onSubmit={handleSubmit}>
+              <label>
+                <span>Username</span>
+                <input
+                  value={username}
+                  onChange={(event) => {
+                    clearFeedback();
+                    setUsername(event.target.value);
+                  }}
+                  placeholder="adminmain"
+                  autoFocus
+                />
+              </label>
+
+              <label>
+                <span>4-digit PIN</span>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="\d{4}"
+                  maxLength={4}
+                  value={pin}
+                  onChange={(event) => {
+                    clearFeedback();
+                    setPin(event.target.value.replace(/\D/g, ""));
+                  }}
+                  placeholder="0000"
+                />
+              </label>
+
+              <button type="submit" className="login-button" disabled={loading}>
+                {loading ? "Signing in..." : "Sign in"}
+              </button>
+            </form>
+          ) : (
+            <form className="login-form" onSubmit={handleAccessRequest}>
+              <label>
+                <span>Full name</span>
+                <input
+                  value={accessForm.fullName}
+                  onChange={(event) => updateAccessForm("fullName", event.target.value)}
+                  placeholder="Your name"
+                  autoFocus
+                />
+              </label>
+
+              <div className="login-form-grid">
+                <label>
+                  <span>Work email</span>
+                  <input
+                    type="email"
+                    value={accessForm.workEmail}
+                    onChange={(event) => updateAccessForm("workEmail", event.target.value)}
+                    placeholder="name@company.com"
+                  />
+                </label>
+                <label>
+                  <span>Phone</span>
+                  <input
+                    value={accessForm.phone}
+                    onChange={(event) => updateAccessForm("phone", event.target.value)}
+                    placeholder="+92..."
+                  />
+                </label>
+              </div>
+
+              <label>
+                <span>Workspace needed</span>
+                <select
+                  value={accessForm.role}
+                  onChange={(event) => updateAccessForm("role", event.target.value)}
+                >
+                  <option>Factory operations</option>
+                  <option>Warehouse and fulfillment</option>
+                  <option>Finance and accounting</option>
+                  <option>School ERP</option>
+                  <option>Service taker portal</option>
+                </select>
+              </label>
+
+              <button type="submit" className="login-button">
+                Prepare access request
+              </button>
+            </form>
           )}
-        </form>
-      </div>
+
+          {feedback && (
+            <p className={`login-feedback ${feedbackTone}`} role="status">
+              {feedback}
+            </p>
+          )}
+
+          <footer className="login-footer">
+            <span>Protected ERP workspace</span>
+            <a href="/portal">Open portal</a>
+          </footer>
+        </main>
+      </section>
     </div>
   );
 }
