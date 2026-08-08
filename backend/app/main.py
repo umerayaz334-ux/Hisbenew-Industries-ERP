@@ -34,7 +34,7 @@ from urllib import request as urllib_request
 
 from .config import APP_DATA_DIR, CORS_ALLOW_ORIGINS, CORS_ALLOW_ORIGIN_REGEX, FRONTEND_DIST_DIR, INTERNAL_CALL_ICE_SERVERS, STATIC_DIR, UPLOAD_DIR
 from .database import Base, engine, SessionLocal, ensure_scaling_indexes, migrate_database
-from .models import Product, Customer, User, ActivityLog, UserRoleRequest, InternalMessage, InternalCall, InternalCallSignal, InspirationItem, OrderImportBatch, Order, OrderItem, StockMovement, Supplier, SupplierOrderItem, SupplierSupplyItem, SupplierTransaction, SupplierPayment, WorkflowStep, Worker, WorkerPayment, Shipping, FulfillmentShipment, FulfillmentBox, FulfillmentBoxItem, FulfillmentInventoryDiscrepancy, FulfillmentOrder, FulfillmentOrderItem, FulfillmentPick, CourierPayment, RegularBill, RegularBillPayment, AccountingAccount, AccountingTransaction, ProductionBatch, ProductionTask, SharedData, WorkspaceData, OrderWorkflowTask, OrderFollowUp
+from .models import Product, Customer, User, ActivityLog, UserRoleRequest, PublicAccessRequest, InternalMessage, InternalCall, InternalCallSignal, InspirationItem, OrderImportBatch, Order, OrderItem, StockMovement, Supplier, SupplierOrderItem, SupplierSupplyItem, SupplierTransaction, SupplierPayment, WorkflowStep, Worker, WorkerPayment, Shipping, FulfillmentShipment, FulfillmentBox, FulfillmentBoxItem, FulfillmentInventoryDiscrepancy, FulfillmentOrder, FulfillmentOrderItem, FulfillmentPick, CourierPayment, RegularBill, RegularBillPayment, AccountingAccount, AccountingTransaction, ProductionBatch, ProductionTask, SharedData, WorkspaceData, OrderWorkflowTask, OrderFollowUp
 from .integrations.amazon import router as amazon_router
 from .integrations.amazon.autosync import amazon_auto_sync_service
 from .integrations.amazon.constants import (
@@ -89,6 +89,7 @@ from .schemas import (
     CustomerCreate, CustomerOut,
     UserCreate, UserUpdate, UserOut, LoginRequest, LoginResponse, UserProfileUpdate,
     RoleRequestCreate, RoleRequestUpdate, RoleRequestOut,
+    PublicAccessRequestCreate, PublicAccessRequestReview, PublicAccessRequestUpdate, PublicAccessRequestOut,
     InternalMessageCreate, InternalMessageOut, InternalMessageUserOut,
     InternalCallCreate, InternalCallAction, InternalCallOut,
     InternalCallSignalCreate, InternalCallSignalOut,
@@ -718,6 +719,40 @@ def user_response(user: User) -> dict:
         "updated_at": user.updated_at,
     }
 
+
+PUBLIC_ACCESS_WORKSPACE_ROLE_HINTS = {
+    "factory operations": "manager",
+    "warehouse and fulfillment": "warehouse",
+    "warehouse / fulfillment": "warehouse",
+    "finance and accounting": "manager",
+    "school erp": "unassigned",
+    "service taker portal": "unassigned",
+}
+
+
+def suggested_role_for_public_request(requested_workspace: str | None) -> str:
+    clean_workspace = (requested_workspace or "").strip().lower()
+    return PUBLIC_ACCESS_WORKSPACE_ROLE_HINTS.get(clean_workspace, "unassigned")
+
+
+def public_access_request_response(access_request: PublicAccessRequest) -> dict:
+    return {
+        "id": access_request.id,
+        "full_name": access_request.full_name,
+        "preferred_username": access_request.preferred_username,
+        "work_email": access_request.work_email,
+        "phone": access_request.phone,
+        "requested_workspace": access_request.requested_workspace,
+        "suggested_role": suggested_role_for_public_request(access_request.requested_workspace),
+        "message": access_request.message,
+        "status": access_request.status,
+        "admin_note": access_request.admin_note,
+        "approved_user_id": access_request.approved_user_id,
+        "reviewed_by_user_id": access_request.reviewed_by_user_id,
+        "reviewed_at": access_request.reviewed_at,
+        "created_at": access_request.created_at,
+        "updated_at": access_request.updated_at,
+    }
 
 def role_request_response(role_request: UserRoleRequest) -> dict:
     return {
@@ -1546,6 +1581,7 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
         request_method == "OPTIONS"
         or path == "/"
         or path == "/login"
+        or (request_method == "POST" and path == "/access-requests")
         or path == "/catalog"
         or path.startswith("/catalog/")
         or path.startswith("/portal")
@@ -3391,6 +3427,186 @@ def delete_role_request(
     db.commit()
     return {"status": "deleted", "deleted_request_id": request_id}
 
+
+@app.post("/access-requests", response_model=PublicAccessRequestOut)
+def create_public_access_request(
+    payload: PublicAccessRequestCreate,
+    db: Session = Depends(get_db),
+):
+    clean_name = (payload.full_name or "").strip()
+    clean_username = (payload.preferred_username or "").strip() or None
+    clean_email = (payload.work_email or "").strip() or None
+    clean_phone = (payload.phone or "").strip() or None
+    clean_workspace = (payload.requested_workspace or "").strip() or None
+    clean_message = (payload.message or "").strip() or None
+
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Full name is required.")
+    if not clean_email and not clean_phone:
+        raise HTTPException(status_code=400, detail="Add an email or phone number.")
+
+    access_request = PublicAccessRequest(
+        full_name=clean_name,
+        preferred_username=clean_username,
+        work_email=clean_email,
+        phone=clean_phone,
+        requested_workspace=clean_workspace,
+        message=clean_message,
+        status="Pending",
+    )
+    db.add(access_request)
+    db.commit()
+    db.refresh(access_request)
+    return public_access_request_response(access_request)
+
+
+@app.get("/access-requests", response_model=list[PublicAccessRequestOut])
+def list_public_access_requests(request: Request, db: Session = Depends(get_db)):
+    require_page_access(request, db, "Users")
+    requests = (
+        db.query(PublicAccessRequest)
+        .order_by(PublicAccessRequest.created_at.desc(), PublicAccessRequest.id.desc())
+        .limit(200)
+        .all()
+    )
+    return [public_access_request_response(item) for item in requests]
+
+
+@app.post("/access-requests/{request_id}/approve", response_model=PublicAccessRequestOut)
+def approve_public_access_request(
+    request_id: int,
+    payload: PublicAccessRequestReview,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    admin_user = require_page_access(request, db, "Users")
+    access_request = db.query(PublicAccessRequest).filter(PublicAccessRequest.id == request_id).first()
+    if not access_request:
+        raise HTTPException(status_code=404, detail="Access request not found")
+    if access_request.approved_user_id:
+        raise HTTPException(status_code=400, detail="This request is already approved")
+
+    clean_name = (payload.name or access_request.full_name or "").strip()
+    clean_username = normalize_username(
+        payload.username or access_request.preferred_username,
+        clean_name,
+    )
+    clean_role = (payload.role or "unassigned").strip()
+    if clean_role not in ROLE_PAGE_DEFAULTS:
+        clean_role = "unassigned"
+
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not clean_username:
+        raise HTTPException(status_code=400, detail="Username is required")
+    ensure_username_available(db, clean_username)
+
+    clean_phone = (payload.phone or access_request.phone or "").strip() or None
+    clean_email = (payload.email or access_request.work_email or "").strip() or None
+    worker_id = None
+    if clean_role == "worker":
+        new_worker = Worker(
+            name=clean_name,
+            role="Worker",
+            phone=clean_phone,
+            email=clean_email,
+            department=None,
+            rate_per_piece=0,
+            is_active=payload.is_active,
+        )
+        db.add(new_worker)
+        db.commit()
+        db.refresh(new_worker)
+        worker_id = new_worker.id
+
+    new_user = User(
+        name=clean_name,
+        username=clean_username,
+        pin=hash_pin(payload.pin),
+        role=clean_role,
+        phone=clean_phone,
+        email=clean_email,
+        allowed_pages=json.dumps(normalize_allowed_pages(clean_role, payload.allowed_pages)),
+        customer_privacy_settings=json.dumps(
+            normalize_access_privacy_settings(
+                payload.customer_privacy_settings,
+                clean_role,
+            )
+        ),
+        session_expiry_minutes=normalize_session_expiry_minutes(
+            payload.session_expiry_minutes
+        ),
+        is_active=payload.is_active,
+        worker_id=worker_id,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    access_request.status = "Approved"
+    access_request.admin_note = (payload.admin_note or "").strip() or None
+    access_request.approved_user_id = new_user.id
+    access_request.reviewed_by_user_id = admin_user.id
+    access_request.reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(access_request)
+
+    record_activity(
+        db,
+        actor_user_id=admin_user.id,
+        actor_user_name=admin_user.name,
+        action="approved access request",
+        entity_type="user",
+        entity_id=new_user.id,
+        summary=f"Approved access request for {new_user.name}",
+        detail=f"Request #{access_request.id} became @{new_user.username}",
+        request_method="POST",
+        request_path=f"/access-requests/{request_id}/approve",
+    )
+    return public_access_request_response(access_request)
+
+
+@app.patch("/access-requests/{request_id}", response_model=PublicAccessRequestOut)
+def update_public_access_request(
+    request_id: int,
+    payload: PublicAccessRequestUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    admin_user = require_page_access(request, db, "Users")
+    access_request = db.query(PublicAccessRequest).filter(PublicAccessRequest.id == request_id).first()
+    if not access_request:
+        raise HTTPException(status_code=404, detail="Access request not found")
+
+    clean_status = (payload.status or "Reviewed").strip() or "Reviewed"
+    if clean_status not in {"Pending", "Contacted", "Rejected", "Reviewed", "Approved"}:
+        raise HTTPException(status_code=400, detail="Unsupported access request status")
+    if access_request.approved_user_id and clean_status != "Approved":
+        raise HTTPException(status_code=400, detail="Approved requests cannot be reopened")
+
+    access_request.status = clean_status
+    access_request.admin_note = (payload.admin_note or "").strip() or None
+    access_request.reviewed_by_user_id = admin_user.id
+    access_request.reviewed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(access_request)
+    return public_access_request_response(access_request)
+
+
+@app.delete("/access-requests/{request_id}")
+def delete_public_access_request(
+    request_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_page_access(request, db, "Users")
+    access_request = db.query(PublicAccessRequest).filter(PublicAccessRequest.id == request_id).first()
+    if not access_request:
+        raise HTTPException(status_code=404, detail="Access request not found")
+
+    db.delete(access_request)
+    db.commit()
+    return {"status": "deleted", "deleted_request_id": request_id}
 
 @app.get("/internal-message-users", response_model=list[InternalMessageUserOut])
 def get_internal_message_users(request: Request, db: Session = Depends(get_db)):

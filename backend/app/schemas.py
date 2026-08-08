@@ -206,6 +206,55 @@ class RoleRequestOut(BaseModel):
     }
 
 
+class PublicAccessRequestCreate(BaseModel):
+    full_name: str = Field(min_length=1, max_length=120)
+    preferred_username: str | None = Field(default=None, max_length=80)
+    work_email: str | None = Field(default=None, max_length=160)
+    phone: str | None = Field(default=None, max_length=80)
+    requested_workspace: str | None = Field(default=None, max_length=120)
+    message: str | None = Field(default=None, max_length=800)
+
+
+class PublicAccessRequestReview(BaseModel):
+    name: str | None = Field(default=None, max_length=120)
+    username: str | None = Field(default=None, max_length=80)
+    pin: constr(pattern=r"^\d{4}$") = "0000"
+    role: str = "unassigned"
+    phone: str | None = Field(default=None, max_length=80)
+    email: str | None = Field(default=None, max_length=160)
+    allowed_pages: list[str] | None = None
+    customer_privacy_settings: dict[str, bool] | None = None
+    session_expiry_minutes: int | None = Field(default=0, ge=0)
+    is_active: bool = True
+    admin_note: str | None = Field(default=None, max_length=800)
+
+
+class PublicAccessRequestUpdate(BaseModel):
+    status: str = "Reviewed"
+    admin_note: str | None = Field(default=None, max_length=800)
+
+
+class PublicAccessRequestOut(BaseModel):
+    id: int
+    full_name: str
+    preferred_username: str | None = None
+    work_email: str | None = None
+    phone: str | None = None
+    requested_workspace: str | None = None
+    suggested_role: str | None = None
+    message: str | None = None
+    status: str
+    admin_note: str | None = None
+    approved_user_id: int | None = None
+    reviewed_by_user_id: int | None = None
+    reviewed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+    model_config = {
+        "from_attributes": True
+    }
+
 class InternalMessageCreate(BaseModel):
     recipient_user_id: int
     body: str

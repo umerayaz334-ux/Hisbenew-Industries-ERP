@@ -295,6 +295,36 @@ def migrate_database():
         except Exception as e:
             print(f"Error creating user role request table: {e}")
 
+        # Create public signup/access request table for accounts awaiting admin approval.
+        try:
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS public_access_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    full_name VARCHAR NOT NULL,
+                    preferred_username VARCHAR,
+                    work_email VARCHAR,
+                    phone VARCHAR,
+                    requested_workspace VARCHAR,
+                    message TEXT,
+                    status VARCHAR DEFAULT 'Pending',
+                    admin_note TEXT,
+                    approved_user_id INTEGER,
+                    reviewed_by_user_id INTEGER,
+                    reviewed_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(approved_user_id) REFERENCES users(id),
+                    FOREIGN KEY(reviewed_by_user_id) REFERENCES users(id)
+                )
+            """))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_public_access_requests_status "
+                "ON public_access_requests(status, created_at)"
+            ))
+            connection.commit()
+            print("Created public_access_requests table (or already exists)")
+        except Exception as e:
+            print(f"Error creating public access request table: {e}")
         # Create internal ERP messages table for user-to-user communication.
         try:
             connection.execute(text("""

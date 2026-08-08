@@ -1041,6 +1041,27 @@ class UserRoleRequest(Base):
     user = relationship("User")
 
 
+class PublicAccessRequest(Base):
+    __tablename__ = "public_access_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String, nullable=False, index=True)
+    preferred_username = Column(String, nullable=True)
+    work_email = Column(String, nullable=True, index=True)
+    phone = Column(String, nullable=True, index=True)
+    requested_workspace = Column(String, nullable=True)
+    message = Column(Text, nullable=True)
+    status = Column(String, default="Pending", index=True)
+    admin_note = Column(Text, nullable=True)
+    approved_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    reviewed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    approved_user = relationship("User", foreign_keys=[approved_user_id])
+    reviewed_by = relationship("User", foreign_keys=[reviewed_by_user_id])
+
 class InternalMessage(Base):
     __tablename__ = "internal_messages"
 

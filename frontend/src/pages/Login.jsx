@@ -3,15 +3,6 @@ import api, { API_BASE_URL } from "../api/api";
 import "./Login.css";
 
 
-const accessTemplate = ({ fullName, workEmail, phone, role }) =>
-  [
-    "Hisbenew ERP access request",
-    `Name: ${fullName.trim()}`,
-    `Email: ${workEmail.trim() || "Not provided"}`,
-    `Phone: ${phone.trim() || "Not provided"}`,
-    `Requested workspace: ${role}`,
-  ].join("\n");
-
 const initialAuthMode = () => {
   if (typeof window === "undefined") return "signin";
   return new URLSearchParams(window.location.search).get("mode") === "signup"
@@ -25,9 +16,11 @@ export default function Login({ onLogin, message, onClearMessage }) {
   const [pin, setPin] = useState("");
   const [accessForm, setAccessForm] = useState({
     fullName: "",
+    preferredUsername: "",
     workEmail: "",
     phone: "",
     role: "Factory operations",
+    message: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -101,17 +94,34 @@ export default function Login({ onLogin, message, onClearMessage }) {
       return;
     }
 
-    const requestText = accessTemplate(accessForm);
+    setLoading(true);
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(requestText);
-        setNotice("Access request copied. Send it to an ERP admin for account approval.");
-        return;
-      }
-    } catch (copyError) {
-      console.warn("Access request could not be copied.", copyError);
+      await api.post("/access-requests", {
+        full_name: accessForm.fullName.trim(),
+        preferred_username: accessForm.preferredUsername.trim() || null,
+        work_email: accessForm.workEmail.trim() || null,
+        phone: accessForm.phone.trim() || null,
+        requested_workspace: accessForm.role,
+        message: accessForm.message.trim() || null,
+      });
+      setNotice("Access request submitted. An ERP admin can approve it from Users and access.");
+      setAccessForm({
+        fullName: "",
+        preferredUsername: "",
+        workEmail: "",
+        phone: "",
+        role: "Factory operations",
+        message: "",
+      });
+    } catch (requestError) {
+      console.error("Access request error:", requestError);
+      setError(
+        requestError.response?.data?.detail ||
+          "Unable to submit access request. Ask an ERP admin to check the backend."
+      );
+    } finally {
+      setLoading(false);
     }
-    setNotice("Access request is ready. Send your details to an ERP admin for account approval.");
   };
 
   const feedback = error || notice || message;
@@ -234,6 +244,14 @@ export default function Login({ onLogin, message, onClearMessage }) {
 
               <div className="login-form-grid">
                 <label>
+                  <span>Preferred username</span>
+                  <input
+                    value={accessForm.preferredUsername}
+                    onChange={(event) => updateAccessForm("preferredUsername", event.target.value)}
+                    placeholder="Optional"
+                  />
+                </label>
+                <label>
                   <span>Work email</span>
                   <input
                     type="email"
@@ -266,8 +284,18 @@ export default function Login({ onLogin, message, onClearMessage }) {
                 </select>
               </label>
 
-              <button type="submit" className="login-button">
-                Prepare access request
+              <label>
+                <span>Access notes</span>
+                <textarea
+                  rows="3"
+                  value={accessForm.message}
+                  onChange={(event) => updateAccessForm("message", event.target.value)}
+                  placeholder="Pages, role, or reason for access"
+                />
+              </label>
+
+              <button type="submit" className="login-button" disabled={loading}>
+                {loading ? "Submitting..." : "Submit access request"}
               </button>
             </form>
           )}

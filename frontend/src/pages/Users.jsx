@@ -290,6 +290,35 @@ const formatSessionExpiry = (value) => {
   return `${minutes} min`;
 };
 
+const REQUEST_WORKSPACE_ROLES = {
+  "factory operations": "manager",
+  "warehouse and fulfillment": "warehouse",
+  "finance and accounting": "manager",
+  "school erp": "unassigned",
+  "service taker portal": "unassigned",
+};
+
+const suggestedRoleForAccessRequest = (request = {}) => {
+  const suggestedRole = request.suggested_role;
+  if (suggestedRole && ROLE_LABELS[suggestedRole]) return suggestedRole;
+  const workspace = String(request.requested_workspace || "").trim().toLowerCase();
+  return REQUEST_WORKSPACE_ROLES[workspace] || "unassigned";
+};
+
+const usernameFromAccessRequest = (request = {}) => {
+  const preferred = String(request.preferred_username || "").trim();
+  if (preferred) return preferred;
+  const generated = String(request.full_name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "")
+    .slice(0, 40);
+  return generated || "new.user";
+};
+
+const requestStatusClass = (status = "Pending") =>
+  String(status || "Pending").toLowerCase().replace(/\s+/g, "-");
 const activityContextText = (activity) => {
   const summary = String(activity.summary || "");
   const parts = [];
@@ -318,6 +347,7 @@ export default function Users() {
   const [users, setUsers] = useState([]);
   const [workers, setWorkers] = useState([]);
   const [roleRequests, setRoleRequests] = useState([]);
+  const [accessRequests, setAccessRequests] = useState([]);
   const [accessOptions, setAccessOptions] = useState(EMPTY_ACCESS_OPTIONS);
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -352,6 +382,9 @@ export default function Users() {
   const [activityError, setActivityError] = useState("");
   const [activityFilter, setActivityFilter] = useState("all");
   const [roleRequestUpdatingId, setRoleRequestUpdatingId] = useState(null);
+  const [accessRequestUpdatingId, setAccessRequestUpdatingId] = useState(null);
+  const [approvingAccessRequest, setApprovingAccessRequest] = useState(null);
+  const [approvalNote, setApprovalNote] = useState("");
 
   const loadUsers = async () => {
     const response = await api.get("/users");
@@ -377,6 +410,11 @@ export default function Users() {
     setRoleRequests(Array.isArray(response.data) ? response.data : []);
   };
 
+  const loadAccessRequests = async () => {
+    const response = await api.get("/access-requests");
+    setAccessRequests(Array.isArray(response.data) ? response.data : []);
+  };
+
   useEffect(() => {
     let active = true;
 
@@ -384,9 +422,10 @@ export default function Users() {
       api.get("/users"),
       api.get("/workers"),
       api.get("/role-requests"),
+      api.get("/access-requests"),
       api.get("/user-access-options"),
     ])
-      .then(([usersResponse, workersResponse, requestsResponse, accessResponse]) => {
+      .then(([usersResponse, workersResponse, requestsResponse, accessRequestsResponse, accessResponse]) => {
         if (!active) return;
         const nextAccessOptions = accessResponse.data || EMPTY_ACCESS_OPTIONS;
         const nextPrivacyRoleDefaults = Object.fromEntries(
@@ -415,6 +454,9 @@ export default function Users() {
         );
         setRoleRequests(
           Array.isArray(requestsResponse.data) ? requestsResponse.data : []
+        );
+        setAccessRequests(
+          Array.isArray(accessRequestsResponse.data) ? accessRequestsResponse.data : []
         );
         setAccessOptions({
           ...nextAccessOptions,
@@ -467,6 +509,9 @@ export default function Users() {
   const activeUsers = users.filter((user) => user.is_active).length;
   const openRoleRequests = roleRequests.filter(
     (request) => String(request.status || "").toLowerCase() === "open"
+  );
+  const openAccessRequests = accessRequests.filter((request) =>
+    ["pending", "contacted"].includes(String(request.status || "").toLowerCase())
   );
   const customAccessUsers = users.filter(
     (user) =>
@@ -531,9 +576,38 @@ export default function Users() {
   const closeForm = () => {
     setShowForm(false);
     setEditingUserId(null);
+    setApprovingAccessRequest(null);
+    setApprovalNote("");
     setError("");
     setCustomerPrivacyError("");
     setCustomerPrivacySavingKey("");
+  };
+
+  const startApproveAccessRequest = (requestItem) => {
+    const nextRole = suggestedRoleForAccessRequest(requestItem);
+    setApprovingAccessRequest(requestItem);
+    setEditingUserId(null);
+    setName(requestItem.full_name || "");
+    setUsername(usernameFromAccessRequest(requestItem));
+    setRole(nextRole);
+    setPin("0000");
+    setPhone(requestItem.phone || "");
+    setEmail(requestItem.work_email || "");
+    setIsActive(true);
+    setWorkerId(null);
+    setSessionExpiryMinutes(0);
+    setApprovalNote("");
+    setCustomerPrivacySettings(
+      privacyDefaultsForRole(
+        nextRole,
+        accessOptions.privacy_role_defaults || PRIVACY_ROLE_DEFAULTS
+      )
+    );
+    setAllowedPages([...getRoleDefaults(nextRole)]);
+    setCustomerPrivacyError("");
+    setCustomerPrivacySavingKey("");
+    setError("");
+    setShowForm(true);
   };
 
   const startEdit = (user) => {
@@ -675,23 +749,33 @@ export default function Users() {
       worker_id: role === "worker" ? workerId : null,
     };
     if (!editingUserId || pin) payload.pin = pin;
+    if (approvingAccessRequest && !editingUserId) {
+      payload.admin_note = approvalNote.trim() || null;
+    }
 
     setSaving(true);
     try {
-      if (editingUserId) {
-        await api.put(`/users/${editingUserId}`, payload);
+      if (approvingAccessRequest && !editingUserId) {
+        await api.post(`/access-requests/${approvingAccessRequest.id}/approve`, payload);
+        await Promise.all([loadUsers(), loadAccessRequests()]);
       } else {
-        await api.post("/users", payload);
+        if (editingUserId) {
+          await api.put(`/users/${editingUserId}`, payload);
+        } else {
+          await api.post("/users", payload);
+        }
+        await loadUsers();
       }
-      await loadUsers();
       closeForm();
     } catch (saveError) {
       console.error("Save user error:", saveError);
       setError(
         saveError.response?.data?.detail ||
-          (editingUserId
-            ? "Unable to update this user."
-            : "Unable to create this user.")
+          (approvingAccessRequest
+            ? "Unable to approve this access request."
+            : editingUserId
+              ? "Unable to update this user."
+              : "Unable to create this user.")
       );
     } finally {
       setSaving(false);
@@ -814,6 +898,46 @@ export default function Users() {
     }
   };
 
+  const updateAccessRequestStatus = async (requestItem, status) => {
+    setAccessRequestUpdatingId(requestItem.id);
+    setError("");
+    try {
+      await api.patch(`/access-requests/${requestItem.id}`, { status });
+      await loadAccessRequests();
+    } catch (requestError) {
+      console.error("Signup access request update error:", requestError);
+      setError(
+        requestError.response?.data?.detail || "Unable to update signup request."
+      );
+    } finally {
+      setAccessRequestUpdatingId(null);
+    }
+  };
+
+  const deleteAccessRequest = async (requestItem) => {
+    const confirmed = await confirmDialog({
+      title: "Remove signup request?",
+      message: `Remove the signup request from ${requestItem.full_name}? This only clears the request, not any user account already created.`,
+      tone: "danger",
+      confirmText: "Remove request",
+    });
+    if (!confirmed) return;
+
+    setAccessRequestUpdatingId(requestItem.id);
+    setError("");
+    try {
+      await api.delete(`/access-requests/${requestItem.id}`);
+      await loadAccessRequests();
+    } catch (requestError) {
+      console.error("Signup access request delete error:", requestError);
+      setError(
+        requestError.response?.data?.detail || "Unable to remove signup request."
+      );
+    } finally {
+      setAccessRequestUpdatingId(null);
+    }
+  };
+
   return (
     <div className="users-page">
       <header className="users-command-header">
@@ -852,6 +976,97 @@ export default function Users() {
           <strong>{customAccessUsers}</strong>
           <small>Different from role default</small>
         </article>
+      </section>
+
+      <section className="users-role-requests users-signup-requests" aria-label="Signup approvals">
+        <div className="users-role-requests-header">
+          <div>
+            <span className="users-eyebrow">Signup approvals</span>
+            <h2>Website account requests</h2>
+            <p>
+              Requests submitted from the public signup page. Approve one to create
+              a login with role defaults, privacy, and custom page access.
+            </p>
+          </div>
+          <strong>{openAccessRequests.length} pending</strong>
+        </div>
+
+        {accessRequests.length === 0 ? (
+          <div className="users-role-request-empty">
+            No website signup requests submitted yet.
+          </div>
+        ) : (
+          <div className="users-role-request-list">
+            {accessRequests.slice(0, 8).map((request) => {
+              const statusClass = requestStatusClass(request.status);
+              const approved = Boolean(request.approved_user_id) || statusClass === "approved";
+              const rejected = statusClass === "rejected";
+              const disabled = accessRequestUpdatingId === request.id;
+              return (
+                <article className="users-role-request-card" key={request.id}>
+                  <div className="users-role-request-main">
+                    <span className={`users-role-request-status is-${statusClass}`}>
+                      {request.status || "Pending"}
+                    </span>
+                    <h3>{request.full_name}</h3>
+                    <p>
+                      {request.message ||
+                        `Requested ${request.requested_workspace || "ERP access"}.`}
+                    </p>
+                    <div className="users-role-request-meta">
+                      <span>@{request.preferred_username || usernameFromAccessRequest(request)}</span>
+                      <span>{request.requested_workspace || "Workspace not specified"}</span>
+                      <span>{roleLabel(suggestedRoleForAccessRequest(request))}</span>
+                      {request.phone && <span>{request.phone}</span>}
+                      {request.work_email && <span>{request.work_email}</span>}
+                      {request.approved_user_id && <span>User #{request.approved_user_id}</span>}
+                      <span>{formatUtcLocal(request.created_at)}</span>
+                    </div>
+                  </div>
+                  <div className="users-role-request-actions">
+                    {!approved && !rejected && (
+                      <button
+                        className="is-primary"
+                        disabled={disabled}
+                        onClick={() => startApproveAccessRequest(request)}
+                        type="button"
+                      >
+                        Approve
+                      </button>
+                    )}
+                    {!approved && !rejected && (
+                      <button
+                        disabled={disabled}
+                        onClick={() => updateAccessRequestStatus(request, "Contacted")}
+                        type="button"
+                      >
+                        Contacted
+                      </button>
+                    )}
+                    {!approved && !rejected && (
+                      <button
+                        className="is-danger"
+                        disabled={disabled}
+                        onClick={() => updateAccessRequestStatus(request, "Rejected")}
+                        type="button"
+                      >
+                        Reject
+                      </button>
+                    )}
+                    <button
+                      className="is-danger"
+                      disabled={disabled}
+                      onClick={() => deleteAccessRequest(request)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="users-role-requests" aria-label="Pending role requests">
@@ -1089,12 +1304,12 @@ export default function Users() {
             <div className="users-modal-header">
               <div>
                 <span className="users-eyebrow">
-                  {editingUserId ? "Account settings" : "New ERP account"}
+                  {approvingAccessRequest ? "Signup approval" : editingUserId ? "Account settings" : "New ERP account"}
                 </span>
                 <h3 id="user-form-title">
-                  {editingUserId ? "Manage user" : "Add user"}
+                  {approvingAccessRequest ? "Approve access request" : editingUserId ? "Manage user" : "Add user"}
                 </h3>
-                <p>Identity, account status, and page access in one place.</p>
+                <p>{approvingAccessRequest ? "Create the account after choosing role, PIN, privacy, and page access." : "Identity, account status, and page access in one place."}</p>
               </div>
               <button
                 aria-label="Close user form"
@@ -1172,6 +1387,20 @@ export default function Users() {
                     />
                   </label>
                 </div>
+                {approvingAccessRequest && (
+                  <label className="users-full-field users-approval-note">
+                    Admin approval note
+                    <textarea
+                      onChange={(event) => setApprovalNote(event.target.value)}
+                      placeholder="Optional note for this signup approval"
+                      rows="3"
+                      value={approvalNote}
+                    />
+                    <small>
+                      Submitted {formatUtcLocal(approvingAccessRequest.created_at)} from {approvingAccessRequest.requested_workspace || "website signup"}.
+                    </small>
+                  </label>
+                )}
               </section>
 
               <section className="users-form-section">
@@ -1387,9 +1616,11 @@ export default function Users() {
                 >
                   {saving
                     ? "Saving..."
-                    : editingUserId
-                      ? "Save user changes"
-                      : "Create user"}
+                    : approvingAccessRequest
+                      ? "Approve and create user"
+                      : editingUserId
+                        ? "Save user changes"
+                        : "Create user"}
                 </button>
                 <button
                   className="users-cancel"

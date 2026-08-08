@@ -507,6 +507,32 @@
   opacity: 0.62;
 }
 
+
+.users-role-request-actions button.is-primary {
+  border-color: #173a57;
+  background: #173a57;
+  color: #ffffff;
+}
+
+.users-role-request-actions button.is-primary:hover:not(:disabled) {
+  background: #214d70;
+}
+
+.users-role-request-status.is-rejected {
+  border-color: #e4c3be;
+  background: #fff1ee;
+  color: #9f2f21;
+}
+
+.users-role-request-status.is-approved {
+  border-color: #b9dcc9;
+  background: #edf8f1;
+  color: #1f6840;
+}
+
+.users-approval-note {
+  margin-top: 12px;
+}
 .users-role-request-actions button.is-danger {
   border-color: #e4c3be;
   background: #fff7f5;
@@ -562,7 +588,8 @@
 }
 
 .users-page input,
-.users-page select {
+.users-page select,
+.users-page textarea {
   width: 100%;
   min-height: 42px;
   border: 1px solid #c9d5df;
@@ -578,20 +605,29 @@
     background 150ms ease;
 }
 
-.users-page input {
+.users-page input,
+.users-page textarea {
   padding: 0 12px;
+}
+
+.users-page textarea {
+  min-height: 86px;
+  padding-top: 11px;
+  resize: vertical;
 }
 
 .users-page select {
   padding: 0 32px 0 12px;
 }
 
-.users-page input::placeholder {
+.users-page input::placeholder,
+.users-page textarea::placeholder {
   color: #738396;
 }
 
 .users-page input:focus,
-.users-page select:focus {
+.users-page select:focus,
+.users-page textarea:focus {
   border-color: #4d91bf;
   box-shadow: 0 0 0 3px rgba(77, 145, 191, 0.14);
 }
