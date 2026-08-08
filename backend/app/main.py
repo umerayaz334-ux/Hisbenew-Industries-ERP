@@ -1543,7 +1543,8 @@ def list_users(db: Session = Depends(get_db)):
 def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
     request_method = str(method or "GET").upper()
     return (
-        path == "/"
+        request_method == "OPTIONS"
+        or path == "/"
         or path == "/login"
         or path.startswith("/portal")
         or path == "/school/admission/apply"
@@ -1558,6 +1559,7 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
         or path.startswith("/sw.js")
         or path.startswith("/health")
         or path.startswith("/app-install-info")
+        or path.startswith("/local-label-printers")
         or path.startswith("/docs")
         or path.startswith("/redoc")
         or path == "/openapi.json"
@@ -4077,7 +4079,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_private_network=True,
 )
+
+@app.middleware("http")
+async def private_network_access_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/local-label-printers"):
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
 
 
 @app.middleware("http")
@@ -7826,6 +7836,24 @@ def get_products(db: Session = Depends(get_db)):
     return [product_response(p) for p in db.query(Product).order_by(Product.category, Product.article_no).all()]
 
 
+def require_local_printer_bridge(request: Request) -> None:
+    client_host = request.client.host if request.client else ""
+    normalized_host = str(client_host or "").strip().lower().strip("[]")
+    if normalized_host == "localhost":
+        return
+
+    try:
+        if ip_address(normalized_host).is_loopback:
+            return
+    except ValueError:
+        pass
+
+    raise HTTPException(
+        status_code=403,
+        detail="Local printer bridge commands are only accepted from this computer.",
+    )
+
+
 @app.get("/label-printers")
 def get_label_printers():
     try:
@@ -7836,6 +7864,30 @@ def get_label_printers():
 
 @app.post("/label-printers/print")
 def print_labels_directly(payload: dict):
+    try:
+        return print_tspl_labels(
+            labels=payload.get("labels") or [],
+            size=payload.get("size") or {},
+            printer_name=payload.get("printer_name"),
+        )
+    except LabelPrintError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/local-label-printers")
+def get_local_label_printers(request: Request):
+    require_local_printer_bridge(request)
+    try:
+        data = list_label_printers()
+        data["connection_scope"] = "this_laptop"
+        return data
+    except LabelPrintError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/local-label-printers/print")
+def print_local_labels_directly(payload: dict, request: Request):
+    require_local_printer_bridge(request)
     try:
         return print_tspl_labels(
             labels=payload.get("labels") or [],

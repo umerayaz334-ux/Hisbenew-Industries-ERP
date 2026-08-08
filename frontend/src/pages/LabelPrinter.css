@@ -83,6 +83,35 @@
   background: #f9fbfa;
 }
 
+.label-printer-connection-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #d7e3dd;
+  border-radius: 6px;
+  background: #edf4f0;
+}
+
+.label-printer-connection-mode button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--lp-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.label-printer-connection-mode button.is-active {
+  background: var(--lp-ink);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(17, 45, 42, 0.18);
+}
+
+.label-printer-bridge-url,
 .label-printer-printer-select {
   display: grid;
   gap: 5px;
@@ -93,7 +122,8 @@
   text-transform: uppercase;
 }
 
-.label-printer-printer-select select {
+.label-printer-printer-select select,
+.label-printer-bridge-url input {
   padding: 0 8px;
 }
 
@@ -109,6 +139,12 @@
   color: var(--lp-muted);
   font-size: 11px;
   font-weight: 750;
+}
+
+.label-printer-printer-scope {
+  color: #6f5635;
+  font-weight: 850;
+  white-space: nowrap;
 }
 
 .label-printer-print-actions {
@@ -347,6 +383,7 @@
 
 .label-printer-search input,
 .label-printer-printer-select select,
+.label-printer-bridge-url input,
 .label-printer-size-bar select,
 .label-printer-new-size input,
 .label-printer-editor input {
@@ -369,6 +406,7 @@
 
 .label-printer-search input:focus,
 .label-printer-printer-select select:focus,
+.label-printer-bridge-url input:focus,
 .label-printer-size-bar select:focus,
 .label-printer-new-size input:focus,
 .label-printer-editor input:focus {
