@@ -537,6 +537,14 @@ function App() {
 
   const isPublicPage = (page) => ["WebsiteStorefront", "WebsiteCatalog", "School Admission Apply"].includes(page);
 
+  useEffect(() => {
+    if (authenticatedUser || isPublicPage(activePage) || activePage === "Login") return;
+    if (window.location.pathname !== "/login") {
+      window.history.replaceState({}, "", "/login");
+    }
+    setActivePage("Login");
+  }, [activePage, authenticatedUser]);
+
   const updatePath = (page) => {
     const isWorkspacePage = isSchoolWorkspacePage(page);
     const targetPage = isPublicPage(page) || isWorkspacePage

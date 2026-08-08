@@ -271,7 +271,7 @@ function Website() {
             <a className="site-header-link" href="/login">
               Login
             </a>
-            <a className="site-header-cta" href="/portal">
+            <a className="site-header-cta" href="/login?mode=signup">
               Sign up
             </a>
           </div>

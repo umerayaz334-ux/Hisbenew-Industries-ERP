@@ -2,7 +2,8 @@
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 32px;
+  width: 100%;
+  padding: 28px;
   overflow-x: hidden;
   background:
     linear-gradient(135deg, rgba(9, 42, 46, 0.94), rgba(18, 22, 31, 0.92)),
@@ -12,7 +13,8 @@
 }
 
 .login-stage {
-  width: min(1080px, 100%);
+  width: min(1220px, 100%);
+  min-height: calc(100vh - 56px);
   display: grid;
   grid-template-columns: minmax(0, 0.95fr) minmax(380px, 0.75fr);
   gap: 20px;
@@ -32,7 +34,6 @@
   display: grid;
   align-content: space-between;
   gap: 32px;
-  min-height: 620px;
   padding: 34px;
   overflow: hidden;
   background:
@@ -172,7 +173,6 @@
 }
 
 .login-tabs button,
-.login-provider-grid button,
 .login-button {
   min-height: 46px;
   border-radius: 8px;
@@ -219,62 +219,6 @@
   line-height: 1.5;
 }
 
-.login-provider-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.login-provider-grid button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border: 1px solid #dce5e2;
-  background: #ffffff;
-  color: #18282b;
-  font-size: 13px;
-  font-weight: 850;
-  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
-}
-
-.login-provider-grid button:hover,
-.login-provider-grid button:focus-visible {
-  border-color: #0f766e;
-  transform: translateY(-1px);
-  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.12);
-  outline: none;
-}
-
-.login-provider-grid button span {
-  width: 24px;
-  height: 24px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 8px;
-  background: #102026;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 950;
-}
-
-.login-divider {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 12px;
-  color: #7a8588;
-  font-size: 11px;
-  font-weight: 850;
-  text-transform: uppercase;
-}
-
-.login-divider::before,
-.login-divider::after {
-  content: "";
-  height: 1px;
-  background: #dfe7e4;
-}
 
 .login-form {
   display: grid;
@@ -430,7 +374,6 @@
   }
 
   .login-proof-grid,
-  .login-provider-grid,
   .login-form-grid {
     grid-template-columns: 1fr;
   }

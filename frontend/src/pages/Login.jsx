@@ -2,12 +2,6 @@ import { useState } from "react";
 import api, { API_BASE_URL } from "../api/api";
 import "./Login.css";
 
-const providerOptions = [
-  { name: "Google", mark: "G" },
-  { name: "Apple", mark: "A" },
-  { name: "Microsoft", mark: "M" },
-  { name: "Passkey", mark: "P" },
-];
 
 const accessTemplate = ({ fullName, workEmail, phone, role }) =>
   [
@@ -18,8 +12,15 @@ const accessTemplate = ({ fullName, workEmail, phone, role }) =>
     `Requested workspace: ${role}`,
   ].join("\n");
 
+const initialAuthMode = () => {
+  if (typeof window === "undefined") return "signin";
+  return new URLSearchParams(window.location.search).get("mode") === "signup"
+    ? "signup"
+    : "signin";
+};
+
 export default function Login({ onLogin, message, onClearMessage }) {
-  const [mode, setMode] = useState("signin");
+  const [mode, setMode] = useState(initialAuthMode);
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
   const [accessForm, setAccessForm] = useState({
@@ -41,6 +42,9 @@ export default function Login({ onLogin, message, onClearMessage }) {
   const switchMode = (nextMode) => {
     clearFeedback();
     setMode(nextMode);
+    if (typeof window !== "undefined" && window.location.pathname === "/login") {
+      window.history.replaceState({}, "", nextMode === "signup" ? "/login?mode=signup" : "/login");
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -79,12 +83,6 @@ export default function Login({ onLogin, message, onClearMessage }) {
     }
   };
 
-  const handleProviderSelect = (providerName) => {
-    clearFeedback();
-    setNotice(
-      `${providerName} sign-in is ready for SSO setup. Use username and PIN until an admin connects this provider.`
-    );
-  };
 
   const updateAccessForm = (field, value) => {
     clearFeedback();
@@ -141,7 +139,7 @@ export default function Login({ onLogin, message, onClearMessage }) {
             </article>
             <article>
               <strong>Storefront</strong>
-              <span>Live website at root</span>
+              <span>Public storefront</span>
             </article>
             <article>
               <strong>Security</strong>
@@ -186,23 +184,6 @@ export default function Login({ onLogin, message, onClearMessage }) {
                 : "Accounts are approved by an ERP admin before activation."}
             </p>
           </header>
-
-          <div className="login-provider-grid" aria-label="Single sign-on options">
-            {providerOptions.map((provider) => (
-              <button
-                key={provider.name}
-                onClick={() => handleProviderSelect(provider.name)}
-                type="button"
-              >
-                <span aria-hidden="true">{provider.mark}</span>
-                {provider.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="login-divider">
-            <span>{mode === "signin" ? "or continue with ERP PIN" : "or prepare a request"}</span>
-          </div>
 
           {mode === "signin" ? (
             <form className="login-form" onSubmit={handleSubmit}>
@@ -299,7 +280,7 @@ export default function Login({ onLogin, message, onClearMessage }) {
 
           <footer className="login-footer">
             <span>Protected ERP workspace</span>
-            <a href="/portal">Open portal</a>
+            <a href="/login">Portal sign in</a>
           </footer>
         </main>
       </section>
