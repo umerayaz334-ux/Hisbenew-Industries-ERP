@@ -2,6 +2,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/api";
 import "./Companies.css";
 
+const ROLE_LABELS = {
+  admin: "Company admin",
+  manager: "Manager",
+  warehouse: "Warehouse / Fulfillment",
+  worker: "Worker",
+  unassigned: "Assign later",
+};
+
+const ROLE_OPTIONS = ["admin", "manager", "warehouse", "worker", "unassigned"];
+const ALWAYS_ALLOWED_PAGES = ["Dashboard", "Settings", "Users"];
+const EXCLUDED_COMPANY_USER_PAGES = new Set([
+  "Companies",
+  "Service Dashboard",
+  "Service Products",
+  "Service Inbound",
+  "Service Shipments",
+  "Service Charges",
+  "My Tasks",
+]);
+
 const emptyCompanyForm = {
   company_name: "",
   slug: "",
@@ -16,6 +36,15 @@ const emptyCompanyForm = {
   module_slugs: [],
 };
 
+const emptyUserForm = {
+  name: "",
+  username: "",
+  pin: "0000",
+  role: "manager",
+  allowed_pages: [],
+  is_active: true,
+};
+
 const toSlug = (value) =>
   String(value || "")
     .trim()
@@ -23,18 +52,33 @@ const toSlug = (value) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+const usernameFromName = (value) => toSlug(value).replace(/-/g, ".");
 const moduleLabel = (module) => module?.page_name || module?.name || module?.slug || "Module";
+const roleLabel = (role) => ROLE_LABELS[role] || role || "User";
+
+const normalizePageList = (pages = []) => {
+  const next = [];
+  pages.forEach((page) => {
+    if (!page || next.includes(page)) return;
+    next.push(page);
+  });
+  return next;
+};
 
 export default function Companies({ authenticatedUser }) {
   const isSuperAdmin = authenticatedUser?.role === "super_admin";
   const [tenants, setTenants] = useState([]);
   const [modules, setModules] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [accessOptions, setAccessOptions] = useState({ pages: [], role_defaults: {} });
   const [modulesByTenant, setModulesByTenant] = useState({});
   const [selectedTenantId, setSelectedTenantId] = useState(null);
   const [companyForm, setCompanyForm] = useState(emptyCompanyForm);
   const [editForm, setEditForm] = useState({ company_name: "", slug: "", email: "", phone: "", status: "active" });
+  const [userForm, setUserForm] = useState(emptyUserForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [userSaving, setUserSaving] = useState(false);
   const [moduleSavingSlug, setModuleSavingSlug] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -43,9 +87,43 @@ export default function Companies({ authenticatedUser }) {
     () => tenants.find((tenant) => Number(tenant.id) === Number(selectedTenantId)) || null,
     [selectedTenantId, tenants]
   );
+
   const selectedModules = selectedTenantId ? modulesByTenant[selectedTenantId] || [] : [];
+  const selectedCompanyUsers = useMemo(
+    () => users.filter((user) => Number(user.tenant_id) === Number(selectedTenantId)),
+    [selectedTenantId, users]
+  );
   const activeTenants = tenants.filter((tenant) => tenant.status === "active").length;
   const enabledModules = selectedModules.filter((module) => module.enabled).length;
+
+  const enabledCompanyPages = useMemo(() => {
+    const enabled = new Set(ALWAYS_ALLOWED_PAGES);
+    selectedModules.forEach((module) => {
+      if (module.enabled && module.page_name && !EXCLUDED_COMPANY_USER_PAGES.has(module.page_name)) {
+        enabled.add(module.page_name);
+      }
+    });
+    return enabled;
+  }, [selectedModules]);
+
+  const pageChoices = useMemo(() => {
+    const sourcePages = accessOptions.pages?.length
+      ? accessOptions.pages
+      : [...enabledCompanyPages];
+    return normalizePageList(sourcePages).filter(
+      (page) => enabledCompanyPages.has(page) && !EXCLUDED_COMPANY_USER_PAGES.has(page)
+    );
+  }, [accessOptions.pages, enabledCompanyPages]);
+
+  const pagesForRole = useCallback(
+    (role = userForm.role) => {
+      const defaults = accessOptions.role_defaults?.[role] || [];
+      const basePages = defaults.length ? defaults : ALWAYS_ALLOWED_PAGES;
+      const selected = normalizePageList(["Dashboard", ...basePages]).filter((page) => pageChoices.includes(page));
+      return selected.length ? selected : pageChoices.filter((page) => ALWAYS_ALLOWED_PAGES.includes(page));
+    },
+    [accessOptions.role_defaults, pageChoices, userForm.role]
+  );
 
   const loadTenantModules = useCallback(async (tenantId) => {
     if (!tenantId) return [];
@@ -55,6 +133,14 @@ export default function Companies({ authenticatedUser }) {
     return nextModules;
   }, []);
 
+  const loadUsers = useCallback(async () => {
+    if (!isSuperAdmin) return [];
+    const response = await api.get("/users");
+    const nextUsers = Array.isArray(response.data) ? response.data : [];
+    setUsers(nextUsers);
+    return nextUsers;
+  }, [isSuperAdmin]);
+
   const loadCompanies = useCallback(async () => {
     if (!isSuperAdmin) {
       setLoading(false);
@@ -63,14 +149,18 @@ export default function Companies({ authenticatedUser }) {
     setLoading(true);
     setError("");
     try {
-      const [tenantsResponse, modulesResponse] = await Promise.all([
+      const [tenantsResponse, modulesResponse, usersResponse, accessResponse] = await Promise.all([
         api.get("/tenants"),
         api.get("/modules"),
+        api.get("/users"),
+        api.get("/user-access-options"),
       ]);
       const nextTenants = Array.isArray(tenantsResponse.data) ? tenantsResponse.data : [];
       const nextModules = Array.isArray(modulesResponse.data) ? modulesResponse.data : [];
       setTenants(nextTenants);
       setModules(nextModules);
+      setUsers(Array.isArray(usersResponse.data) ? usersResponse.data : []);
+      setAccessOptions(accessResponse.data || { pages: [], role_defaults: {} });
       setCompanyForm((current) => ({
         ...current,
         module_slugs: current.module_slugs.length
@@ -103,10 +193,21 @@ export default function Companies({ authenticatedUser }) {
     });
   }, [selectedTenant]);
 
+  useEffect(() => {
+    setUserForm((current) => {
+      const selected = current.allowed_pages.filter((page) => pageChoices.includes(page));
+      return {
+        ...current,
+        allowed_pages: selected.length ? selected : pagesForRole(current.role),
+      };
+    });
+  }, [pageChoices, pagesForRole, selectedTenantId]);
+
   const selectTenant = async (tenantId) => {
     setSelectedTenantId(tenantId);
     setError("");
     setSuccess("");
+    setUserForm(emptyUserForm);
     if (!modulesByTenant[tenantId]) {
       try {
         await loadTenantModules(tenantId);
@@ -124,7 +225,20 @@ export default function Companies({ authenticatedUser }) {
         next.slug = toSlug(value);
       }
       if (field === "admin_name" && !current.admin_username.trim()) {
-        next.admin_username = toSlug(value).replace(/-/g, ".");
+        next.admin_username = usernameFromName(value);
+      }
+      return next;
+    });
+  };
+
+  const updateUserForm = (field, value) => {
+    setUserForm((current) => {
+      const next = { ...current, [field]: value };
+      if (field === "name" && !current.username.trim()) {
+        next.username = usernameFromName(value);
+      }
+      if (field === "role") {
+        next.allowed_pages = pagesForRole(value);
       }
       return next;
     });
@@ -136,6 +250,17 @@ export default function Companies({ authenticatedUser }) {
       if (selected.has(slug)) selected.delete(slug);
       else selected.add(slug);
       return { ...current, module_slugs: Array.from(selected) };
+    });
+  };
+
+  const toggleUserPage = (page) => {
+    if (page === "Dashboard") return;
+    setUserForm((current) => {
+      const selected = new Set(current.allowed_pages);
+      if (selected.has(page)) selected.delete(page);
+      else selected.add(page);
+      selected.add("Dashboard");
+      return { ...current, allowed_pages: pageChoices.filter((choice) => selected.has(choice)) };
     });
   };
 
@@ -215,6 +340,49 @@ export default function Companies({ authenticatedUser }) {
     }
   };
 
+  const createCompanyUser = async (event) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    if (!selectedTenant) {
+      setError("Choose a company first.");
+      return;
+    }
+    if (!userForm.name.trim()) {
+      setError("Enter the user's name.");
+      return;
+    }
+    if (!/^\d{4}$/.test(userForm.pin)) {
+      setError("User PIN must be exactly 4 digits.");
+      return;
+    }
+
+    const selectedPages = normalizePageList(["Dashboard", ...userForm.allowed_pages]).filter((page) =>
+      pageChoices.includes(page)
+    );
+    setUserSaving(true);
+    try {
+      await api.post("/users", {
+        tenant_id: selectedTenant.id,
+        name: userForm.name.trim(),
+        username: userForm.username.trim() || null,
+        pin: userForm.pin,
+        role: userForm.role,
+        allowed_pages: selectedPages,
+        is_active: userForm.is_active,
+        worker_id: null,
+      });
+      setUserForm({ ...emptyUserForm, allowed_pages: pagesForRole(emptyUserForm.role) });
+      await Promise.all([loadUsers(), loadCompanies()]);
+      setSuccess("Company user created.");
+    } catch (saveError) {
+      console.error("Company user create error:", saveError);
+      setError(saveError.response?.data?.detail || "Unable to create company user.");
+    } finally {
+      setUserSaving(false);
+    }
+  };
+
   const toggleTenantModule = async (module) => {
     if (!selectedTenant) return;
     setModuleSavingSlug(module.slug);
@@ -251,7 +419,7 @@ export default function Companies({ authenticatedUser }) {
         <div>
           <span className="companies-eyebrow">Super admin</span>
           <h1>Companies</h1>
-          <p>Manage company tenants, first admins, and enabled ERP modules.</p>
+          <p>Manage company tenants, company users, and enabled ERP modules.</p>
         </div>
         <div className="companies-summary-strip" aria-label="Company summary">
           <article>
@@ -263,8 +431,8 @@ export default function Companies({ authenticatedUser }) {
             <strong>{activeTenants}</strong>
           </article>
           <article>
-            <span>Modules</span>
-            <strong>{enabledModules}</strong>
+            <span>Users</span>
+            <strong>{selectedCompanyUsers.length}</strong>
           </article>
         </div>
       </header>
@@ -496,9 +664,124 @@ export default function Companies({ authenticatedUser }) {
                   ))}
                 </div>
               </div>
+
+              <div className="companies-user-section">
+                <div className="companies-module-heading">
+                  <h3>Company users</h3>
+                  <span>{selectedCompanyUsers.length} accounts</span>
+                </div>
+                <div className="companies-user-list">
+                  {selectedCompanyUsers.length === 0 ? (
+                    <div className="companies-empty companies-empty-compact">No users in this company yet.</div>
+                  ) : (
+                    selectedCompanyUsers.map((user) => (
+                      <article className="companies-user-row" key={user.id}>
+                        <span className="companies-user-avatar">
+                          {(user.name || user.username || "U").slice(0, 2).toUpperCase()}
+                        </span>
+                        <div>
+                          <strong>{user.name}</strong>
+                          <small>@{user.username || user.name}</small>
+                        </div>
+                        <span className={`companies-status is-${user.is_active ? "active" : "inactive"}`}>
+                          {user.is_active ? "active" : "inactive"}
+                        </span>
+                        <span>{roleLabel(user.role)}</span>
+                        <span>{user.allowed_pages?.length || 0} pages</span>
+                      </article>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <form className="companies-form companies-user-form" onSubmit={createCompanyUser}>
+                <div className="companies-panel-heading companies-user-form-heading">
+                  <span className="companies-eyebrow">New company user</span>
+                  <h2>Create user for {selectedTenant.company_name}</h2>
+                </div>
+                <div className="companies-form-grid">
+                  <label>
+                    Full name
+                    <input
+                      onChange={(event) => updateUserForm("name", event.target.value)}
+                      placeholder="e.g. Sara Ahmed"
+                      required
+                      value={userForm.name}
+                    />
+                  </label>
+                  <label>
+                    Username
+                    <input
+                      onChange={(event) => updateUserForm("username", event.target.value)}
+                      value={userForm.username}
+                    />
+                  </label>
+                  <label>
+                    4-digit PIN
+                    <input
+                      inputMode="numeric"
+                      maxLength={4}
+                      onChange={(event) => updateUserForm("pin", event.target.value.replace(/\D/g, ""))}
+                      type="password"
+                      value={userForm.pin}
+                    />
+                  </label>
+                  <label>
+                    Role
+                    <select onChange={(event) => updateUserForm("role", event.target.value)} value={userForm.role}>
+                      {ROLE_OPTIONS.map((role) => (
+                        <option key={role} value={role}>{roleLabel(role)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Status
+                    <select
+                      onChange={(event) => updateUserForm("is_active", event.target.value === "active")}
+                      value={userForm.is_active ? "active" : "inactive"}
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="companies-user-access-header">
+                  <div>
+                    <h3>Allowed ERP pages</h3>
+                    <span>{userForm.allowed_pages.length} selected</span>
+                  </div>
+                  <div className="companies-user-access-actions">
+                    <button onClick={() => updateUserForm("allowed_pages", pagesForRole(userForm.role))} type="button">
+                      Role default
+                    </button>
+                    <button onClick={() => updateUserForm("allowed_pages", pageChoices)} type="button">
+                      Select all
+                    </button>
+                  </div>
+                </div>
+
+                <div className="companies-page-grid">
+                  {pageChoices.map((page) => (
+                    <label className={userForm.allowed_pages.includes(page) ? "is-selected" : ""} key={page}>
+                      <input
+                        checked={userForm.allowed_pages.includes(page)}
+                        disabled={page === "Dashboard"}
+                        onChange={() => toggleUserPage(page)}
+                        type="checkbox"
+                      />
+                      <span>{page}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <button className="companies-primary-button" disabled={userSaving} type="submit">
+                  {userSaving ? "Creating..." : "Create company user"}
+                </button>
+              </form>
             </>
           ) : (
-            <div className="companies-empty">Select a company to edit details and modules.</div>
+            <div className="companies-empty">Select a company to edit details, modules, and users.</div>
           )}
         </section>
       </div>
