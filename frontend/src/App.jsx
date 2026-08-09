@@ -49,6 +49,7 @@ const AmazonFinances = lazy(() => import("./pages/AmazonFinances"));
 const AmazonPricing = lazy(() => import("./pages/AmazonPricing"));
 const Users = lazy(() => import("./pages/Users"));
 const Companies = lazy(() => import("./pages/Companies"));
+const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
 const Quotes = lazy(() => import("./pages/Quotes"));
 const TempData = lazy(() => import("./pages/TempData"));
 const Messages = lazy(() => import("./pages/Messages"));
@@ -116,6 +117,7 @@ const pagePaths = {
   Workers: "/portal/workers",
   Users: "/portal/users",
   Companies: "/portal/companies",
+  "Add Company": "/portal/companies/new",
   Login: "/login",
 };
 
@@ -126,6 +128,8 @@ const serviceTakerPages = [
   "Service Shipments",
   "Service Charges",
 ];
+
+const PLATFORM_SUPER_ADMIN_PAGES = ["Dashboard", "Add Company", "Companies", "Users", "Settings"];
 
 const rolePages = {
   admin: [
@@ -214,7 +218,7 @@ const rolePages = {
   service_taker: serviceTakerPages,
 };
 
-rolePages.super_admin = [...rolePages.admin, "Companies"];
+rolePages.super_admin = PLATFORM_SUPER_ADMIN_PAGES;
 
 const pathToPage = Object.fromEntries(
   Object.entries(pagePaths).map(([page, path]) => [path, page])
@@ -259,6 +263,7 @@ const isSupplierLedgerPath = (pathname) =>
 
 const normalizeClientAllowedPages = (pages = [], role = "") => {
   if (role === "service_taker") return serviceTakerPages;
+  if (role === "super_admin") return PLATFORM_SUPER_ADMIN_PAGES;
   const normalized = [];
 
   pages.forEach((page) => {
@@ -267,8 +272,7 @@ const normalizeClientAllowedPages = (pages = [], role = "") => {
     if (!normalized.includes(page)) normalized.push(page);
   });
 
-  if (["admin", "super_admin"].includes(role) && !normalized.includes("Deployment")) normalized.push("Deployment");
-  if (role === "super_admin" && !normalized.includes("Companies")) normalized.push("Companies");
+  if (role === "admin" && !normalized.includes("Deployment")) normalized.push("Deployment");
   if (!normalized.includes("Dashboard")) normalized.unshift("Dashboard");
   return normalized;
 };
@@ -686,10 +690,20 @@ function App() {
     }
 
     if (!normalizedAllowedPages.includes(activePage)) {
-      return <Dashboard {...dashboardProps} />;
+      return authenticatedUser?.role === "super_admin" ? (
+        <SuperAdminDashboard authenticatedUser={authenticatedUser} onNavigate={updatePath} />
+      ) : (
+        <Dashboard {...dashboardProps} />
+      );
     }
 
-    if (activePage === "Dashboard") return <Dashboard {...dashboardProps} />;
+    if (activePage === "Dashboard") {
+      return authenticatedUser?.role === "super_admin" ? (
+        <SuperAdminDashboard authenticatedUser={authenticatedUser} onNavigate={updatePath} />
+      ) : (
+        <Dashboard {...dashboardProps} />
+      );
+    }
     if (activePage === "Products") {
       const legacyAmazonInventoryPath =
         normalizePath(window.location.pathname) ===
@@ -828,7 +842,9 @@ function App() {
     if (activePage === "Deployment") return <Deployment />;
     if (activePage === "Workers") return <Workers />;
     if (activePage === "Users") return <Users authenticatedUser={authenticatedUser} />;
-    if (activePage === "Companies") return <Companies authenticatedUser={authenticatedUser} />;
+    if (activePage === "Companies" || activePage === "Add Company") {
+      return <Companies authenticatedUser={authenticatedUser} focusCreate={activePage === "Add Company"} />;
+    }
     if (activePage === "Copy Clipboard") return <CopyClipboard />;
 
     return <Dashboard />;

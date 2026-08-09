@@ -184,6 +184,7 @@ ALL_ERP_PAGES = [
     "Amazon Finances",
     "Amazon Pricing",
     "Quotes",
+    "Add Company",
     "Companies",
     "Users",
     "Inspiration",
@@ -542,16 +543,14 @@ class WebsiteSettingsPayload(BaseModel):
     hidden_product_ids: list[int] = Field(default_factory=list)
     product_order_ids: list[int] = Field(default_factory=list)
 
+SUPER_ADMIN_PLATFORM_PAGES = ["Dashboard", "Add Company", "Companies", "Users", "Settings"]
+
 ROLE_PAGE_DEFAULTS = {
-    "super_admin": [
-        page
-        for page in ALL_ERP_PAGES
-        if page != "My Tasks" and page not in SERVICE_TAKER_PORTAL_PAGES
-    ],
+    "super_admin": SUPER_ADMIN_PLATFORM_PAGES.copy(),
     "admin": [
         page
         for page in ALL_ERP_PAGES
-        if page not in {"My Tasks", "Companies"} and page not in SERVICE_TAKER_PORTAL_PAGES
+        if page not in {"My Tasks", "Add Company", "Companies"} and page not in SERVICE_TAKER_PORTAL_PAGES
     ],
     "manager": [
         "Dashboard",
@@ -614,6 +613,7 @@ PAGE_PARENT_MAP = {
     "Worker Payouts": "Manufacturing",
     "Quotes": "Settings",
     "Users": "Settings",
+    "Add Company": "Settings",
     "Companies": "Settings",
     "Website": "Settings",
     "Deployment": "Settings",
@@ -635,6 +635,8 @@ def normalize_username(username: str | None, name: str) -> str:
 def normalize_allowed_pages(role: str, pages: list[str] | None) -> list[str]:
     if role == "service_taker":
         return SERVICE_TAKER_PORTAL_PAGES.copy()
+    if role == "super_admin":
+        return SUPER_ADMIN_PLATFORM_PAGES.copy()
     requested = ROLE_PAGE_DEFAULTS.get(role, ROLE_PAGE_DEFAULTS["worker"]) if pages is None else pages
     if role == "unassigned":
         requested = ROLE_PAGE_DEFAULTS[role]
@@ -835,7 +837,7 @@ def tenant_response(tenant: Tenant, db: Session) -> dict:
         "logo": tenant.logo,
         "status": tenant.status or "active",
         "user_count": user_count,
-        "created_at": tenant.created_at,
+        "created_at": tenant.created_at or tenant.updated_at or datetime.utcnow(),
         "updated_at": tenant.updated_at,
     }
 
@@ -1548,6 +1550,7 @@ def enrich_activity_context(
 def activity_log_response(activity: ActivityLog) -> dict:
     return {
         "id": activity.id,
+        "tenant_id": activity.tenant_id,
         "actor_user_id": activity.actor_user_id,
         "actor_user_name": activity.actor_user_name,
         "action": activity.action,
@@ -4863,12 +4866,16 @@ def clear_user_activity_logs(user_id: int, request: Request, db: Session = Depen
 
 @app.get("/activity-logs", response_model=list[ActivityLogOut])
 def get_activity_logs(
+    request: Request,
     user_id: int | None = Query(None),
     limit: int = Query(120, ge=1, le=500),
     action: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
+    actor = require_page_access(request, db, "Users")
     query = db.query(ActivityLog)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
     if user_id is not None:
         query = query.filter(ActivityLog.actor_user_id == user_id)
     if action and action != "all":
@@ -5038,35 +5045,111 @@ def ensure_default_admin():
             )
             .first()
         )
-        if hafiz_umer:
-            hafiz_umer.role = "super_admin"
-            hafiz_umer.tenant_id = hafiz_umer.tenant_id or default_tenant.id
-            hafiz_umer.allowed_pages = json.dumps(ROLE_PAGE_DEFAULTS["super_admin"])
-            hafiz_umer.customer_privacy_settings = json.dumps(
-                default_access_privacy_settings_for_role("super_admin")
-            )
-            db.add(hafiz_umer)
-            db.commit()
-        if not (
-            db.query(User)
-            .execution_options(skip_tenant_scope=True)
-            .filter(User.role.in_(["admin", "super_admin"]))
-            .first()
-        ):
-            default_admin = User(
+        if not hafiz_umer:
+            hafiz_umer = User(
                 tenant_id=default_tenant.id,
-                name="adminmain",
-                username="adminmain",
+                name="Hafiz Umer",
+                username="hafizumer",
                 pin=hash_pin("1234"),
                 role="super_admin",
-                allowed_pages=json.dumps(ROLE_PAGE_DEFAULTS["super_admin"]),
+                is_active=True,
+            )
+        hafiz_umer.role = "super_admin"
+        hafiz_umer.tenant_id = hafiz_umer.tenant_id or default_tenant.id
+        hafiz_umer.allowed_pages = json.dumps(ROLE_PAGE_DEFAULTS["super_admin"])
+        hafiz_umer.customer_privacy_settings = json.dumps(
+            default_access_privacy_settings_for_role("super_admin")
+        )
+        db.add(hafiz_umer)
+        db.commit()
+
+        company_admin = (
+            db.query(User)
+            .execution_options(skip_tenant_scope=True)
+            .filter(
+                User.tenant_id == default_tenant.id,
+                or_(
+                    func.lower(func.coalesce(User.name, "")) == "hisbenew company admin",
+                    func.lower(func.coalesce(User.username, "")) == "hisbenew.admin",
+                    func.lower(func.coalesce(User.username, "")) == "hisbenew.company.admin",
+                ),
+            )
+            .order_by(User.id.asc())
+            .first()
+        )
+        if not company_admin:
+            admin_username = "hisbenew.admin"
+            suffix = 1
+            while (
+                db.query(User)
+                .execution_options(skip_tenant_scope=True)
+                .filter(func.lower(func.coalesce(User.username, User.name)) == admin_username.lower())
+                .first()
+            ):
+                suffix += 1
+                admin_username = f"hisbenew.admin{suffix}"
+            company_admin = User(
+                tenant_id=default_tenant.id,
+                name="Hisbenew Company Admin",
+                username=admin_username,
+                pin=hash_pin("1234"),
+                role="admin",
+                allowed_pages=json.dumps(ROLE_PAGE_DEFAULTS["admin"]),
                 customer_privacy_settings=json.dumps(
-                    default_access_privacy_settings_for_role("super_admin")
+                    default_access_privacy_settings_for_role("admin")
                 ),
                 is_active=True,
             )
-            db.add(default_admin)
+            db.add(company_admin)
             db.commit()
+        else:
+            company_admin.role = "admin"
+            company_admin.tenant_id = default_tenant.id
+            company_admin.allowed_pages = json.dumps(ROLE_PAGE_DEFAULTS["admin"])
+            company_admin.customer_privacy_settings = json.dumps(
+                default_access_privacy_settings_for_role("admin")
+            )
+            company_admin.is_active = True
+            db.add(company_admin)
+            db.commit()
+
+        cuterex_user = (
+            db.query(User)
+            .execution_options(skip_tenant_scope=True)
+            .filter(
+                or_(
+                    func.lower(func.coalesce(User.name, "")) == "cuterex",
+                    func.lower(func.coalesce(User.username, "")) == "cuterex",
+                )
+            )
+            .first()
+        )
+        if not cuterex_user:
+            cuterex_user = User(
+                tenant_id=default_tenant.id,
+                name="Cuterex",
+                username="Cuterex",
+                pin=hash_pin("1234"),
+                role="admin",
+                allowed_pages=json.dumps(ROLE_PAGE_DEFAULTS["admin"]),
+                customer_privacy_settings=json.dumps(
+                    default_access_privacy_settings_for_role("admin")
+                ),
+                is_active=True,
+            )
+        else:
+            cuterex_user.tenant_id = default_tenant.id
+            cuterex_user.name = cuterex_user.name or "Cuterex"
+            cuterex_user.username = cuterex_user.username or "Cuterex"
+            cuterex_user.pin = hash_pin("1234")
+            cuterex_user.role = "admin"
+            cuterex_user.allowed_pages = json.dumps(ROLE_PAGE_DEFAULTS["admin"])
+            cuterex_user.customer_privacy_settings = json.dumps(
+                default_access_privacy_settings_for_role("admin")
+            )
+            cuterex_user.is_active = True
+        db.add(cuterex_user)
+        db.commit()
     finally:
         db.close()
 

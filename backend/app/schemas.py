@@ -431,6 +431,7 @@ class ActivityPageViewCreate(BaseModel):
 
 class ActivityLogOut(BaseModel):
     id: int
+    tenant_id: int | None = None
     actor_user_id: int | None = None
     actor_user_name: str | None = None
     action: str

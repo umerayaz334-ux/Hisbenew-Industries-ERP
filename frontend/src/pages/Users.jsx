@@ -179,9 +179,7 @@ const normalizePrivacySettings = (
 const EMPTY_ACCESS_OPTIONS = {
   pages: ACCESS_GROUPS.flatMap((group) => group.pages),
   role_defaults: {
-    super_admin: ACCESS_GROUPS.flatMap((group) => group.pages).filter(
-      (page) => page !== "My Tasks"
-    ),
+    super_admin: ["Dashboard", "Add Company", "Companies", "Users", "Settings"],
     admin: ACCESS_GROUPS.flatMap((group) => group.pages).filter(
       (page) => page !== "My Tasks"
     ),

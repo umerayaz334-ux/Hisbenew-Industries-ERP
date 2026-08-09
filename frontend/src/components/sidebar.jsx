@@ -49,12 +49,15 @@ const menuItems = [
   { name: "Quotes", icon: "quote" },
   { name: "Website", icon: "spark" },
   { name: "Deployment", icon: "deployment" },
+  { name: "Add Company", icon: "building" },
   { name: "Companies", icon: "building" },
   { name: "Users", icon: "users" },
   { name: "TempData", label: "Temp Data", icon: "database" },
   { name: "Messages", icon: "message" },
   { name: "Copy Clipboard", icon: "clipboard" },
 ];
+
+const platformSuperAdminPages = ["Dashboard", "Add Company", "Companies", "Users", "Settings"];
 
 const roleAllowedPages = {
   admin: [
@@ -179,6 +182,7 @@ const secondaryMenuOrder = [
   "Messages",
   "Copy Clipboard",
   "Inspiration",
+  "Add Company",
   "Companies",
   "Users",
   "Amazon Listings",
@@ -203,7 +207,7 @@ const schoolMenuItems = [
 ];
 
 const menuItemByName = new Map(menuItems.map((item) => [item.name, item]));
-roleAllowedPages.super_admin = [...roleAllowedPages.admin, "Companies"];
+roleAllowedPages.super_admin = platformSuperAdminPages;
 
 const warehouseRoleOnlyPages = new Set([
   "Warehouse Dispatch",

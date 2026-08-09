@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../api/api";
 import "./Companies.css";
 
@@ -14,6 +14,7 @@ const ROLE_OPTIONS = ["admin", "manager", "warehouse", "worker", "unassigned"];
 const ALWAYS_ALLOWED_PAGES = ["Dashboard", "Settings", "Users"];
 const EXCLUDED_COMPANY_USER_PAGES = new Set([
   "Companies",
+  "Add Company",
   "Service Dashboard",
   "Service Products",
   "Service Inbound",
@@ -55,6 +56,17 @@ const toSlug = (value) =>
 const usernameFromName = (value) => toSlug(value).replace(/-/g, ".");
 const moduleLabel = (module) => module?.page_name || module?.name || module?.slug || "Module";
 const roleLabel = (role) => ROLE_LABELS[role] || role || "User";
+const formatActivityTime = (value) => {
+  if (!value) return "Just now";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Just now";
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
 
 const normalizePageList = (pages = []) => {
   const next = [];
@@ -65,11 +77,12 @@ const normalizePageList = (pages = []) => {
   return next;
 };
 
-export default function Companies({ authenticatedUser }) {
+export default function Companies({ authenticatedUser, focusCreate = false }) {
   const isSuperAdmin = authenticatedUser?.role === "super_admin";
   const [tenants, setTenants] = useState([]);
   const [modules, setModules] = useState([]);
   const [users, setUsers] = useState([]);
+  const [activityLogs, setActivityLogs] = useState([]);
   const [accessOptions, setAccessOptions] = useState({ pages: [], role_defaults: {} });
   const [modulesByTenant, setModulesByTenant] = useState({});
   const [selectedTenantId, setSelectedTenantId] = useState(null);
@@ -82,6 +95,7 @@ export default function Companies({ authenticatedUser }) {
   const [moduleSavingSlug, setModuleSavingSlug] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const createPanelRef = useRef(null);
 
   const selectedTenant = useMemo(
     () => tenants.find((tenant) => Number(tenant.id) === Number(selectedTenantId)) || null,
@@ -92,6 +106,13 @@ export default function Companies({ authenticatedUser }) {
   const selectedCompanyUsers = useMemo(
     () => users.filter((user) => Number(user.tenant_id) === Number(selectedTenantId)),
     [selectedTenantId, users]
+  );
+  const selectedCompanyActivity = useMemo(
+    () =>
+      activityLogs
+        .filter((activity) => Number(activity.tenant_id) === Number(selectedTenantId))
+        .slice(0, 8),
+    [activityLogs, selectedTenantId]
   );
   const activeTenants = tenants.filter((tenant) => tenant.status === "active").length;
   const enabledModules = selectedModules.filter((module) => module.enabled).length;
@@ -149,17 +170,19 @@ export default function Companies({ authenticatedUser }) {
     setLoading(true);
     setError("");
     try {
-      const [tenantsResponse, modulesResponse, usersResponse, accessResponse] = await Promise.all([
+      const [tenantsResponse, modulesResponse, usersResponse, accessResponse, activityResponse] = await Promise.all([
         api.get("/tenants"),
         api.get("/modules"),
         api.get("/users"),
         api.get("/user-access-options"),
+        api.get("/activity-logs?limit=200"),
       ]);
       const nextTenants = Array.isArray(tenantsResponse.data) ? tenantsResponse.data : [];
       const nextModules = Array.isArray(modulesResponse.data) ? modulesResponse.data : [];
       setTenants(nextTenants);
       setModules(nextModules);
       setUsers(Array.isArray(usersResponse.data) ? usersResponse.data : []);
+      setActivityLogs(Array.isArray(activityResponse.data) ? activityResponse.data : []);
       setAccessOptions(accessResponse.data || { pages: [], role_defaults: {} });
       setCompanyForm((current) => ({
         ...current,
@@ -181,6 +204,14 @@ export default function Companies({ authenticatedUser }) {
   useEffect(() => {
     loadCompanies();
   }, [loadCompanies]);
+
+  useEffect(() => {
+    if (!focusCreate || !isSuperAdmin) return undefined;
+    const timer = window.setTimeout(() => {
+      createPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [focusCreate, isSuperAdmin]);
 
   useEffect(() => {
     if (!selectedTenant) return;
@@ -441,7 +472,10 @@ export default function Companies({ authenticatedUser }) {
       {success && <div className="companies-message is-success">{success}</div>}
 
       <div className="companies-layout">
-        <section className="companies-panel companies-create-panel">
+        <section
+          className={`companies-panel companies-create-panel ${focusCreate ? "is-focused" : ""}`.trim()}
+          ref={createPanelRef}
+        >
           <div className="companies-panel-heading">
             <span className="companies-eyebrow">New company</span>
             <h2>Create tenant</h2>
@@ -693,7 +727,29 @@ export default function Companies({ authenticatedUser }) {
                   )}
                 </div>
               </div>
-
+              <div className="companies-user-section companies-activity-section">
+                <div className="companies-module-heading">
+                  <h3>Recent activity</h3>
+                  <span>{selectedCompanyActivity.length} latest</span>
+                </div>
+                <div className="companies-activity-list">
+                  {selectedCompanyActivity.length === 0 ? (
+                    <div className="companies-empty companies-empty-compact">No recent activity for this company yet.</div>
+                  ) : (
+                    selectedCompanyActivity.map((activity) => (
+                      <article className="companies-activity-row" key={activity.id}>
+                        <div>
+                          <strong>{activity.summary || activity.action}</strong>
+                          <small>
+                            {activity.actor_user_name || "Unknown user"} - {formatActivityTime(activity.created_at)}
+                          </small>
+                        </div>
+                        <span>{activity.page || activity.entity_type || "Activity"}</span>
+                      </article>
+                    ))
+                  )}
+                </div>
+              </div>
               <form className="companies-form companies-user-form" onSubmit={createCompanyUser}>
                 <div className="companies-panel-heading companies-user-form-heading">
                   <span className="companies-eyebrow">New company user</span>
