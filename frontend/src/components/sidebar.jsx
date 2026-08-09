@@ -201,6 +201,8 @@ const schoolMenuItems = [
 ];
 
 const menuItemByName = new Map(menuItems.map((item) => [item.name, item]));
+roleAllowedPages.super_admin = roleAllowedPages.admin;
+
 const warehouseRoleOnlyPages = new Set([
   "Warehouse Dispatch",
   "Warehouse Shipments",
@@ -476,7 +478,7 @@ function Sidebar({
     ? schoolMenuItems
         .filter(
           (item) =>
-            userRole === "admin" ||
+            ["admin", "super_admin"].includes(userRole) ||
             !Array.isArray(schoolPermissions) ||
             schoolPermissions.includes(item.permission) ||
             (item.name === "School Foundation" &&
@@ -519,7 +521,7 @@ function Sidebar({
   );
 
   const roleLabel =
-    userRole === "admin"
+    ["admin", "super_admin"].includes(userRole)
       ? "Administrator"
       : userRole === "manager"
         ? "Manager"

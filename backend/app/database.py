@@ -38,6 +38,218 @@ SessionLocal = sessionmaker(
 
 Base = declarative_base()
 
+DEFAULT_TENANT_SLUG = "hisbenew-industries"
+DEFAULT_TENANT_NAME = "Hisbenew Industries"
+TENANT_SCOPED_TABLES = (
+    "users",
+    "activity_logs",
+    "user_role_requests",
+    "public_access_requests",
+    "internal_messages",
+    "internal_calls",
+    "internal_call_signals",
+    "order_import_batches",
+    "inspiration_items",
+    "products",
+    "customers",
+    "orders",
+    "order_items",
+    "stock_movements",
+    "suppliers",
+    "supplier_order_items",
+    "supplier_supply_items",
+    "supplier_transactions",
+    "supplier_payments",
+    "workflow_steps",
+    "workers",
+    "worker_payments",
+    "shipping",
+    "fulfillment_shipments",
+    "fulfillment_boxes",
+    "fulfillment_box_items",
+    "fulfillment_inventory_discrepancies",
+    "fulfillment_orders",
+    "fulfillment_order_items",
+    "fulfillment_picks",
+    "courier_payments",
+    "regular_bills",
+    "regular_bill_payments",
+    "accounting_accounts",
+    "accounting_transactions",
+    "production_batches",
+    "production_tasks",
+    "shared_data",
+    "workspace_data",
+    "order_workflow_tasks",
+    "order_follow_ups",
+)
+
+
+def sqlite_table_columns(connection, table_name: str) -> list[str]:
+    return [row[1] for row in connection.execute(text(f"PRAGMA table_info({table_name})"))]
+
+
+def ensure_tenant_schema_sqlite(connection) -> int:
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS tenants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name VARCHAR NOT NULL,
+            slug VARCHAR NOT NULL UNIQUE,
+            email VARCHAR,
+            phone VARCHAR,
+            logo TEXT,
+            status VARCHAR DEFAULT 'active',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS modules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR NOT NULL,
+            slug VARCHAR NOT NULL UNIQUE,
+            page_name VARCHAR,
+            description TEXT,
+            default_enabled BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS tenant_modules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            module_id INTEGER NOT NULL,
+            enabled BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, module_id),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(module_id) REFERENCES modules(id)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS custom_pages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            page_name VARCHAR NOT NULL,
+            slug VARCHAR NOT NULL,
+            fields_json TEXT NOT NULL DEFAULT '[]',
+            is_active BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, slug),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+    """))
+    connection.execute(text(
+        "INSERT OR IGNORE INTO tenants (company_name, slug, status) "
+        "VALUES (:company_name, :slug, 'active')"
+    ), {"company_name": DEFAULT_TENANT_NAME, "slug": DEFAULT_TENANT_SLUG})
+    default_tenant_id = connection.execute(
+        text("SELECT id FROM tenants WHERE slug = :slug"),
+        {"slug": DEFAULT_TENANT_SLUG},
+    ).scalar()
+
+    for table_name in TENANT_SCOPED_TABLES:
+        try:
+            columns = sqlite_table_columns(connection, table_name)
+        except Exception:
+            columns = []
+        if not columns:
+            continue
+        if "tenant_id" not in columns:
+            connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN tenant_id INTEGER"))
+        connection.execute(
+            text(f"UPDATE {table_name} SET tenant_id = :tenant_id WHERE tenant_id IS NULL"),
+            {"tenant_id": default_tenant_id},
+        )
+        connection.execute(text(
+            f"CREATE INDEX IF NOT EXISTS ix_{table_name}_tenant_id ON {table_name}(tenant_id)"
+        ))
+
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tenants_slug ON tenants(slug)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tenant_modules_tenant_id ON tenant_modules(tenant_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_custom_pages_tenant_id ON custom_pages(tenant_id)"))
+    connection.commit()
+    return int(default_tenant_id)
+
+
+def ensure_tenant_schema_postgres(connection) -> int:
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS tenants (
+            id SERIAL PRIMARY KEY,
+            company_name VARCHAR NOT NULL,
+            slug VARCHAR NOT NULL UNIQUE,
+            email VARCHAR,
+            phone VARCHAR,
+            logo TEXT,
+            status VARCHAR DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS modules (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR NOT NULL,
+            slug VARCHAR NOT NULL UNIQUE,
+            page_name VARCHAR,
+            description TEXT,
+            default_enabled BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS tenant_modules (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            module_id INTEGER NOT NULL REFERENCES modules(id),
+            enabled BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, module_id)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS custom_pages (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            page_name VARCHAR NOT NULL,
+            slug VARCHAR NOT NULL,
+            fields_json TEXT NOT NULL DEFAULT '[]',
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, slug)
+        )
+    """))
+    connection.execute(text(
+        "INSERT INTO tenants (company_name, slug, status) "
+        "VALUES (:company_name, :slug, 'active') "
+        "ON CONFLICT (slug) DO NOTHING"
+    ), {"company_name": DEFAULT_TENANT_NAME, "slug": DEFAULT_TENANT_SLUG})
+    default_tenant_id = connection.execute(
+        text("SELECT id FROM tenants WHERE slug = :slug"),
+        {"slug": DEFAULT_TENANT_SLUG},
+    ).scalar()
+
+    for table_name in TENANT_SCOPED_TABLES:
+        connection.execute(text(
+            f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)"
+        ))
+        connection.execute(
+            text(f"UPDATE {table_name} SET tenant_id = :tenant_id WHERE tenant_id IS NULL"),
+            {"tenant_id": default_tenant_id},
+        )
+        connection.execute(text(
+            f"CREATE INDEX IF NOT EXISTS ix_{table_name}_tenant_id ON {table_name}(tenant_id)"
+        ))
+
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tenants_slug ON tenants(slug)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tenant_modules_tenant_id ON tenant_modules(tenant_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_custom_pages_tenant_id ON custom_pages(tenant_id)"))
+    return int(default_tenant_id)
+
 
 SCALING_INDEXES = (
     "CREATE INDEX IF NOT EXISTS ix_internal_messages_recipient_unread "
@@ -81,6 +293,7 @@ def migrate_database():
     if not is_sqlite_database:
         # create_all does not add columns to an existing production table.
         with engine.begin() as connection:
+            ensure_tenant_schema_postgres(connection)
             connection.execute(
                 text(
                     "ALTER TABLE products ADD COLUMN IF NOT EXISTS "
@@ -89,6 +302,8 @@ def migrate_database():
             )
         return
     with engine.connect() as connection:
+        ensure_tenant_schema_sqlite(connection)
+
         # Add the USA fulfillment front-room location to portable databases.
         try:
             result = connection.execute(text("PRAGMA table_info(products)"))

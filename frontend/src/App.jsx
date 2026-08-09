@@ -212,6 +212,8 @@ const rolePages = {
   service_taker: serviceTakerPages,
 };
 
+rolePages.super_admin = rolePages.admin;
+
 const pathToPage = Object.fromEntries(
   Object.entries(pagePaths).map(([page, path]) => [path, page])
 );
@@ -263,7 +265,7 @@ const normalizeClientAllowedPages = (pages = [], role = "") => {
     if (!normalized.includes(page)) normalized.push(page);
   });
 
-  if (role === "admin" && !normalized.includes("Deployment")) normalized.push("Deployment");
+  if (["admin", "super_admin"].includes(role) && !normalized.includes("Deployment")) normalized.push("Deployment");
   if (!normalized.includes("Dashboard")) normalized.unshift("Dashboard");
   return normalized;
 };
@@ -853,9 +855,9 @@ function App() {
             workspace={schoolWorkspaceActive ? "school" : "factory"}
             schoolSettings={schoolSettings}
             schoolPermissions={schoolAccess?.permissions}
-            canSwitchToFactory={authenticatedUser.role === "admin"}
+            canSwitchToFactory={["admin", "super_admin"].includes(authenticatedUser.role)}
             onSwitchWorkspace={
-              authenticatedUser.role === "admin"
+              ["admin", "super_admin"].includes(authenticatedUser.role)
                 ? () => updatePath(schoolWorkspaceActive ? "Dashboard" : "School ERP")
                 : undefined
             }

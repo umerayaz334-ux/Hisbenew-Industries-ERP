@@ -33,8 +33,8 @@ from urllib.parse import urlparse
 from urllib import request as urllib_request
 
 from .config import APP_DATA_DIR, CORS_ALLOW_ORIGINS, CORS_ALLOW_ORIGIN_REGEX, FRONTEND_DIST_DIR, INTERNAL_CALL_ICE_SERVERS, STATIC_DIR, UPLOAD_DIR
-from .database import Base, engine, SessionLocal, ensure_scaling_indexes, migrate_database
-from .models import Product, Customer, User, ActivityLog, UserRoleRequest, PublicAccessRequest, InternalMessage, InternalCall, InternalCallSignal, InspirationItem, OrderImportBatch, Order, OrderItem, StockMovement, Supplier, SupplierOrderItem, SupplierSupplyItem, SupplierTransaction, SupplierPayment, WorkflowStep, Worker, WorkerPayment, Shipping, FulfillmentShipment, FulfillmentBox, FulfillmentBoxItem, FulfillmentInventoryDiscrepancy, FulfillmentOrder, FulfillmentOrderItem, FulfillmentPick, CourierPayment, RegularBill, RegularBillPayment, AccountingAccount, AccountingTransaction, ProductionBatch, ProductionTask, SharedData, WorkspaceData, OrderWorkflowTask, OrderFollowUp
+from .database import Base, DEFAULT_TENANT_NAME, DEFAULT_TENANT_SLUG, engine, SessionLocal, ensure_scaling_indexes, migrate_database
+from .models import Tenant, Module, TenantModule, CustomPage, Product, Customer, User, ActivityLog, UserRoleRequest, PublicAccessRequest, InternalMessage, InternalCall, InternalCallSignal, InspirationItem, OrderImportBatch, Order, OrderItem, StockMovement, Supplier, SupplierOrderItem, SupplierSupplyItem, SupplierTransaction, SupplierPayment, WorkflowStep, Worker, WorkerPayment, Shipping, FulfillmentShipment, FulfillmentBox, FulfillmentBoxItem, FulfillmentInventoryDiscrepancy, FulfillmentOrder, FulfillmentOrderItem, FulfillmentPick, CourierPayment, RegularBill, RegularBillPayment, AccountingAccount, AccountingTransaction, ProductionBatch, ProductionTask, SharedData, WorkspaceData, OrderWorkflowTask, OrderFollowUp
 from .integrations.amazon import router as amazon_router
 from .integrations.amazon.autosync import amazon_auto_sync_service
 from .integrations.amazon.constants import (
@@ -85,6 +85,8 @@ from .usa_shipping import (
     usa_rate_card_summary,
 )
 from .schemas import (
+    TenantCreate, TenantUpdate, TenantOut, ModuleOut, TenantModuleUpdate,
+    TenantModuleBulkUpdate, CustomPageCreate, CustomPageUpdate, CustomPageOut,
     ProductCreate, ProductOut,
     CustomerCreate, CustomerOut,
     UserCreate, UserUpdate, UserOut, LoginRequest, LoginResponse, UserProfileUpdate,
@@ -118,13 +120,18 @@ from .schemas import (
 )
 
 # Dependency function must be defined before it is used in route dependencies
-def get_db():
+def get_db(request: Request):
     """Provide a transactional scope around a series of operations."""
     db = SessionLocal()
+    tenant_id = getattr(getattr(request, "state", None), "tenant_id", None) if request else None
+    if tenant_id is not None:
+        db.info["tenant_id"] = tenant_id
     try:
         yield db
     finally:
         db.close()
+
+from .print_agent import router as print_agent_router
 
 # Initialize FastAPI application with a descriptive title
 app = FastAPI(title="Hisbenew Industries ERP")
@@ -132,6 +139,7 @@ app.include_router(school_router)
 app.include_router(amazon_router)
 app.include_router(service_taker_router)
 app.include_router(deployment_router)
+app.include_router(print_agent_router)
 app.router.add_event_handler("startup", realtime_hub.start)
 app.router.add_event_handler("shutdown", realtime_hub.stop)
 app.router.add_event_handler("startup", amazon_auto_sync_service.start)
@@ -327,7 +335,7 @@ class AccessPrivacySettingsPayload(BaseModel):
 
 def default_access_privacy_settings_for_role(role: str | None = None) -> dict:
     normalized_role = str(role or "").strip().lower()
-    if normalized_role == "admin":
+    if normalized_role in {"admin", "super_admin"}:
         return {
             "hide_customer_business_for_non_admin": False,
             "hide_worker_customer_names_except_shipping": False,
@@ -534,6 +542,11 @@ class WebsiteSettingsPayload(BaseModel):
     product_order_ids: list[int] = Field(default_factory=list)
 
 ROLE_PAGE_DEFAULTS = {
+    "super_admin": [
+        page
+        for page in ALL_ERP_PAGES
+        if page != "My Tasks" and page not in SERVICE_TAKER_PORTAL_PAGES
+    ],
     "admin": [
         page
         for page in ALL_ERP_PAGES
@@ -642,15 +655,15 @@ def normalize_allowed_pages(role: str, pages: list[str] | None) -> list[str]:
         "Amazon Pricing",
         "Service Takers",
     ):
-        if role == "admin" and admin_page not in normalized:
+        if role in {"admin", "super_admin"} and admin_page not in normalized:
             normalized.append(admin_page)
-        if role != "admin" and admin_page in normalized:
+        if role not in {"admin", "super_admin"} and admin_page in normalized:
             normalized.remove(admin_page)
     for service_page in SERVICE_TAKER_PORTAL_PAGES:
         if service_page in normalized:
             normalized.remove(service_page)
 
-    can_print_product_labels = role in {"admin", "manager"} and "Products" in normalized
+    can_print_product_labels = role in {"admin", "super_admin", "manager"} and "Products" in normalized
     can_print_warehouse_labels = role == "warehouse" and any(
         page in normalized
         for page in ("Warehouse / Fulfillment", "Warehouse Dispatch", "Warehouse Shipments", "Warehouse Stock")
@@ -666,6 +679,185 @@ def normalize_session_expiry_minutes(value: int | None) -> int:
     if value is None:
         return 0
     return max(0, int(value))
+
+TENANT_ADMIN_ROLES = {"admin", "super_admin"}
+TENANT_ALWAYS_ALLOWED_PAGES = {"Dashboard", "Settings", "Users"}
+
+
+def slugify_tenant_value(value: str | None, fallback: str = "tenant") -> str:
+    cleaned = re.sub(r"[^a-z0-9]+", "-", str(value or "").strip().lower())
+    cleaned = cleaned.strip("-")
+    return cleaned or fallback
+
+
+def normalize_tenant_status(status: str | None) -> str:
+    cleaned = str(status or "active").strip().lower()
+    if cleaned not in {"active", "inactive"}:
+        raise HTTPException(status_code=400, detail="Tenant status must be active or inactive")
+    return cleaned
+
+
+def is_tenant_admin(user: User | None) -> bool:
+    return bool(user and user.role in TENANT_ADMIN_ROLES)
+
+
+def get_default_tenant(db: Session) -> Tenant:
+    tenant = (
+        db.query(Tenant)
+        .execution_options(skip_tenant_scope=True)
+        .filter(Tenant.slug == DEFAULT_TENANT_SLUG)
+        .first()
+    )
+    if tenant:
+        return tenant
+
+    tenant = Tenant(
+        company_name=DEFAULT_TENANT_NAME,
+        slug=DEFAULT_TENANT_SLUG,
+        status="active",
+    )
+    db.add(tenant)
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
+def get_tenant_or_404(db: Session, tenant_id: int) -> Tenant:
+    tenant = (
+        db.query(Tenant)
+        .execution_options(skip_tenant_scope=True)
+        .filter(Tenant.id == tenant_id)
+        .first()
+    )
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Company tenant not found")
+    return tenant
+
+
+def tenant_for_slug(db: Session, slug: str | None) -> Tenant | None:
+    clean_slug = slugify_tenant_value(slug, "")
+    if not clean_slug:
+        return None
+    return (
+        db.query(Tenant)
+        .execution_options(skip_tenant_scope=True)
+        .filter(Tenant.slug == clean_slug)
+        .first()
+    )
+
+
+def require_tenant_admin(request: Request, db: Session) -> User:
+    user = get_authenticated_user(request, db)
+    if not is_tenant_admin(user):
+        raise HTTPException(status_code=403, detail="Company admin access is required.")
+    return user
+
+
+def tenant_id_for_write(
+    request: Request,
+    db: Session,
+    requested_tenant_id: int | None = None,
+) -> int:
+    user = require_tenant_admin(request, db)
+    if user.role == "super_admin" and requested_tenant_id is not None:
+        return get_tenant_or_404(db, requested_tenant_id).id
+    if user.tenant_id is not None:
+        if requested_tenant_id is not None and requested_tenant_id != user.tenant_id:
+            raise HTTPException(status_code=403, detail="This user cannot write into another company tenant.")
+        return user.tenant_id
+    return get_default_tenant(db).id
+
+
+def tenant_enabled_page_set(db: Session, tenant_id: int | None) -> tuple[set[str], set[str]]:
+    if tenant_id is None:
+        return set(), set()
+    rows = (
+        db.query(TenantModule, Module)
+        .execution_options(skip_tenant_scope=True)
+        .join(Module, Module.id == TenantModule.module_id)
+        .filter(TenantModule.tenant_id == tenant_id)
+        .all()
+    )
+    enabled = {
+        module.page_name
+        for tenant_module, module in rows
+        if tenant_module.enabled and module.page_name
+    }
+    disabled = {
+        module.page_name
+        for tenant_module, module in rows
+        if not tenant_module.enabled and module.page_name
+    }
+    return enabled, disabled
+
+
+def tenant_filtered_allowed_pages(
+    db: Session | None,
+    tenant_id: int | None,
+    pages: list[str],
+) -> list[str]:
+    if db is None or tenant_id is None:
+        return pages
+    enabled, disabled = tenant_enabled_page_set(db, tenant_id)
+    known_pages = enabled | disabled
+    if not known_pages:
+        return pages
+    return [
+        page
+        for page in pages
+        if page in TENANT_ALWAYS_ALLOWED_PAGES or page not in known_pages or page in enabled
+    ]
+
+
+def tenant_response(tenant: Tenant, db: Session) -> dict:
+    user_count = (
+        db.query(func.count(User.id))
+        .execution_options(skip_tenant_scope=True)
+        .filter(User.tenant_id == tenant.id)
+        .scalar()
+        or 0
+    )
+    return {
+        "id": tenant.id,
+        "company_name": tenant.company_name,
+        "slug": tenant.slug,
+        "email": tenant.email,
+        "phone": tenant.phone,
+        "logo": tenant.logo,
+        "status": tenant.status or "active",
+        "user_count": user_count,
+        "created_at": tenant.created_at,
+        "updated_at": tenant.updated_at,
+    }
+
+
+def module_response(module: Module, enabled: bool = True) -> dict:
+    return {
+        "id": module.id,
+        "name": module.name,
+        "slug": module.slug,
+        "page_name": module.page_name,
+        "description": module.description,
+        "default_enabled": bool(module.default_enabled),
+        "enabled": bool(enabled),
+    }
+
+
+def custom_page_response(page: CustomPage) -> dict:
+    try:
+        fields = json.loads(page.fields_json or "[]")
+    except (TypeError, json.JSONDecodeError):
+        fields = []
+    return {
+        "id": page.id,
+        "tenant_id": page.tenant_id,
+        "page_name": page.page_name,
+        "slug": page.slug,
+        "fields": fields if isinstance(fields, list) else [],
+        "is_active": bool(page.is_active),
+        "created_at": page.created_at,
+        "updated_at": page.updated_at,
+    }
 
 
 def user_customer_privacy_settings(user: User | None) -> dict:
@@ -694,7 +886,7 @@ def create_user_access_token(user: User) -> str:
     )
 
 
-def user_response(user: User) -> dict:
+def user_response(user: User, db: Session | None = None) -> dict:
     try:
         stored_pages = json.loads(user.allowed_pages) if user.allowed_pages else None
     except (TypeError, json.JSONDecodeError):
@@ -702,12 +894,19 @@ def user_response(user: User) -> dict:
 
     return {
         "id": user.id,
+        "tenant_id": user.tenant_id,
+        "tenant_name": user.tenant.company_name if user.tenant else None,
+        "tenant_slug": user.tenant.slug if user.tenant else None,
         "name": user.name,
         "username": user.username or user.name,
         "role": user.role,
         "phone": user.phone,
         "email": user.email,
-        "allowed_pages": normalize_allowed_pages(user.role, stored_pages),
+        "allowed_pages": tenant_filtered_allowed_pages(
+            db,
+            user.tenant_id,
+            normalize_allowed_pages(user.role, stored_pages),
+        ),
         "customer_privacy_settings": user_customer_privacy_settings(user),
         "session_expiry_minutes": normalize_session_expiry_minutes(
             user.session_expiry_minutes
@@ -735,9 +934,20 @@ def suggested_role_for_public_request(requested_workspace: str | None) -> str:
     return PUBLIC_ACCESS_WORKSPACE_ROLE_HINTS.get(clean_workspace, "unassigned")
 
 
-def public_access_request_response(access_request: PublicAccessRequest) -> dict:
+def public_access_request_response(access_request: PublicAccessRequest, db: Session | None = None) -> dict:
+    tenant = None
+    if db is not None and access_request.tenant_id is not None:
+        tenant = (
+            db.query(Tenant)
+            .execution_options(skip_tenant_scope=True)
+            .filter(Tenant.id == access_request.tenant_id)
+            .first()
+        )
     return {
         "id": access_request.id,
+        "tenant_id": access_request.tenant_id,
+        "tenant_name": tenant.company_name if tenant else None,
+        "tenant_slug": tenant.slug if tenant else None,
         "full_name": access_request.full_name,
         "preferred_username": access_request.preferred_username,
         "work_email": access_request.work_email,
@@ -965,7 +1175,12 @@ def require_page_access(request: Request, db: Session, page: str) -> User:
     except (TypeError, json.JSONDecodeError):
         stored_pages = None
 
-    if page not in normalize_allowed_pages(user.role, stored_pages):
+    allowed_pages = tenant_filtered_allowed_pages(
+        db,
+        user.tenant_id,
+        normalize_allowed_pages(user.role, stored_pages),
+    )
+    if page not in allowed_pages:
         raise HTTPException(status_code=403, detail=f"{page} access is required.")
     return user
 
@@ -973,8 +1188,10 @@ def require_page_access(request: Request, db: Session, page: str) -> User:
 def ensure_username_available(
     db: Session, username: str, excluded_user_id: int | None = None
 ) -> None:
-    query = db.query(User).filter(
-        func.lower(func.coalesce(User.username, User.name)) == username.lower()
+    query = (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(func.lower(func.coalesce(User.username, User.name)) == username.lower())
     )
     if excluded_user_id is not None:
         query = query.filter(User.id != excluded_user_id)
@@ -1408,6 +1625,9 @@ def should_audit_request(request: Request, status_code: int) -> bool:
             "/accounting",
             "/production",
             "/users",
+            "/tenants",
+            "/modules",
+            "/custom-pages",
             "/inspiration",
         )
     )
@@ -1572,7 +1792,7 @@ async def create_product(
 
 @app.get("/users", response_model=list[UserOut])
 def list_users(db: Session = Depends(get_db)):
-    return [user_response(user) for user in db.query(User).order_by(User.id.desc()).all()]
+    return [user_response(user, db) for user in db.query(User).order_by(User.id.desc()).all()]
 
 
 def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
@@ -1637,8 +1857,46 @@ async def auth_middleware(request: Request, call_next):
 
     user_id = int(payload.get("sub", "0"))
     db = SessionLocal()
+    request_tenant_id = None
+    request_tenant_slug = None
+    tenant_error: tuple[int, str] | None = None
     try:
-        user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+        user = (
+            db.query(User)
+            .execution_options(skip_tenant_scope=True)
+            .filter(User.id == user_id, User.is_active == True)
+            .first()
+        )
+        if user and user.tenant_id is not None:
+            tenant = (
+                db.query(Tenant)
+                .execution_options(skip_tenant_scope=True)
+                .filter(Tenant.id == user.tenant_id)
+                .first()
+            )
+            if tenant:
+                request_tenant_id = tenant.id
+                request_tenant_slug = tenant.slug
+                if (tenant.status or "active") != "active" and user.role != "super_admin":
+                    tenant_error = (403, "This company tenant is inactive.")
+        selected_tenant_header = (request.headers.get("X-ERP-Tenant-Id") or "").strip()
+        if user and user.role == "super_admin" and selected_tenant_header:
+            try:
+                selected_tenant_id = int(selected_tenant_header)
+            except ValueError:
+                tenant_error = (400, "X-ERP-Tenant-Id must be a number.")
+            else:
+                selected_tenant = (
+                    db.query(Tenant)
+                    .execution_options(skip_tenant_scope=True)
+                    .filter(Tenant.id == selected_tenant_id)
+                    .first()
+                )
+                if not selected_tenant:
+                    tenant_error = (404, "Selected company tenant was not found.")
+                else:
+                    request_tenant_id = selected_tenant.id
+                    request_tenant_slug = selected_tenant.slug
     finally:
         db.close()
 
@@ -1647,6 +1905,11 @@ async def auth_middleware(request: Request, call_next):
             status_code=401,
             content={"detail": "Invalid or expired authentication token."},
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    if tenant_error:
+        return JSONResponse(
+            status_code=tenant_error[0],
+            content={"detail": tenant_error[1]},
         )
 
     if user.role == "school":
@@ -1687,6 +1950,8 @@ async def auth_middleware(request: Request, call_next):
 
     request.state.user_id = user.id
     request.state.user_name = user.username or user.name
+    request.state.tenant_id = request_tenant_id
+    request.state.tenant_slug = request_tenant_slug
     request.state.authenticated_user = user
     return await call_next(request)
 
@@ -1715,6 +1980,387 @@ def update_user_access_privacy_settings(
 ):
     require_page_access(request, db, "Users")
     return save_access_privacy_settings(payload.model_dump())
+
+
+
+def module_slug_for_page(page: str) -> str:
+    return slugify_tenant_value(page, "module")
+
+
+def ensure_default_modules_for_db(db: Session) -> None:
+    existing_by_slug = {
+        module.slug: module
+        for module in db.query(Module).execution_options(skip_tenant_scope=True).all()
+    }
+    for page in ALL_ERP_PAGES:
+        slug = module_slug_for_page(page)
+        if slug in existing_by_slug:
+            module = existing_by_slug[slug]
+            module.name = module.name or page
+            module.page_name = module.page_name or page
+            db.add(module)
+            continue
+        module = Module(
+            name=page,
+            slug=slug,
+            page_name=page,
+            description=f"Controls access to {page}.",
+            default_enabled=True,
+        )
+        db.add(module)
+        existing_by_slug[slug] = module
+    db.flush()
+
+    tenants = db.query(Tenant).execution_options(skip_tenant_scope=True).all()
+    modules = db.query(Module).execution_options(skip_tenant_scope=True).all()
+    for tenant in tenants:
+        sync_tenant_modules(db, tenant.id, None, commit=False, modules=modules)
+    db.commit()
+
+
+def ensure_default_modules() -> None:
+    db = SessionLocal()
+    try:
+        ensure_default_modules_for_db(db)
+    finally:
+        db.close()
+
+
+def sync_tenant_modules(
+    db: Session,
+    tenant_id: int,
+    enabled_by_slug: dict[str, bool] | None = None,
+    *,
+    commit: bool = True,
+    modules: list[Module] | None = None,
+) -> list[TenantModule]:
+    if modules is None:
+        modules = (
+            db.query(Module)
+            .execution_options(skip_tenant_scope=True)
+            .order_by(Module.name.asc())
+            .all()
+        )
+    existing = {
+        tenant_module.module_id: tenant_module
+        for tenant_module in (
+            db.query(TenantModule)
+            .execution_options(skip_tenant_scope=True)
+            .filter(TenantModule.tenant_id == tenant_id)
+            .all()
+        )
+    }
+    normalized_enabled = {
+        slugify_tenant_value(slug, ""): bool(enabled)
+        for slug, enabled in (enabled_by_slug or {}).items()
+    }
+
+    rows = []
+    for module in modules:
+        tenant_module = existing.get(module.id)
+        if not tenant_module:
+            tenant_module = TenantModule(
+                tenant_id=tenant_id,
+                module_id=module.id,
+                enabled=bool(module.default_enabled),
+            )
+            db.add(tenant_module)
+        if enabled_by_slug is not None and module.slug in normalized_enabled:
+            tenant_module.enabled = normalized_enabled[module.slug]
+        rows.append(tenant_module)
+    if commit:
+        db.commit()
+    return rows
+
+
+def tenant_modules_for_response(db: Session, tenant_id: int) -> list[dict]:
+    ensure_default_modules_for_db(db)
+    rows = (
+        db.query(TenantModule, Module)
+        .execution_options(skip_tenant_scope=True)
+        .join(Module, Module.id == TenantModule.module_id)
+        .filter(TenantModule.tenant_id == tenant_id)
+        .order_by(Module.name.asc())
+        .all()
+    )
+    return [module_response(module, tenant_module.enabled) for tenant_module, module in rows]
+
+
+@app.get("/tenant-context")
+def get_tenant_context(request: Request, db: Session = Depends(get_db)):
+    user = get_authenticated_user(request, db)
+    tenant_id = getattr(request.state, "tenant_id", None) or user.tenant_id
+    tenant = get_tenant_or_404(db, tenant_id) if tenant_id is not None else None
+    modules = tenant_modules_for_response(db, tenant_id) if tenant_id is not None else []
+    custom_pages = (
+        db.query(CustomPage)
+        .filter(CustomPage.tenant_id == tenant_id, CustomPage.is_active == True)
+        .order_by(CustomPage.page_name.asc())
+        .all()
+        if tenant_id is not None
+        else []
+    )
+    return {
+        "tenant": tenant_response(tenant, db) if tenant else None,
+        "modules": modules,
+        "custom_pages": [custom_page_response(page) for page in custom_pages],
+    }
+
+
+@app.get("/tenants", response_model=list[TenantOut])
+def list_tenants(request: Request, db: Session = Depends(get_db)):
+    require_tenant_admin(request, db)
+    tenants = (
+        db.query(Tenant)
+        .execution_options(skip_tenant_scope=True)
+        .order_by(Tenant.company_name.asc(), Tenant.id.asc())
+        .all()
+    )
+    return [tenant_response(tenant, db) for tenant in tenants]
+
+
+@app.post("/tenants", response_model=TenantOut)
+def create_tenant(
+    payload: TenantCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_tenant_admin(request, db)
+    clean_name = payload.company_name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Company name is required")
+    slug = slugify_tenant_value(payload.slug or clean_name)
+    if tenant_for_slug(db, slug):
+        raise HTTPException(status_code=400, detail="Company slug is already in use")
+
+    tenant = Tenant(
+        company_name=clean_name,
+        slug=slug,
+        email=(payload.email or "").strip() or None,
+        phone=(payload.phone or "").strip() or None,
+        logo=(payload.logo or "").strip() or None,
+        status=normalize_tenant_status(payload.status),
+    )
+    db.add(tenant)
+    db.flush()
+    ensure_default_modules_for_db(db)
+    enabled_by_slug = None
+    if payload.module_slugs is not None:
+        selected = {slugify_tenant_value(slug, "") for slug in payload.module_slugs}
+        enabled_by_slug = {
+            module.slug: module.slug in selected
+            for module in db.query(Module).execution_options(skip_tenant_scope=True).all()
+        }
+    sync_tenant_modules(db, tenant.id, enabled_by_slug, commit=False)
+
+    if payload.admin_name:
+        admin_name = payload.admin_name.strip()
+        admin_username = normalize_username(payload.admin_username, admin_name)
+        ensure_username_available(db, admin_username)
+        admin_user = User(
+            tenant_id=tenant.id,
+            name=admin_name,
+            username=admin_username,
+            pin=hash_pin(payload.admin_pin),
+            role="admin",
+            phone=(payload.admin_phone or "").strip() or None,
+            email=(payload.admin_email or "").strip() or None,
+            allowed_pages=json.dumps(ROLE_PAGE_DEFAULTS["admin"]),
+            customer_privacy_settings=json.dumps(default_access_privacy_settings_for_role("admin")),
+            session_expiry_minutes=0,
+            is_active=True,
+        )
+        db.add(admin_user)
+
+    db.commit()
+    db.refresh(tenant)
+    return tenant_response(tenant, db)
+
+
+@app.put("/tenants/{tenant_id}", response_model=TenantOut)
+def update_tenant(
+    tenant_id: int,
+    payload: TenantUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_tenant_admin(request, db)
+    tenant = get_tenant_or_404(db, tenant_id)
+    data = payload.model_dump(exclude_unset=True)
+    if "company_name" in data and data["company_name"] is not None:
+        clean_name = data["company_name"].strip()
+        if not clean_name:
+            raise HTTPException(status_code=400, detail="Company name is required")
+        tenant.company_name = clean_name
+    if "slug" in data and data["slug"] is not None:
+        slug = slugify_tenant_value(data["slug"])
+        duplicate = tenant_for_slug(db, slug)
+        if duplicate and duplicate.id != tenant.id:
+            raise HTTPException(status_code=400, detail="Company slug is already in use")
+        tenant.slug = slug
+    if "status" in data and data["status"] is not None:
+        tenant.status = normalize_tenant_status(data["status"])
+    for field in ("email", "phone", "logo"):
+        if field in data:
+            setattr(tenant, field, (data[field] or "").strip() or None)
+    tenant.updated_at = datetime.utcnow()
+    db.add(tenant)
+    db.commit()
+    db.refresh(tenant)
+    return tenant_response(tenant, db)
+
+
+@app.get("/tenants/{tenant_id}/modules", response_model=list[ModuleOut])
+def get_tenant_modules(
+    tenant_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_tenant_admin(request, db)
+    get_tenant_or_404(db, tenant_id)
+    return tenant_modules_for_response(db, tenant_id)
+
+
+@app.put("/tenants/{tenant_id}/modules", response_model=list[ModuleOut])
+def update_tenant_modules(
+    tenant_id: int,
+    payload: TenantModuleBulkUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_tenant_admin(request, db)
+    get_tenant_or_404(db, tenant_id)
+    ensure_default_modules_for_db(db)
+    sync_tenant_modules(db, tenant_id, payload.modules)
+    return tenant_modules_for_response(db, tenant_id)
+
+
+@app.patch("/tenants/{tenant_id}/modules/{module_slug}", response_model=list[ModuleOut])
+def update_tenant_module(
+    tenant_id: int,
+    module_slug: str,
+    payload: TenantModuleUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_tenant_admin(request, db)
+    get_tenant_or_404(db, tenant_id)
+    clean_slug = slugify_tenant_value(module_slug, "")
+    module = (
+        db.query(Module)
+        .execution_options(skip_tenant_scope=True)
+        .filter(Module.slug == clean_slug)
+        .first()
+    )
+    if not module:
+        raise HTTPException(status_code=404, detail="Module not found")
+    sync_tenant_modules(db, tenant_id, {module.slug: payload.enabled})
+    return tenant_modules_for_response(db, tenant_id)
+
+
+@app.get("/modules", response_model=list[ModuleOut])
+def list_modules(request: Request, db: Session = Depends(get_db)):
+    user = get_authenticated_user(request, db)
+    tenant_id = getattr(request.state, "tenant_id", None) or user.tenant_id
+    if tenant_id is None:
+        return [module_response(module, module.default_enabled) for module in db.query(Module).all()]
+    return tenant_modules_for_response(db, tenant_id)
+
+
+@app.get("/custom-pages", response_model=list[CustomPageOut])
+def list_custom_pages(request: Request, db: Session = Depends(get_db)):
+    user = get_authenticated_user(request, db)
+    tenant_id = getattr(request.state, "tenant_id", None) or user.tenant_id
+    query = db.query(CustomPage)
+    if tenant_id is not None:
+        query = query.filter(CustomPage.tenant_id == tenant_id)
+    pages = query.order_by(CustomPage.page_name.asc(), CustomPage.id.asc()).all()
+    return [custom_page_response(page) for page in pages]
+
+
+@app.post("/custom-pages", response_model=CustomPageOut)
+def create_custom_page(
+    payload: CustomPageCreate,
+    request: Request,
+    tenant_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    target_tenant_id = tenant_id_for_write(request, db, tenant_id)
+    page_name = payload.page_name.strip()
+    slug = slugify_tenant_value(payload.slug or page_name, "custom-page")
+    duplicate = (
+        db.query(CustomPage)
+        .execution_options(skip_tenant_scope=True)
+        .filter(CustomPage.tenant_id == target_tenant_id, CustomPage.slug == slug)
+        .first()
+    )
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Custom page slug already exists for this company")
+    page = CustomPage(
+        tenant_id=target_tenant_id,
+        page_name=page_name,
+        slug=slug,
+        fields_json=json.dumps(payload.fields),
+        is_active=payload.is_active,
+    )
+    db.add(page)
+    db.commit()
+    db.refresh(page)
+    return custom_page_response(page)
+
+
+@app.put("/custom-pages/{page_id}", response_model=CustomPageOut)
+def update_custom_page(
+    page_id: int,
+    payload: CustomPageUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_tenant_admin(request, db)
+    page = db.query(CustomPage).filter(CustomPage.id == page_id).first()
+    if not page:
+        raise HTTPException(status_code=404, detail="Custom page not found")
+    data = payload.model_dump(exclude_unset=True)
+    if "page_name" in data and data["page_name"] is not None:
+        page_name = data["page_name"].strip()
+        if not page_name:
+            raise HTTPException(status_code=400, detail="Page name is required")
+        page.page_name = page_name
+    if "slug" in data and data["slug"] is not None:
+        slug = slugify_tenant_value(data["slug"], "custom-page")
+        duplicate = (
+            db.query(CustomPage)
+            .execution_options(skip_tenant_scope=True)
+            .filter(CustomPage.tenant_id == page.tenant_id, CustomPage.slug == slug, CustomPage.id != page.id)
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Custom page slug already exists for this company")
+        page.slug = slug
+    if "fields" in data and data["fields"] is not None:
+        page.fields_json = json.dumps(data["fields"])
+    if "is_active" in data and data["is_active"] is not None:
+        page.is_active = bool(data["is_active"])
+    page.updated_at = datetime.utcnow()
+    db.add(page)
+    db.commit()
+    db.refresh(page)
+    return custom_page_response(page)
+
+
+@app.delete("/custom-pages/{page_id}")
+def delete_custom_page(
+    page_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_tenant_admin(request, db)
+    page = db.query(CustomPage).filter(CustomPage.id == page_id).first()
+    if not page:
+        raise HTTPException(status_code=404, detail="Custom page not found")
+    db.delete(page)
+    db.commit()
+    return {"detail": "Custom page deleted", "deleted_page_id": page_id}
 
 
 DATA_ERASE_OPTIONS = [
@@ -2074,6 +2720,7 @@ def restore_data_backup_from_extract(extract_dir: Path, metadata: dict) -> dict:
     Base.metadata.create_all(bind=engine)
     migrate_database()
     ensure_scaling_indexes()
+    ensure_default_modules()
 
     return {
         "database": "restored",
@@ -3140,6 +3787,7 @@ def update_website_settings(payload: WebsiteSettingsPayload):
 
 @app.get("/website-products")
 def get_public_website_products(db: Session = Depends(get_db)):
+    db.info["tenant_id"] = get_default_tenant(db).id
     settings = load_website_settings()
     hidden_product_ids = set(settings.get("hidden_product_ids") or [])
     return [
@@ -3150,7 +3798,7 @@ def get_public_website_products(db: Session = Depends(get_db)):
 
 
 @app.post("/users", response_model=UserOut)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
+def create_user(user: UserCreate, request: Request, db: Session = Depends(get_db)):
     clean_name = user.name.strip()
     clean_username = normalize_username(user.username, clean_name)
     if not clean_name:
@@ -3158,10 +3806,17 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     if not clean_username:
         raise HTTPException(status_code=400, detail="Username is required")
     ensure_username_available(db, clean_username)
+    actor = get_authenticated_user(request, db)
+    target_tenant_id = (
+        get_tenant_or_404(db, user.tenant_id).id
+        if actor.role == "super_admin" and user.tenant_id is not None
+        else (actor.tenant_id or get_default_tenant(db).id)
+    )
 
     worker_id = user.worker_id
     if user.role == "worker" and worker_id is None:
         new_worker = Worker(
+            tenant_id=target_tenant_id,
             name=clean_name,
             role="Worker",
             phone=user.phone,
@@ -3176,6 +3831,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         worker_id = new_worker.id
 
     new_user = User(
+        tenant_id=target_tenant_id,
         name=clean_name,
         username=clean_username,
         pin=hash_pin(user.pin),
@@ -3198,7 +3854,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return user_response(new_user)
+    return user_response(new_user, db)
 
 
 @app.post("/login", response_model=LoginResponse)
@@ -3207,11 +3863,25 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if not identifier:
         raise HTTPException(status_code=400, detail="Username is required")
 
-    user = db.query(User).filter(
-        func.lower(func.coalesce(User.username, User.name)) == identifier.lower(),
-        User.is_active == True,
-    ).first()
+    query = (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(
+            func.lower(func.coalesce(User.username, User.name)) == identifier.lower(),
+            User.is_active == True,
+        )
+    )
+    if payload.tenant_slug:
+        tenant = tenant_for_slug(db, payload.tenant_slug)
+        if not tenant:
+            raise HTTPException(status_code=401, detail="Invalid credentials or inactive user")
+        query = query.filter(User.tenant_id == tenant.id)
+    user = query.first()
     if not user or not verify_pin(payload.pin, user.pin):
+        raise HTTPException(status_code=401, detail="Invalid credentials or inactive user")
+    if user.tenant_id is None:
+        user.tenant_id = get_default_tenant(db).id
+    elif user.tenant and (user.tenant.status or "active") != "active" and user.role != "super_admin":
         raise HTTPException(status_code=401, detail="Invalid credentials or inactive user")
 
     if not user.pin.startswith("pbkdf2_sha256$"):
@@ -3233,14 +3903,14 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     )
     access_token = create_user_access_token(user)
     return {
-        **user_response(user),
+        **user_response(user, db),
         "access_token": access_token,
         "token_type": "bearer",
     }
 
 
 @app.put("/users/{user_id}", response_model=UserOut)
-def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)):
+def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.id == user_id).first()
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
@@ -3251,6 +3921,13 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     if not clean_username:
         raise HTTPException(status_code=400, detail="Username is required")
     ensure_username_available(db, clean_username, existing.id)
+    actor = get_authenticated_user(request, db)
+    if payload.tenant_id is not None:
+        if actor.role != "super_admin":
+            raise HTTPException(status_code=403, detail="Only a super admin can move users between companies.")
+        existing.tenant_id = get_tenant_or_404(db, payload.tenant_id).id
+    elif existing.tenant_id is None:
+        existing.tenant_id = actor.tenant_id or get_default_tenant(db).id
 
     existing.name = clean_name
     existing.username = clean_username
@@ -3276,6 +3953,7 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
 
     if payload.role == "worker" and existing.worker_id is None:
         new_worker = Worker(
+            tenant_id=existing.tenant_id,
             name=clean_name,
             role="Worker",
             phone=payload.phone,
@@ -3291,7 +3969,7 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
 
     db.commit()
     db.refresh(existing)
-    return user_response(existing)
+    return user_response(existing, db)
 
 
 @app.post("/users/{user_id}/customer-privacy-settings", response_model=UserOut)
@@ -3316,7 +3994,7 @@ def update_user_customer_privacy_settings(
     )
     db.commit()
     db.refresh(existing)
-    return user_response(existing)
+    return user_response(existing, db)
 
 
 @app.put("/users/{user_id}/profile", response_model=UserOut)
@@ -3342,7 +4020,7 @@ def update_user_profile(user_id: int, payload: UserProfileUpdate, db: Session = 
 
     db.commit()
     db.refresh(existing)
-    return user_response(existing)
+    return user_response(existing, db)
 
 
 @app.get("/users/{user_id}", response_model=UserOut)
@@ -3350,7 +4028,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return user_response(user)
+    return user_response(user, db)
 
 
 @app.post("/role-requests", response_model=RoleRequestOut)
@@ -3435,6 +4113,9 @@ def create_public_access_request(
     db: Session = Depends(get_db),
 ):
     clean_name = (payload.full_name or "").strip()
+    tenant = tenant_for_slug(db, payload.tenant_slug) if payload.tenant_slug else get_default_tenant(db)
+    if not tenant:
+        raise HTTPException(status_code=400, detail="Requested company tenant was not found.")
     clean_username = (payload.preferred_username or "").strip() or None
     clean_email = (payload.work_email or "").strip() or None
     clean_phone = (payload.phone or "").strip() or None
@@ -3447,6 +4128,7 @@ def create_public_access_request(
         raise HTTPException(status_code=400, detail="Add an email or phone number.")
 
     access_request = PublicAccessRequest(
+        tenant_id=tenant.id,
         full_name=clean_name,
         preferred_username=clean_username,
         work_email=clean_email,
@@ -3458,7 +4140,7 @@ def create_public_access_request(
     db.add(access_request)
     db.commit()
     db.refresh(access_request)
-    return public_access_request_response(access_request)
+    return public_access_request_response(access_request, db)
 
 
 @app.get("/access-requests", response_model=list[PublicAccessRequestOut])
@@ -3470,7 +4152,7 @@ def list_public_access_requests(request: Request, db: Session = Depends(get_db))
         .limit(200)
         .all()
     )
-    return [public_access_request_response(item) for item in requests]
+    return [public_access_request_response(item, db) for item in requests]
 
 
 @app.post("/access-requests/{request_id}/approve", response_model=PublicAccessRequestOut)
@@ -3507,6 +4189,7 @@ def approve_public_access_request(
     worker_id = None
     if clean_role == "worker":
         new_worker = Worker(
+            tenant_id=access_request.tenant_id or admin_user.tenant_id or get_default_tenant(db).id,
             name=clean_name,
             role="Worker",
             phone=clean_phone,
@@ -3521,6 +4204,7 @@ def approve_public_access_request(
         worker_id = new_worker.id
 
     new_user = User(
+        tenant_id=access_request.tenant_id or admin_user.tenant_id or get_default_tenant(db).id,
         name=clean_name,
         username=clean_username,
         pin=hash_pin(payload.pin),
@@ -3564,7 +4248,7 @@ def approve_public_access_request(
         request_method="POST",
         request_path=f"/access-requests/{request_id}/approve",
     )
-    return public_access_request_response(access_request)
+    return public_access_request_response(access_request, db)
 
 
 @app.patch("/access-requests/{request_id}", response_model=PublicAccessRequestOut)
@@ -3591,7 +4275,7 @@ def update_public_access_request(
     access_request.reviewed_at = datetime.utcnow()
     db.commit()
     db.refresh(access_request)
-    return public_access_request_response(access_request)
+    return public_access_request_response(access_request, db)
 
 
 @app.delete("/access-requests/{request_id}")
@@ -4268,8 +4952,15 @@ if INITIALIZE_DATABASE_ON_IMPORT:
 def ensure_default_admin():
     db = SessionLocal()
     try:
-        if not db.query(User).filter(User.role == "admin").first():
+        default_tenant = get_default_tenant(db)
+        if not (
+            db.query(User)
+            .execution_options(skip_tenant_scope=True)
+            .filter(User.role.in_(["admin", "super_admin"]))
+            .first()
+        ):
             default_admin = User(
+                tenant_id=default_tenant.id,
                 name="adminmain",
                 username="adminmain",
                 pin=hash_pin("1234"),
@@ -4287,6 +4978,7 @@ def ensure_default_admin():
 
 if INITIALIZE_DATABASE_ON_IMPORT:
     ensure_default_admin()
+    ensure_default_modules()
 
 # Note: The FastAPI app has already been instantiated above; avoid re-instantiating here.
 
@@ -4316,6 +5008,15 @@ async def audit_activity_middleware(request: Request, call_next):
         db = SessionLocal()
         try:
             actor_user_id, actor_user_name = parse_actor_from_request(request)
+            if actor_user_id:
+                actor_user = (
+                    db.query(User)
+                    .execution_options(skip_tenant_scope=True)
+                    .filter(User.id == actor_user_id)
+                    .first()
+                )
+                if actor_user and actor_user.tenant_id is not None:
+                    db.info["tenant_id"] = actor_user.tenant_id
             context = describe_activity_request(request.method, request.url.path)
             context = enrich_activity_context(
                 db,
@@ -8203,14 +8904,24 @@ def download_product_catalog_file(
     except ProductCatalogError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    user = (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(User.id == user_id, User.is_active == True)
+        .first()
+    )
     if not user:
         raise HTTPException(status_code=401, detail="The catalog download link is no longer valid.")
+    db.info["tenant_id"] = user.tenant_id or get_default_tenant(db).id
     try:
         stored_pages = json.loads(user.allowed_pages) if user.allowed_pages else None
     except (TypeError, json.JSONDecodeError):
         stored_pages = None
-    if "Products" not in normalize_allowed_pages(user.role, stored_pages):
+    if "Products" not in tenant_filtered_allowed_pages(
+        db,
+        user.tenant_id,
+        normalize_allowed_pages(user.role, stored_pages),
+    ):
         raise HTTPException(status_code=403, detail="Products access is required.")
     return product_catalog_pdf_response(db, product_ids=product_ids)
 

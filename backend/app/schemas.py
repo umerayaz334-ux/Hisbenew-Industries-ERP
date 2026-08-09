@@ -115,10 +115,102 @@ class SchoolStudentOut(SchoolStudentCreate):
 
 from pydantic import Field, constr
 
+class TenantCreate(BaseModel):
+    company_name: str = Field(min_length=1, max_length=160)
+    slug: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=160)
+    phone: str | None = Field(default=None, max_length=80)
+    logo: str | None = None
+    status: str = "active"
+    admin_name: str | None = Field(default=None, max_length=120)
+    admin_username: str | None = Field(default=None, max_length=80)
+    admin_pin: constr(pattern=r"^\d{4}$") = "0000"
+    admin_email: str | None = Field(default=None, max_length=160)
+    admin_phone: str | None = Field(default=None, max_length=80)
+    module_slugs: list[str] | None = None
+
+
+class TenantUpdate(BaseModel):
+    company_name: str | None = Field(default=None, max_length=160)
+    slug: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=160)
+    phone: str | None = Field(default=None, max_length=80)
+    logo: str | None = None
+    status: str | None = None
+
+
+class TenantOut(BaseModel):
+    id: int
+    company_name: str
+    slug: str
+    email: str | None = None
+    phone: str | None = None
+    logo: str | None = None
+    status: str
+    user_count: int = 0
+    created_at: datetime
+    updated_at: datetime | None = None
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class ModuleOut(BaseModel):
+    id: int
+    name: str
+    slug: str
+    page_name: str | None = None
+    description: str | None = None
+    default_enabled: bool = True
+    enabled: bool = True
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class TenantModuleUpdate(BaseModel):
+    enabled: bool
+
+
+class TenantModuleBulkUpdate(BaseModel):
+    modules: dict[str, bool] = Field(default_factory=dict)
+
+
+class CustomPageCreate(BaseModel):
+    page_name: str = Field(min_length=1, max_length=120)
+    slug: str | None = Field(default=None, max_length=120)
+    fields: list[dict] = Field(default_factory=list)
+    is_active: bool = True
+
+
+class CustomPageUpdate(BaseModel):
+    page_name: str | None = Field(default=None, max_length=120)
+    slug: str | None = Field(default=None, max_length=120)
+    fields: list[dict] | None = None
+    is_active: bool | None = None
+
+
+class CustomPageOut(BaseModel):
+    id: int
+    tenant_id: int
+    page_name: str
+    slug: str
+    fields: list[dict] = Field(default_factory=list)
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime | None = None
+
+    model_config = {
+        "from_attributes": True
+    }
+
 
 class UserCreate(BaseModel):
     name: str
     username: str | None = None
+    tenant_id: int | None = None
     pin: constr(pattern=r"^\d{4}$") = "0000"
     role: str
     phone: str | None = None
@@ -133,6 +225,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     name: str
     username: str | None = None
+    tenant_id: int | None = None
     pin: Optional[constr(pattern=r"^\d{4}$")] = None
     role: str
     phone: str | None = None
@@ -146,6 +239,9 @@ class UserUpdate(BaseModel):
 
 class UserOut(BaseModel):
     id: int
+    tenant_id: int | None = None
+    tenant_name: str | None = None
+    tenant_slug: str | None = None
     name: str
     username: str
     role: str
@@ -207,6 +303,7 @@ class RoleRequestOut(BaseModel):
 
 
 class PublicAccessRequestCreate(BaseModel):
+    tenant_slug: str | None = Field(default=None, max_length=120)
     full_name: str = Field(min_length=1, max_length=120)
     preferred_username: str | None = Field(default=None, max_length=80)
     work_email: str | None = Field(default=None, max_length=160)
@@ -236,6 +333,9 @@ class PublicAccessRequestUpdate(BaseModel):
 
 class PublicAccessRequestOut(BaseModel):
     id: int
+    tenant_id: int | None = None
+    tenant_name: str | None = None
+    tenant_slug: str | None = None
     full_name: str
     preferred_username: str | None = None
     work_email: str | None = None
@@ -351,6 +451,7 @@ class ActivityLogOut(BaseModel):
 class LoginRequest(BaseModel):
     username: str | None = None
     name: str | None = None
+    tenant_slug: str | None = None
     pin: constr(pattern=r"^\d{4}$")
 
 

@@ -93,6 +93,7 @@ const buildAccessGroups = (pages = []) => {
 };
 
 const ROLE_LABELS = {
+  super_admin: "Super admin",
   admin: "Administrator",
   manager: "Manager",
   warehouse: "Warehouse / Fulfillment",
@@ -110,6 +111,11 @@ const DEFAULT_PRIVACY_SETTINGS = {
 };
 
 const PRIVACY_ROLE_DEFAULTS = {
+  super_admin: {
+    hide_customer_business_for_non_admin: false,
+    hide_worker_customer_names_except_shipping: false,
+    hide_customer_phone_for_non_admin: false,
+  },
   admin: {
     hide_customer_business_for_non_admin: false,
     hide_worker_customer_names_except_shipping: false,
@@ -172,6 +178,9 @@ const normalizePrivacySettings = (
 const EMPTY_ACCESS_OPTIONS = {
   pages: ACCESS_GROUPS.flatMap((group) => group.pages),
   role_defaults: {
+    super_admin: ACCESS_GROUPS.flatMap((group) => group.pages).filter(
+      (page) => page !== "My Tasks"
+    ),
     admin: ACCESS_GROUPS.flatMap((group) => group.pages).filter(
       (page) => page !== "My Tasks"
     ),
@@ -1181,6 +1190,7 @@ export default function Users() {
               value={roleFilter}
             >
               <option value="all">All roles</option>
+              <option value="super_admin">Super admin</option>
               <option value="admin">Administrator</option>
               <option value="manager">Manager</option>
               <option value="warehouse">Warehouse</option>
@@ -1439,6 +1449,7 @@ export default function Users() {
                       value={role}
                     >
                       <option value="unassigned">Assign role later</option>
+                      <option value="super_admin">Super admin</option>
                       <option value="admin">Administrator</option>
                       <option value="manager">Manager</option>
                       <option value="warehouse">Warehouse / Fulfillment</option>
