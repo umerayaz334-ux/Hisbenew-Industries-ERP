@@ -39,7 +39,7 @@ SessionLocal = sessionmaker(
 Base = declarative_base()
 
 DEFAULT_TENANT_SLUG = "hisbenew-industries"
-DEFAULT_TENANT_NAME = "Hisbenew Industries"
+DEFAULT_TENANT_NAME = "Hisbenew"
 TENANT_SCOPED_TABLES = (
     "users",
     "activity_logs",

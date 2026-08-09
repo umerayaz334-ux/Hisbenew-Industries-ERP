@@ -688,6 +688,10 @@ def normalize_session_expiry_minutes(value: int | None) -> int:
 
 TENANT_ADMIN_ROLES = {"admin", "super_admin"}
 TENANT_ALWAYS_ALLOWED_PAGES = {"Dashboard", "Settings", "Users"}
+SCRATCH_COMPANY_NAME = "Cuterex"
+SCRATCH_COMPANY_SLUG = "cuterex"
+SCRATCH_COMPANY_ADMIN_USERNAME = "Cuterex"
+SCRATCH_COMPANY_ADMIN_PIN = "1234"
 
 
 def slugify_tenant_value(value: str | None, fallback: str = "tenant") -> str:
@@ -715,6 +719,12 @@ def get_default_tenant(db: Session) -> Tenant:
         .first()
     )
     if tenant:
+        if tenant.company_name != DEFAULT_TENANT_NAME:
+            tenant.company_name = DEFAULT_TENANT_NAME
+            tenant.updated_at = datetime.utcnow()
+            db.add(tenant)
+            db.commit()
+            db.refresh(tenant)
         return tenant
 
     tenant = Tenant(
@@ -725,6 +735,39 @@ def get_default_tenant(db: Session) -> Tenant:
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
+    return tenant
+
+
+def get_or_create_company_tenant(
+    db: Session,
+    *,
+    company_name: str,
+    slug: str,
+    status: str = "active",
+) -> Tenant:
+    clean_slug = slugify_tenant_value(slug)
+    tenant = tenant_for_slug(db, clean_slug)
+    if tenant:
+        changed = False
+        if tenant.company_name != company_name:
+            tenant.company_name = company_name
+            changed = True
+        if (tenant.status or "active") != status:
+            tenant.status = status
+            changed = True
+        if changed:
+            tenant.updated_at = datetime.utcnow()
+            db.add(tenant)
+            db.flush()
+        return tenant
+
+    tenant = Tenant(
+        company_name=company_name,
+        slug=clean_slug,
+        status=status,
+    )
+    db.add(tenant)
+    db.flush()
     return tenant
 
 
@@ -5050,6 +5093,7 @@ def ensure_default_admin():
     db = SessionLocal()
     try:
         default_tenant = get_default_tenant(db)
+        ensure_default_modules_for_db(db)
         hafiz_umer = (
             db.query(User)
             .execution_options(skip_tenant_scope=True)
@@ -5064,7 +5108,7 @@ def ensure_default_admin():
         )
         if not hafiz_umer:
             hafiz_umer = User(
-                tenant_id=default_tenant.id,
+                tenant_id=None,
                 name="Hafiz Umer",
                 username="hafizumer",
                 pin=hash_pin("1234"),
@@ -5072,7 +5116,7 @@ def ensure_default_admin():
                 is_active=True,
             )
         hafiz_umer.role = "super_admin"
-        hafiz_umer.tenant_id = hafiz_umer.tenant_id or default_tenant.id
+        hafiz_umer.tenant_id = None
         hafiz_umer.allowed_pages = json.dumps(ROLE_PAGE_DEFAULTS["super_admin"])
         hafiz_umer.customer_privacy_settings = json.dumps(
             default_access_privacy_settings_for_role("super_admin")
@@ -5130,6 +5174,15 @@ def ensure_default_admin():
             db.add(company_admin)
             db.commit()
 
+        sync_tenant_modules(db, default_tenant.id, None, commit=False)
+        scratch_tenant = get_or_create_company_tenant(
+            db,
+            company_name=SCRATCH_COMPANY_NAME,
+            slug=SCRATCH_COMPANY_SLUG,
+            status="active",
+        )
+        sync_tenant_modules(db, scratch_tenant.id, None, commit=False)
+
         cuterex_user = (
             db.query(User)
             .execution_options(skip_tenant_scope=True)
@@ -5143,10 +5196,10 @@ def ensure_default_admin():
         )
         if not cuterex_user:
             cuterex_user = User(
-                tenant_id=default_tenant.id,
+                tenant_id=scratch_tenant.id,
                 name="Cuterex",
-                username="Cuterex",
-                pin=hash_pin("1234"),
+                username=SCRATCH_COMPANY_ADMIN_USERNAME,
+                pin=hash_pin(SCRATCH_COMPANY_ADMIN_PIN),
                 role="admin",
                 allowed_pages=json.dumps(ROLE_PAGE_DEFAULTS["admin"]),
                 customer_privacy_settings=json.dumps(
@@ -5155,10 +5208,10 @@ def ensure_default_admin():
                 is_active=True,
             )
         else:
-            cuterex_user.tenant_id = default_tenant.id
+            cuterex_user.tenant_id = scratch_tenant.id
             cuterex_user.name = cuterex_user.name or "Cuterex"
-            cuterex_user.username = cuterex_user.username or "Cuterex"
-            cuterex_user.pin = hash_pin("1234")
+            cuterex_user.username = cuterex_user.username or SCRATCH_COMPANY_ADMIN_USERNAME
+            cuterex_user.pin = hash_pin(SCRATCH_COMPANY_ADMIN_PIN)
             cuterex_user.role = "admin"
             cuterex_user.allowed_pages = json.dumps(ROLE_PAGE_DEFAULTS["admin"])
             cuterex_user.customer_privacy_settings = json.dumps(
