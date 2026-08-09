@@ -179,7 +179,7 @@ def require_amazon_admin(request: Request, db: Session = Depends(get_db)) -> Use
     )
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required.")
-    if user.role != "admin":
+    if user.role not in {"admin", "super_admin"}:
         raise HTTPException(
             status_code=403,
             detail="Only administrators can manage Amazon Seller Central settings.",

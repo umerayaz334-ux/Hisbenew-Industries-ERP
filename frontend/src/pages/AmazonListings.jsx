@@ -227,7 +227,7 @@ function AmazonListings({ authenticatedUser }) {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [issueTarget, setIssueTarget] = useState(null);
-  const isAdmin = authenticatedUser?.role === "admin";
+  const isAdmin = ["admin", "super_admin"].includes(authenticatedUser?.role);
 
   const loadListings = useCallback(async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);

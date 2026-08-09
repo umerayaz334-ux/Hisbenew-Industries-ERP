@@ -72,7 +72,7 @@ function AmazonFbaInventory({ authenticatedUser, embedded = false }) {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [thresholdDrafts, setThresholdDrafts] = useState({});
-  const isAdmin = authenticatedUser?.role === "admin";
+  const isAdmin = ["admin", "super_admin"].includes(authenticatedUser?.role);
 
   const loadInventory = useCallback(
     async ({ quiet = false } = {}) => {

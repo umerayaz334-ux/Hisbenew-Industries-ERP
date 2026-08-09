@@ -760,7 +760,7 @@ function Shipping({ userRole }) {
           <h1>Shipping</h1>
 
           <div className="shipping-header-actions">
-            {userRole === "admin" && (
+            {["admin", "super_admin"].includes(userRole) && (
               <label className={`shipping-rate-upload ${uploadingRateSheet ? "is-busy" : ""}`}>
                 <input
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

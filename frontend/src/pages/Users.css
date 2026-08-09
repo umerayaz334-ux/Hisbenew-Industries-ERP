@@ -734,6 +734,7 @@
   white-space: nowrap;
 }
 
+.users-role-chip.is-super_admin,
 .users-role-chip.is-admin {
   border-color: #cbbcea;
   background: #f1ebfb;
@@ -1654,5 +1655,21 @@
   .users-activity-icon {
     width: 34px;
     height: 34px;
+  }
+}
+
+.users-filters.has-company-filter {
+  grid-template-columns: minmax(220px, 1.3fr) minmax(150px, 0.9fr) minmax(130px, 0.75fr) minmax(130px, 0.75fr);
+}
+
+@media (max-width: 1050px) {
+  .users-filters.has-company-filter {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .users-filters.has-company-filter {
+    grid-template-columns: 1fr;
   }
 }

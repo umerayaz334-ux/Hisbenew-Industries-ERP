@@ -228,7 +228,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(createEmptyForm);
   const [catalogTab, setCatalogTab] = useState(() =>
-    initialCatalogTab === "amazon" && authenticatedUser?.role === "admin"
+    initialCatalogTab === "amazon" && ["admin", "super_admin"].includes(authenticatedUser?.role)
       ? "amazon"
       : "products"
   );
@@ -255,7 +255,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
   const [selectedProductIds, setSelectedProductIds] = useState(() => new Set());
   const faireFileInputRef = useRef(null);
   const effectiveRole = userRole || authenticatedUser?.role;
-  const isAdmin = effectiveRole === "admin";
+  const isAdmin = ["admin", "super_admin"].includes(effectiveRole);
   const isWorkerView = effectiveRole === "worker";
   const confirmDialog = useConfirmDialog();
 

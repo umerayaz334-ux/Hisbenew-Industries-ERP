@@ -67,7 +67,7 @@ def authenticated_user(request: Request, db: Session) -> User:
 
 def require_admin(request: Request, db: Session) -> User:
     user = authenticated_user(request, db)
-    if user.role != "admin":
+    if user.role not in {"admin", "super_admin"}:
         raise HTTPException(
             status_code=403,
             detail="Only administrators can manage service takers.",

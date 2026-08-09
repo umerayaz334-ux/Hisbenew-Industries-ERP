@@ -49,6 +49,7 @@ const ACCESS_GROUPS = [
       "TempData",
       "Settings",
       "Quotes",
+      "Companies",
       "Users",
     ],
   },
@@ -246,6 +247,7 @@ const EMPTY_ACCESS_OPTIONS = {
     "Worker Payouts": "Manufacturing",
     Quotes: "Settings",
     Users: "Settings",
+    Companies: "Settings",
     Website: "Settings",
     Deployment: "Settings",
     Inspiration: "Products",
@@ -351,12 +353,13 @@ const activityContextText = (activity) => {
   return [...new Set(parts.filter(Boolean))].join(" / ");
 };
 
-export default function Users() {
+export default function Users({ authenticatedUser }) {
   const confirmDialog = useConfirmDialog();
   const [users, setUsers] = useState([]);
   const [workers, setWorkers] = useState([]);
   const [roleRequests, setRoleRequests] = useState([]);
   const [accessRequests, setAccessRequests] = useState([]);
+  const [tenants, setTenants] = useState([]);
   const [accessOptions, setAccessOptions] = useState(EMPTY_ACCESS_OPTIONS);
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -365,6 +368,7 @@ export default function Users() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [tenantId, setTenantId] = useState("");
   const [workerId, setWorkerId] = useState(null);
   const [sessionExpiryMinutes, setSessionExpiryMinutes] = useState(0);
   const [customerPrivacySettings, setCustomerPrivacySettings] = useState(
@@ -384,6 +388,7 @@ export default function Users() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [tenantFilter, setTenantFilter] = useState("all");
   const [activityUser, setActivityUser] = useState(null);
   const [activityLogs, setActivityLogs] = useState([]);
   const [activityLoading, setActivityLoading] = useState(false);
@@ -394,6 +399,7 @@ export default function Users() {
   const [accessRequestUpdatingId, setAccessRequestUpdatingId] = useState(null);
   const [approvingAccessRequest, setApprovingAccessRequest] = useState(null);
   const [approvalNote, setApprovalNote] = useState("");
+  const isSuperAdmin = authenticatedUser?.role === "super_admin";
 
   const loadUsers = async () => {
     const response = await api.get("/users");
@@ -424,6 +430,15 @@ export default function Users() {
     setAccessRequests(Array.isArray(response.data) ? response.data : []);
   };
 
+  const loadTenants = async () => {
+    if (!isSuperAdmin) {
+      setTenants([]);
+      return;
+    }
+    const response = await api.get("/tenants");
+    setTenants(Array.isArray(response.data) ? response.data : []);
+  };
+
   useEffect(() => {
     let active = true;
 
@@ -433,8 +448,9 @@ export default function Users() {
       api.get("/role-requests"),
       api.get("/access-requests"),
       api.get("/user-access-options"),
+      isSuperAdmin ? api.get("/tenants") : Promise.resolve({ data: [] }),
     ])
-      .then(([usersResult, workersResult, requestsResult, accessRequestsResult, accessResult]) => {
+      .then(([usersResult, workersResult, requestsResult, accessRequestsResult, accessResult, tenantsResult]) => {
         if (!active) return;
 
         const nextAccessOptions =
@@ -485,6 +501,11 @@ export default function Users() {
             ? accessRequestsResult.value.data
             : []
         );
+        setTenants(
+          tenantsResult.status === "fulfilled" && Array.isArray(tenantsResult.value.data)
+            ? tenantsResult.value.data
+            : []
+        );
         setAccessOptions({
           ...nextAccessOptions,
           pages: normalizePageList(nextAccessOptions.pages || []),
@@ -515,23 +536,25 @@ export default function Users() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isSuperAdmin]);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
     return users.filter((user) => {
       const matchesQuery =
         !query ||
-        [user.name, user.username, user.phone, user.email, user.role].some((value) =>
+        [user.name, user.username, user.phone, user.email, user.role, user.tenant_name, user.tenant_slug].some((value) =>
           String(value || "").toLowerCase().includes(query)
         );
       const matchesRole = roleFilter === "all" || user.role === roleFilter;
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "active" ? user.is_active : !user.is_active);
-      return matchesQuery && matchesRole && matchesStatus;
+      const matchesCompany =
+        !isSuperAdmin || tenantFilter === "all" || Number(user.tenant_id) === Number(tenantFilter);
+      return matchesQuery && matchesRole && matchesStatus && matchesCompany;
     });
-  }, [roleFilter, search, statusFilter, users]);
+  }, [isSuperAdmin, roleFilter, search, statusFilter, tenantFilter, users]);
 
   const activeUsers = users.filter((user) => user.is_active).length;
   const openRoleRequests = roleRequests.filter(
@@ -549,6 +572,17 @@ export default function Users() {
           []
       )
   ).length;
+  const tenantOptions = useMemo(
+    () => tenants.filter((tenant) => tenant.status !== "inactive"),
+    [tenants]
+  );
+  const defaultTenantId = String(tenantOptions[0]?.id || tenants[0]?.id || "");
+
+  useEffect(() => {
+    if (isSuperAdmin && !tenantId && defaultTenantId) {
+      setTenantId(defaultTenantId);
+    }
+  }, [defaultTenantId, isSuperAdmin, tenantId]);
   const getRoleDefaults = useCallback((nextRole) =>
     accessOptions.role_defaults?.[nextRole] ||
     EMPTY_ACCESS_OPTIONS.role_defaults[nextRole] ||
@@ -579,6 +613,7 @@ export default function Users() {
     setEmail("");
     setIsActive(true);
     setWorkerId(null);
+    setTenantId(defaultTenantId);
     setSessionExpiryMinutes(0);
     setCustomerPrivacySettings(
       privacyDefaultsForRole(
@@ -622,6 +657,7 @@ export default function Users() {
     setEmail(requestItem.work_email || "");
     setIsActive(true);
     setWorkerId(null);
+    setTenantId(requestItem.tenant_id ? String(requestItem.tenant_id) : defaultTenantId);
     setSessionExpiryMinutes(0);
     setApprovalNote("");
     setCustomerPrivacySettings(
@@ -647,6 +683,7 @@ export default function Users() {
     setEmail(user.email || "");
     setIsActive(Boolean(user.is_active));
     setWorkerId(user.worker_id || null);
+    setTenantId(user.tenant_id ? String(user.tenant_id) : defaultTenantId);
     setSessionExpiryMinutes(
       normalizeSessionExpiryMinutes(user.session_expiry_minutes)
     );
@@ -775,6 +812,7 @@ export default function Users() {
       is_active: isActive,
       worker_id: role === "worker" ? workerId : null,
     };
+    if (isSuperAdmin && tenantId) payload.tenant_id = Number(tenantId);
     if (!editingUserId || pin) payload.pin = pin;
     if (approvingAccessRequest && !editingUserId) {
       payload.admin_note = approvalNote.trim() || null;
@@ -784,14 +822,14 @@ export default function Users() {
     try {
       if (approvingAccessRequest && !editingUserId) {
         await api.post(`/access-requests/${approvingAccessRequest.id}/approve`, payload);
-        await Promise.all([loadUsers(), loadAccessRequests()]);
+        await Promise.all([loadUsers(), loadAccessRequests(), loadTenants()]);
       } else {
         if (editingUserId) {
           await api.put(`/users/${editingUserId}`, payload);
         } else {
           await api.post("/users", payload);
         }
-        await loadUsers();
+        await Promise.all([loadUsers(), loadTenants()]);
       }
       closeForm();
     } catch (saveError) {
@@ -1003,6 +1041,13 @@ export default function Users() {
           <strong>{customAccessUsers}</strong>
           <small>Different from role default</small>
         </article>
+        {isSuperAdmin && (
+          <article>
+            <span>Companies</span>
+            <strong>{tenants.length}</strong>
+            <small>Tenant workspaces</small>
+          </article>
+        )}
       </section>
 
       <section className="users-role-requests users-signup-requests" aria-label="Signup approvals">
@@ -1177,13 +1222,27 @@ export default function Users() {
               {filteredUsers.length} of {users.length} accounts shown
             </p>
           </div>
-          <div className="users-filters">
+          <div className={`users-filters ${isSuperAdmin ? "has-company-filter" : ""}`.trim()}>
             <input
               aria-label="Search users"
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search name, username, phone, email..."
               value={search}
             />
+            {isSuperAdmin && (
+              <select
+                aria-label="Filter users by company"
+                onChange={(event) => setTenantFilter(event.target.value)}
+                value={tenantFilter}
+              >
+                <option value="all">All companies</option>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.company_name}
+                  </option>
+                ))}
+              </select>
+            )}
             <select
               aria-label="Filter users by role"
               onChange={(event) => setRoleFilter(event.target.value)}
@@ -1226,6 +1285,7 @@ export default function Users() {
                 <tr>
                   <th>User</th>
                   <th>Role</th>
+                  {isSuperAdmin && <th>Company</th>}
                   <th>Page access</th>
                   <th>Session</th>
                   <th>Status</th>
@@ -1259,6 +1319,14 @@ export default function Users() {
                           {roleLabel(user.role)}
                         </span>
                       </td>
+                      {isSuperAdmin && (
+                        <td data-label="Company">
+                          <div className="users-access-summary">
+                            <strong>{user.tenant_name || "No company"}</strong>
+                            <span>{user.tenant_slug || "default"}</span>
+                          </div>
+                        </td>
+                      )}
                       <td data-label="Page access">
                         <div className="users-access-summary">
                           <strong>{user.allowed_pages?.length || 0} pages</strong>
@@ -1457,6 +1525,23 @@ export default function Users() {
                       <option disabled value="service_taker">Service taker (manage in Service Takers)</option>
                     </select>
                   </label>
+                  {isSuperAdmin && (
+                    <label>
+                      Company
+                      <select
+                        onChange={(event) => setTenantId(event.target.value)}
+                        required
+                        value={tenantId}
+                      >
+                        <option value="">Choose company</option>
+                        {tenants.map((tenant) => (
+                          <option key={tenant.id} value={tenant.id}>
+                            {tenant.company_name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <label>
                     Account status
                     <select

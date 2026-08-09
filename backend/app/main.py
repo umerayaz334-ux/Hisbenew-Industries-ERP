@@ -184,6 +184,7 @@ ALL_ERP_PAGES = [
     "Amazon Finances",
     "Amazon Pricing",
     "Quotes",
+    "Companies",
     "Users",
     "Inspiration",
     "TempData",
@@ -550,7 +551,7 @@ ROLE_PAGE_DEFAULTS = {
     "admin": [
         page
         for page in ALL_ERP_PAGES
-        if page != "My Tasks" and page not in SERVICE_TAKER_PORTAL_PAGES
+        if page not in {"My Tasks", "Companies"} and page not in SERVICE_TAKER_PORTAL_PAGES
     ],
     "manager": [
         "Dashboard",
@@ -613,6 +614,7 @@ PAGE_PARENT_MAP = {
     "Worker Payouts": "Manufacturing",
     "Quotes": "Settings",
     "Users": "Settings",
+    "Companies": "Settings",
     "Website": "Settings",
     "Deployment": "Settings",
     "Amazon Settings": "Settings",
@@ -750,6 +752,13 @@ def require_tenant_admin(request: Request, db: Session) -> User:
     user = get_authenticated_user(request, db)
     if not is_tenant_admin(user):
         raise HTTPException(status_code=403, detail="Company admin access is required.")
+    return user
+
+
+def require_super_admin(request: Request, db: Session) -> User:
+    user = get_authenticated_user(request, db)
+    if user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin access is required")
     return user
 
 
@@ -1294,7 +1303,7 @@ def access_privacy_settings(privacy: dict | None) -> dict:
 
 
 def access_privacy_is_non_admin(privacy: dict | None) -> bool:
-    return access_privacy_role(privacy) != "admin"
+    return access_privacy_role(privacy) not in {"admin", "super_admin"}
 
 
 def access_privacy_hides_customer_business(privacy: dict | None) -> bool:
@@ -1791,8 +1800,12 @@ async def create_product(
 
 
 @app.get("/users", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db)):
-    return [user_response(user, db) for user in db.query(User).order_by(User.id.desc()).all()]
+def list_users(request: Request, db: Session = Depends(get_db)):
+    actor = require_page_access(request, db, "Users")
+    query = db.query(User)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
+    return [user_response(user, db) for user in query.order_by(User.id.desc()).all()]
 
 
 def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
@@ -2109,7 +2122,7 @@ def get_tenant_context(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/tenants", response_model=list[TenantOut])
 def list_tenants(request: Request, db: Session = Depends(get_db)):
-    require_tenant_admin(request, db)
+    require_super_admin(request, db)
     tenants = (
         db.query(Tenant)
         .execution_options(skip_tenant_scope=True)
@@ -2125,7 +2138,7 @@ def create_tenant(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_tenant_admin(request, db)
+    require_super_admin(request, db)
     clean_name = payload.company_name.strip()
     if not clean_name:
         raise HTTPException(status_code=400, detail="Company name is required")
@@ -2184,7 +2197,7 @@ def update_tenant(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_tenant_admin(request, db)
+    require_super_admin(request, db)
     tenant = get_tenant_or_404(db, tenant_id)
     data = payload.model_dump(exclude_unset=True)
     if "company_name" in data and data["company_name"] is not None:
@@ -2216,7 +2229,7 @@ def get_tenant_modules(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_tenant_admin(request, db)
+    require_super_admin(request, db)
     get_tenant_or_404(db, tenant_id)
     return tenant_modules_for_response(db, tenant_id)
 
@@ -2228,7 +2241,7 @@ def update_tenant_modules(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_tenant_admin(request, db)
+    require_super_admin(request, db)
     get_tenant_or_404(db, tenant_id)
     ensure_default_modules_for_db(db)
     sync_tenant_modules(db, tenant_id, payload.modules)
@@ -2243,7 +2256,7 @@ def update_tenant_module(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_tenant_admin(request, db)
+    require_super_admin(request, db)
     get_tenant_or_404(db, tenant_id)
     clean_slug = slugify_tenant_value(module_slug, "")
     module = (
@@ -2478,7 +2491,7 @@ def require_admin_user(request: Request, db: Session) -> User:
     user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required.")
-    if user.role != "admin":
+    if user.role not in {"admin", "super_admin"}:
         raise HTTPException(status_code=403, detail="Only administrators can manage ERP data.")
     return user
 
@@ -3140,7 +3153,7 @@ def erase_data(payload: DataEraseRequest, request: Request, db: Session = Depend
             delete_query_rows(db.query(Customer), counts, "customers")
         if "users" in keys:
             delete_query_rows(db.query(ActivityLog), counts, "activity_logs")
-            delete_query_rows(db.query(User).filter(User.role != "admin"), counts, "non_admin_users")
+            delete_query_rows(db.query(User).filter(~User.role.in_(["admin", "super_admin"])), counts, "non_admin_users")
         if "website" in keys:
             reset_website_settings(counts)
 
@@ -3806,12 +3819,14 @@ def create_user(user: UserCreate, request: Request, db: Session = Depends(get_db
     if not clean_username:
         raise HTTPException(status_code=400, detail="Username is required")
     ensure_username_available(db, clean_username)
-    actor = get_authenticated_user(request, db)
+    actor = require_page_access(request, db, "Users")
     target_tenant_id = (
         get_tenant_or_404(db, user.tenant_id).id
         if actor.role == "super_admin" and user.tenant_id is not None
         else (actor.tenant_id or get_default_tenant(db).id)
     )
+    if actor.role == "super_admin":
+        db.info["tenant_id"] = target_tenant_id
 
     worker_id = user.worker_id
     if user.role == "worker" and worker_id is None:
@@ -3911,7 +3926,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 @app.put("/users/{user_id}", response_model=UserOut)
 def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.id == user_id).first()
+    actor = require_page_access(request, db, "Users")
+    query = db.query(User)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
+    existing = query.filter(User.id == user_id).first()
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
     clean_name = payload.name.strip()
@@ -3921,7 +3940,6 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     if not clean_username:
         raise HTTPException(status_code=400, detail="Username is required")
     ensure_username_available(db, clean_username, existing.id)
-    actor = get_authenticated_user(request, db)
     if payload.tenant_id is not None:
         if actor.role != "super_admin":
             raise HTTPException(status_code=403, detail="Only a super admin can move users between companies.")
@@ -3950,6 +3968,8 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     )
     existing.is_active = payload.is_active
     existing.worker_id = payload.worker_id
+    if actor.role == "super_admin" and existing.tenant_id is not None:
+        db.info["tenant_id"] = existing.tenant_id
 
     if payload.role == "worker" and existing.worker_id is None:
         new_worker = Worker(
@@ -3981,8 +4001,11 @@ def update_user_customer_privacy_settings(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_page_access(request, db, "Users")
-    existing = db.query(User).filter(User.id == user_id).first()
+    actor = require_page_access(request, db, "Users")
+    query = db.query(User)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
+    existing = query.filter(User.id == user_id).first()
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -3992,6 +4015,8 @@ def update_user_customer_privacy_settings(
             existing.role,
         )
     )
+    if actor.role == "super_admin" and existing.tenant_id is not None:
+        db.info["tenant_id"] = existing.tenant_id
     db.commit()
     db.refresh(existing)
     return user_response(existing, db)
@@ -4060,9 +4085,12 @@ def create_role_request(
 
 @app.get("/role-requests", response_model=list[RoleRequestOut])
 def get_role_requests(request: Request, db: Session = Depends(get_db)):
-    require_page_access(request, db, "Users")
+    actor = require_page_access(request, db, "Users")
+    query = db.query(UserRoleRequest)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
     requests = (
-        db.query(UserRoleRequest)
+        query
         .order_by(UserRoleRequest.created_at.desc(), UserRoleRequest.id.desc())
         .limit(200)
         .all()
@@ -4077,8 +4105,11 @@ def update_role_request(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_page_access(request, db, "Users")
-    role_request = db.query(UserRoleRequest).filter(UserRoleRequest.id == request_id).first()
+    actor = require_page_access(request, db, "Users")
+    query = db.query(UserRoleRequest)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
+    role_request = query.filter(UserRoleRequest.id == request_id).first()
     if not role_request:
         raise HTTPException(status_code=404, detail="Role request not found")
 
@@ -4086,6 +4117,8 @@ def update_role_request(
     role_request.status = clean_status
     role_request.admin_note = (payload.admin_note or "").strip() or None
     role_request.reviewed_at = datetime.utcnow()
+    if actor.role == "super_admin" and role_request.tenant_id is not None:
+        db.info["tenant_id"] = role_request.tenant_id
     db.commit()
     db.refresh(role_request)
     return role_request_response(role_request)
@@ -4097,8 +4130,11 @@ def delete_role_request(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_page_access(request, db, "Users")
-    role_request = db.query(UserRoleRequest).filter(UserRoleRequest.id == request_id).first()
+    actor = require_page_access(request, db, "Users")
+    query = db.query(UserRoleRequest)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
+    role_request = query.filter(UserRoleRequest.id == request_id).first()
     if not role_request:
         raise HTTPException(status_code=404, detail="Role request not found")
 
@@ -4145,9 +4181,12 @@ def create_public_access_request(
 
 @app.get("/access-requests", response_model=list[PublicAccessRequestOut])
 def list_public_access_requests(request: Request, db: Session = Depends(get_db)):
-    require_page_access(request, db, "Users")
+    actor = require_page_access(request, db, "Users")
+    query = db.query(PublicAccessRequest)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
     requests = (
-        db.query(PublicAccessRequest)
+        query
         .order_by(PublicAccessRequest.created_at.desc(), PublicAccessRequest.id.desc())
         .limit(200)
         .all()
@@ -4163,7 +4202,10 @@ def approve_public_access_request(
     db: Session = Depends(get_db),
 ):
     admin_user = require_page_access(request, db, "Users")
-    access_request = db.query(PublicAccessRequest).filter(PublicAccessRequest.id == request_id).first()
+    query = db.query(PublicAccessRequest)
+    if admin_user.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
+    access_request = query.filter(PublicAccessRequest.id == request_id).first()
     if not access_request:
         raise HTTPException(status_code=404, detail="Access request not found")
     if access_request.approved_user_id:
@@ -4184,12 +4226,16 @@ def approve_public_access_request(
         raise HTTPException(status_code=400, detail="Username is required")
     ensure_username_available(db, clean_username)
 
+    target_tenant_id = access_request.tenant_id or admin_user.tenant_id or get_default_tenant(db).id
+    if admin_user.role == "super_admin":
+        db.info["tenant_id"] = target_tenant_id
+
     clean_phone = (payload.phone or access_request.phone or "").strip() or None
     clean_email = (payload.email or access_request.work_email or "").strip() or None
     worker_id = None
     if clean_role == "worker":
         new_worker = Worker(
-            tenant_id=access_request.tenant_id or admin_user.tenant_id or get_default_tenant(db).id,
+            tenant_id=target_tenant_id,
             name=clean_name,
             role="Worker",
             phone=clean_phone,
@@ -4204,7 +4250,7 @@ def approve_public_access_request(
         worker_id = new_worker.id
 
     new_user = User(
-        tenant_id=access_request.tenant_id or admin_user.tenant_id or get_default_tenant(db).id,
+        tenant_id=target_tenant_id,
         name=clean_name,
         username=clean_username,
         pin=hash_pin(payload.pin),
@@ -4259,7 +4305,10 @@ def update_public_access_request(
     db: Session = Depends(get_db),
 ):
     admin_user = require_page_access(request, db, "Users")
-    access_request = db.query(PublicAccessRequest).filter(PublicAccessRequest.id == request_id).first()
+    query = db.query(PublicAccessRequest)
+    if admin_user.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
+    access_request = query.filter(PublicAccessRequest.id == request_id).first()
     if not access_request:
         raise HTTPException(status_code=404, detail="Access request not found")
 
@@ -4273,6 +4322,8 @@ def update_public_access_request(
     access_request.admin_note = (payload.admin_note or "").strip() or None
     access_request.reviewed_by_user_id = admin_user.id
     access_request.reviewed_at = datetime.utcnow()
+    if admin_user.role == "super_admin" and access_request.tenant_id is not None:
+        db.info["tenant_id"] = access_request.tenant_id
     db.commit()
     db.refresh(access_request)
     return public_access_request_response(access_request, db)
@@ -4284,8 +4335,11 @@ def delete_public_access_request(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    require_page_access(request, db, "Users")
-    access_request = db.query(PublicAccessRequest).filter(PublicAccessRequest.id == request_id).first()
+    actor = require_page_access(request, db, "Users")
+    query = db.query(PublicAccessRequest)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
+    access_request = query.filter(PublicAccessRequest.id == request_id).first()
     if not access_request:
         raise HTTPException(status_code=404, detail="Access request not found")
 
@@ -4767,15 +4821,22 @@ async def realtime_websocket(websocket: WebSocket):
 @app.get("/users/{user_id}/activity-logs", response_model=list[ActivityLogOut])
 def get_user_activity_logs(
     user_id: int,
+    request: Request,
     limit: int = Query(100, ge=1, le=300),
     action: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.id == user_id).first()
+    actor = require_page_access(request, db, "Users")
+    user_query = db.query(User)
+    if actor.role == "super_admin":
+        user_query = user_query.execution_options(skip_tenant_scope=True)
+    user = user_query.filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     query = db.query(ActivityLog).filter(ActivityLog.actor_user_id == user_id)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
     if action and action != "all":
         query = query.filter(ActivityLog.action == action)
     logs = query.order_by(ActivityLog.created_at.desc()).limit(limit).all()
@@ -4783,16 +4844,19 @@ def get_user_activity_logs(
 
 
 @app.delete("/users/{user_id}/activity-logs")
-def clear_user_activity_logs(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+def clear_user_activity_logs(user_id: int, request: Request, db: Session = Depends(get_db)):
+    actor = require_page_access(request, db, "Users")
+    user_query = db.query(User)
+    if actor.role == "super_admin":
+        user_query = user_query.execution_options(skip_tenant_scope=True)
+    user = user_query.filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    deleted_count = (
-        db.query(ActivityLog)
-        .filter(ActivityLog.actor_user_id == user_id)
-        .delete(synchronize_session=False)
-    )
+    activity_query = db.query(ActivityLog).filter(ActivityLog.actor_user_id == user_id)
+    if actor.role == "super_admin":
+        activity_query = activity_query.execution_options(skip_tenant_scope=True)
+    deleted_count = activity_query.delete(synchronize_session=False)
     db.commit()
     return {"deleted_count": deleted_count}
 
@@ -4882,12 +4946,21 @@ def delete_worker_record(
 
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.id == user_id).first()
+def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
+    actor = require_page_access(request, db, "Users")
+    query = db.query(User)
+    if actor.role == "super_admin":
+        query = query.execution_options(skip_tenant_scope=True)
+    existing = query.filter(User.id == user_id).first()
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
+    if actor.role == "super_admin" and existing.tenant_id is not None:
+        db.info["tenant_id"] = existing.tenant_id
+    worker_query = db.query(Worker)
+    if actor.role == "super_admin":
+        worker_query = worker_query.execution_options(skip_tenant_scope=True)
     linked_worker = (
-        db.query(Worker).filter(Worker.id == existing.worker_id).first()
+        worker_query.filter(Worker.id == existing.worker_id).first()
         if existing.worker_id
         else None
     )
@@ -4953,6 +5026,27 @@ def ensure_default_admin():
     db = SessionLocal()
     try:
         default_tenant = get_default_tenant(db)
+        hafiz_umer = (
+            db.query(User)
+            .execution_options(skip_tenant_scope=True)
+            .filter(
+                or_(
+                    func.lower(func.coalesce(User.name, "")) == "hafiz umer",
+                    func.lower(func.coalesce(User.username, "")) == "hafiz umer",
+                    func.lower(func.coalesce(User.username, "")) == "hafizumer",
+                )
+            )
+            .first()
+        )
+        if hafiz_umer:
+            hafiz_umer.role = "super_admin"
+            hafiz_umer.tenant_id = hafiz_umer.tenant_id or default_tenant.id
+            hafiz_umer.allowed_pages = json.dumps(ROLE_PAGE_DEFAULTS["super_admin"])
+            hafiz_umer.customer_privacy_settings = json.dumps(
+                default_access_privacy_settings_for_role("super_admin")
+            )
+            db.add(hafiz_umer)
+            db.commit()
         if not (
             db.query(User)
             .execution_options(skip_tenant_scope=True)
@@ -4964,10 +5058,10 @@ def ensure_default_admin():
                 name="adminmain",
                 username="adminmain",
                 pin=hash_pin("1234"),
-                role="admin",
-                allowed_pages=json.dumps(ROLE_PAGE_DEFAULTS["admin"]),
+                role="super_admin",
+                allowed_pages=json.dumps(ROLE_PAGE_DEFAULTS["super_admin"]),
                 customer_privacy_settings=json.dumps(
-                    default_access_privacy_settings_for_role("admin")
+                    default_access_privacy_settings_for_role("super_admin")
                 ),
                 is_active=True,
             )
@@ -7843,7 +7937,7 @@ def production_batch_response(batch: ProductionBatch):
 # Dashboard
 def amazon_dashboard_summary(db: Session, privacy: dict) -> dict:
     """Return PII-free Amazon operational totals for the admin dashboard."""
-    if access_privacy_role(privacy) != "admin":
+    if access_privacy_role(privacy) not in {"admin", "super_admin"}:
         return {"visible": False}
 
     account = db.query(AmazonAccount).order_by(AmazonAccount.id.asc()).first()

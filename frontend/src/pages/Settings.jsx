@@ -331,7 +331,7 @@ function Settings({ authenticatedUser, onUpdateUser }) {
     accessMode === "remote" ? "Auto switch ready" : "Use current link";
   const installReadiness = getInstallReadiness(installState, installPrompt);
   const installButtonLabel = installButtonLabels[installReadiness] || "Install app";
-  const isAdmin = authenticatedUser?.role === "admin";
+  const isAdmin = ["admin", "super_admin"].includes(authenticatedUser?.role);
   const allEraseKeys = useMemo(
     () => eraseOptions.map((option) => option.key),
     [eraseOptions]

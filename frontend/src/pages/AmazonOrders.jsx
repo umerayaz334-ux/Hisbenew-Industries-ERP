@@ -75,7 +75,7 @@ function AmazonOrders({ authenticatedUser }) {
   const [historyTarget, setHistoryTarget] = useState(null);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const isAdmin = authenticatedUser?.role === "admin";
+  const isAdmin = ["admin", "super_admin"].includes(authenticatedUser?.role);
 
   const loadOrders = useCallback(
     async ({ quiet = false } = {}) => {

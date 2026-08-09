@@ -81,7 +81,7 @@ function AmazonPricing({ authenticatedUser }) {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const isAdmin = authenticatedUser?.role === "admin";
+  const isAdmin = ["admin", "super_admin"].includes(authenticatedUser?.role);
 
   const loadWorkspace = useCallback(async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);

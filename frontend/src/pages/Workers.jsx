@@ -271,7 +271,7 @@ function Workers() {
   };
 
   const availableUsers = users.filter(
-    (user) => user.role !== "admin" && !user.worker_id
+    (user) => !["admin", "super_admin"].includes(user.role) && !user.worker_id
   );
   const hasAvailableWorkerUsers = availableUsers.length > 0;
 

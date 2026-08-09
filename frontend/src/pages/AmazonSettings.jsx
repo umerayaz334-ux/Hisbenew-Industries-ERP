@@ -136,7 +136,7 @@ function AmazonSettings({ authenticatedUser }) {
     interval_minutes: 15,
   });
   const [rotationReferenceTime] = useState(() => Date.now());
-  const isAdmin = authenticatedUser?.role === "admin";
+  const isAdmin = ["admin", "super_admin"].includes(authenticatedUser?.role);
 
   const applySettings = useCallback((data) => {
     setSettings(data);

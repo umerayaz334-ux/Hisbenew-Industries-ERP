@@ -604,7 +604,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
   });
   const [loading, setLoading] = useState(true);
   const [backendError, setBackendError] = useState(false);
-  const [amazonSyncing, setAmazonSyncing] = useState(userRole === "admin");
+  const [amazonSyncing, setAmazonSyncing] = useState(["admin", "super_admin"].includes(userRole));
   const [amazonSyncError, setAmazonSyncError] = useState("");
   const [amazonSaleNotice, setAmazonSaleNotice] = useState(null);
   const amazonSyncPromiseRef = useRef(null);
@@ -838,7 +838,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
   );
 
   const syncAmazonOpenOrders = useCallback(async () => {
-    if (userRole !== "admin") return;
+    if (!["admin", "super_admin"].includes(userRole)) return;
     if (amazonSyncPromiseRef.current) {
       return amazonSyncPromiseRef.current;
     }
@@ -981,7 +981,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
   }, []);
 
   useEffect(() => {
-    if (userRole !== "admin") return undefined;
+    if (!["admin", "super_admin"].includes(userRole)) return undefined;
 
     const initialSyncId = window.setTimeout(syncAmazonOpenOrders, 150);
     const syncIntervalId = window.setInterval(
@@ -996,7 +996,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
 
   useEffect(() => {
     if (
-      userRole !== "admin" ||
+      !["admin", "super_admin"].includes(userRole) ||
       amazonSaleDemoStartedRef.current ||
       typeof window === "undefined"
     ) {
@@ -1030,7 +1030,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
   }, [userRole]);
 
   useEffect(() => {
-    if (userRole !== "admin") return undefined;
+    if (!["admin", "super_admin"].includes(userRole)) return undefined;
     const unlockAudio = () => primeAmazonSaleAudio();
     window.addEventListener("pointerdown", unlockAudio, { passive: true });
     window.addEventListener("keydown", unlockAudio);
@@ -1353,7 +1353,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
         href: "/portal/inventory",
       });
     }
-    if (userRole === "admin" && amazonData.configured && amazonOpenOrders > 0) {
+    if (["admin", "super_admin"].includes(userRole) && amazonData.configured && amazonOpenOrders > 0) {
       items.push({
         key: "amazon-open-orders",
         title: `${amazonOpenOrders} Amazon FBA ${
@@ -1365,7 +1365,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
       });
     }
     if (
-      userRole === "admin" &&
+      ["admin", "super_admin"].includes(userRole) &&
       amazonData.configured &&
       (amazonUnmappedItems > 0 || amazonInboundDiscrepancy > 0)
     ) {
@@ -1407,7 +1407,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
           title: `${pluralize(overdueBillCount, "bill")} overdue`,
           tone: "danger",
         }
-      : userRole === "admin" &&
+      : ["admin", "super_admin"].includes(userRole) &&
           amazonData.configured &&
           (amazonUnmappedItems > 0 || amazonInboundDiscrepancy > 0)
         ? {
@@ -1462,7 +1462,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
       label: "Waiting to ship",
       value: formatNumber(pendingShipping),
     },
-      ...(userRole === "admin"
+      ...(["admin", "super_admin"].includes(userRole)
         ? [
             {
               detail: amazonSyncing

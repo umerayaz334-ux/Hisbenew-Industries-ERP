@@ -48,6 +48,7 @@ const AmazonFbaInbound = lazy(() => import("./pages/AmazonFbaInbound"));
 const AmazonFinances = lazy(() => import("./pages/AmazonFinances"));
 const AmazonPricing = lazy(() => import("./pages/AmazonPricing"));
 const Users = lazy(() => import("./pages/Users"));
+const Companies = lazy(() => import("./pages/Companies"));
 const Quotes = lazy(() => import("./pages/Quotes"));
 const TempData = lazy(() => import("./pages/TempData"));
 const Messages = lazy(() => import("./pages/Messages"));
@@ -114,6 +115,7 @@ const pagePaths = {
   Reports: "/portal/reports",
   Workers: "/portal/workers",
   Users: "/portal/users",
+  Companies: "/portal/companies",
   Login: "/login",
 };
 
@@ -212,7 +214,7 @@ const rolePages = {
   service_taker: serviceTakerPages,
 };
 
-rolePages.super_admin = rolePages.admin;
+rolePages.super_admin = [...rolePages.admin, "Companies"];
 
 const pathToPage = Object.fromEntries(
   Object.entries(pagePaths).map(([page, path]) => [path, page])
@@ -266,6 +268,7 @@ const normalizeClientAllowedPages = (pages = [], role = "") => {
   });
 
   if (["admin", "super_admin"].includes(role) && !normalized.includes("Deployment")) normalized.push("Deployment");
+  if (role === "super_admin" && !normalized.includes("Companies")) normalized.push("Companies");
   if (!normalized.includes("Dashboard")) normalized.unshift("Dashboard");
   return normalized;
 };
@@ -824,7 +827,8 @@ function App() {
     if (activePage === "Website") return <WebsiteAdmin />;
     if (activePage === "Deployment") return <Deployment />;
     if (activePage === "Workers") return <Workers />;
-    if (activePage === "Users") return <Users />;
+    if (activePage === "Users") return <Users authenticatedUser={authenticatedUser} />;
+    if (activePage === "Companies") return <Companies authenticatedUser={authenticatedUser} />;
     if (activePage === "Copy Clipboard") return <CopyClipboard />;
 
     return <Dashboard />;

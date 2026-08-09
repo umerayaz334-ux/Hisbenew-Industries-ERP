@@ -33,13 +33,13 @@ def bootstrap() -> None:
 
     db = SessionLocal()
     try:
-        if not db.query(User).filter(User.role == "admin").first():
+        if not db.query(User).filter(User.role.in_(["admin", "super_admin"])).first():
             db.add(
                 User(
                     name="adminmain",
                     username="adminmain",
                     pin=hash_pin("1234"),
-                    role="admin",
+                    role="super_admin",
                     is_active=True,
                 )
             )

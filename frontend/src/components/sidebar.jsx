@@ -49,6 +49,7 @@ const menuItems = [
   { name: "Quotes", icon: "quote" },
   { name: "Website", icon: "spark" },
   { name: "Deployment", icon: "deployment" },
+  { name: "Companies", icon: "building" },
   { name: "Users", icon: "users" },
   { name: "TempData", label: "Temp Data", icon: "database" },
   { name: "Messages", icon: "message" },
@@ -178,6 +179,7 @@ const secondaryMenuOrder = [
   "Messages",
   "Copy Clipboard",
   "Inspiration",
+  "Companies",
   "Users",
   "Amazon Listings",
   "Amazon FBA Orders",
@@ -201,7 +203,7 @@ const schoolMenuItems = [
 ];
 
 const menuItemByName = new Map(menuItems.map((item) => [item.name, item]));
-roleAllowedPages.super_admin = roleAllowedPages.admin;
+roleAllowedPages.super_admin = [...roleAllowedPages.admin, "Companies"];
 
 const warehouseRoleOnlyPages = new Set([
   "Warehouse Dispatch",
@@ -365,6 +367,19 @@ function SidebarIcon({ name }) {
         <path d="M4 3h16v18H4z" />
       </>
     ),
+    building: (
+      <>
+        <path d="M4 21V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v16" />
+        <path d="M17 9h1a2 2 0 0 1 2 2v10" />
+        <path d="M3 21h18" />
+        <path d="M8 7h2" />
+        <path d="M12 7h2" />
+        <path d="M8 11h2" />
+        <path d="M12 11h2" />
+        <path d="M8 15h2" />
+        <path d="M12 15h2" />
+      </>
+    ),
     users: (
       <>
         <circle cx="9" cy="8" r="3" />
@@ -521,9 +536,11 @@ function Sidebar({
   );
 
   const roleLabel =
-    ["admin", "super_admin"].includes(userRole)
-      ? "Administrator"
-      : userRole === "manager"
+    userRole === "super_admin"
+      ? "Super admin"
+      : userRole === "admin"
+        ? "Administrator"
+        : userRole === "manager"
         ? "Manager"
         : userRole === "warehouse"
           ? "Warehouse"
