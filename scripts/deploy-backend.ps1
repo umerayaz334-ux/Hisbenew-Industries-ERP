@@ -178,6 +178,16 @@ Invoke-Step -Message "Install backend dependencies" -Action {
   Invoke-CheckedCommand -FilePath $pythonPath -Arguments @("-m", "pip", "install", "-r", $requirementsPath)
 }
 
+Invoke-Step -Message "Apply database migrations and tenant seeds" -Action {
+  Push-Location $backendPath
+  try {
+    $seedCommand = "from app.database import Base, engine, migrate_database, ensure_scaling_indexes; from app.main import ensure_default_admin, ensure_default_modules; Base.metadata.create_all(bind=engine); migrate_database(); ensure_scaling_indexes(); ensure_default_admin(); ensure_default_modules(); print('Database migrations and tenant seeds applied.')"
+    Invoke-CheckedCommand -FilePath $pythonPath -Arguments @("-c", $seedCommand)
+  } finally {
+    Pop-Location
+  }
+}
+
 Invoke-Step -Message "Restart backend" -Action {
   Restart-Backend -Name $serviceName
 }
