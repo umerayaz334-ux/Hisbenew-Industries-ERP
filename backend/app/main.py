@@ -194,6 +194,8 @@ ALL_ERP_PAGES = [
     "My Tasks",
 ]
 
+TENANT_MODULE_EXCLUDED_PAGES = {"Add Company", "Companies"}
+
 SERVICE_TAKER_PORTAL_PAGES = [
     "Service Dashboard",
     "Service Products",
@@ -2009,6 +2011,8 @@ def ensure_default_modules_for_db(db: Session) -> None:
         for module in db.query(Module).execution_options(skip_tenant_scope=True).all()
     }
     for page in ALL_ERP_PAGES:
+        if page in TENANT_MODULE_EXCLUDED_PAGES:
+            continue
         slug = module_slug_for_page(page)
         if slug in existing_by_slug:
             module = existing_by_slug[slug]
@@ -2057,6 +2061,11 @@ def sync_tenant_modules(
             .order_by(Module.name.asc())
             .all()
         )
+    modules = [
+        module
+        for module in modules
+        if module.page_name not in TENANT_MODULE_EXCLUDED_PAGES
+    ]
     existing = {
         tenant_module.module_id: tenant_module
         for tenant_module in (
@@ -2099,7 +2108,11 @@ def tenant_modules_for_response(db: Session, tenant_id: int) -> list[dict]:
         .order_by(Module.name.asc())
         .all()
     )
-    return [module_response(module, tenant_module.enabled) for tenant_module, module in rows]
+    return [
+        module_response(module, tenant_module.enabled)
+        for tenant_module, module in rows
+        if module.page_name not in TENANT_MODULE_EXCLUDED_PAGES
+    ]
 
 
 @app.get("/tenant-context")
@@ -2279,7 +2292,11 @@ def list_modules(request: Request, db: Session = Depends(get_db)):
     user = get_authenticated_user(request, db)
     tenant_id = getattr(request.state, "tenant_id", None) or user.tenant_id
     if tenant_id is None:
-        return [module_response(module, module.default_enabled) for module in db.query(Module).all()]
+        return [
+            module_response(module, module.default_enabled)
+            for module in db.query(Module).all()
+            if module.page_name not in TENANT_MODULE_EXCLUDED_PAGES
+        ]
     return tenant_modules_for_response(db, tenant_id)
 
 
