@@ -1,12 +1,7 @@
 name: Deploy frontend to cPanel
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "frontend/**"
-      - ".github/workflows/deploy-frontend-cpanel.yml"
+  # Localhost mode: do not deploy automatically on push.
   workflow_dispatch:
 
 concurrency:
