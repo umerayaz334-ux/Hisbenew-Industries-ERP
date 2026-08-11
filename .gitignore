@@ -65,3 +65,5 @@ tmp/portable/
 **/python-cache/
 **/.pytest_cache/
 
+
+print-agent/venv/
