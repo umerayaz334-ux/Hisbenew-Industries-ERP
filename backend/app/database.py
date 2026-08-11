@@ -444,6 +444,9 @@ def migrate_database():
                     "front_room_stock INTEGER DEFAULT 0 NOT NULL"
                 )
             )
+            connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS raw_pin VARCHAR"))
+            connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_privacy_settings TEXT"))
+            connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_expiry_minutes INTEGER DEFAULT 0"))
         return
     with engine.connect() as connection:
         ensure_tenant_schema_sqlite(connection)
@@ -478,6 +481,25 @@ def migrate_database():
                 print("Added 'shipping_address' column to customers table")
         except Exception as e:
             print(f"Error adding address column: {e}")
+
+        # Check and add new columns to users table
+        try:
+            result = connection.execute(text("PRAGMA table_info(users)"))
+            user_columns = [row[1] for row in result]
+            if "raw_pin" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN raw_pin VARCHAR"))
+                connection.commit()
+                print("Added 'raw_pin' column to users table")
+            if "customer_privacy_settings" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN customer_privacy_settings TEXT"))
+                connection.commit()
+                print("Added 'customer_privacy_settings' column to users table")
+            if "session_expiry_minutes" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN session_expiry_minutes INTEGER DEFAULT 0"))
+                connection.commit()
+                print("Added 'session_expiry_minutes' column to users table")
+        except Exception as e:
+            print(f"Error adding columns to users table: {e}")
         
         # Check and add payout-related columns to orders table
         try:
