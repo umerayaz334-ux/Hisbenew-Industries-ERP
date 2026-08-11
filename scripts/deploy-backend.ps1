@@ -111,10 +111,10 @@ function Restart-Backend {
             $_.Name -notlike "*actions.runner*" -and
             $_.DisplayName -notlike "*Actions Runner*" -and
             ($_.DisplayName -eq $Name -or 
-             $_.Name -like "*hisbenew*backend*" -or 
-             $_.DisplayName -like "*hisbenew*backend*" -or
-             $_.Name -like "*erp*backend*" -or
-             $_.DisplayName -like "*erp*backend*")
+             $_.Name -like "*hisbenew*" -or 
+             $_.DisplayName -like "*hisbenew*" -or
+             $_.Name -like "*backend*" -or
+             $_.DisplayName -like "*backend*")
         } | Select-Object -First 1
     }
 
@@ -129,7 +129,7 @@ function Restart-Backend {
     if (-not $task) {
         $task = Get-ScheduledTask | Where-Object { 
             $_.TaskName -notlike "*actions.runner*" -and
-            ($_.TaskName -like "*hisbenew*" -or $_.TaskName -like "*erp*")
+            ($_.TaskName -like "*hisbenew*" -or $_.TaskName -like "*erp*" -or $_.TaskName -like "*backend*")
         } | Select-Object -First 1
     }
 
@@ -152,7 +152,10 @@ function Restart-Backend {
         Start-Sleep -Seconds 2
     }
 
-    Write-Host "Notice: No dedicated Windows Service or Scheduled Task found for '$Name'. Proceeding to health verification."
+    # 4. Start Uvicorn process directly in background
+    Write-Host "Launching Uvicorn backend process directly..."
+    Start-Process -FilePath $pythonPath -ArgumentList "-m uvicorn app.main:app --host 0.0.0.0 --port 8000" -WorkingDirectory $backendPath -WindowStyle Hidden
+    Start-Sleep -Seconds 3
 }
 
 
