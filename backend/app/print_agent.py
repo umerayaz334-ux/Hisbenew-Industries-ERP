@@ -190,6 +190,7 @@ async def print_agent(websocket: WebSocket):
 # ----------------------------------------------------------------------
 
 @router.post("/api/printer-agents/register")
+@router.post("/printer-agents/register")
 def register_printer_agent(payload: AgentRegisterPayload, db: Session = Depends(get_db)):
     """Register or update a local print agent and issue a security token."""
     existing = db.query(PrintAgentRecord).filter(PrintAgentRecord.agent_id == payload.agent_id).first()
@@ -243,6 +244,7 @@ def register_printer_agent(payload: AgentRegisterPayload, db: Session = Depends(
 
 
 @router.post("/api/printer-agents/heartbeat")
+@router.post("/printer-agents/heartbeat")
 def printer_agent_heartbeat(payload: AgentHeartbeatPayload, db: Session = Depends(get_db)):
     """30-second heartbeat from active agent to report online status."""
     agent = db.query(PrintAgentRecord).filter(PrintAgentRecord.agent_id == payload.agent_id).first()
@@ -270,6 +272,7 @@ def printer_agent_heartbeat(payload: AgentHeartbeatPayload, db: Session = Depend
 
 
 @router.get("/api/printer-agents")
+@router.get("/printer-agents")
 def list_printer_agents(db: Session = Depends(get_db)):
     """List all registered printer agents and their online/offline status."""
     agents = db.query(PrintAgentRecord).order_by(desc(PrintAgentRecord.last_heartbeat)).all()
@@ -292,6 +295,7 @@ def list_printer_agents(db: Session = Depends(get_db)):
 
 
 @router.post("/api/print-jobs")
+@router.post("/print-jobs")
 def create_print_job(payload: CreatePrintJobPayload, db: Session = Depends(get_db)):
     """Backend/Frontend enqueues a new print job."""
     job_id = f"job-{uuid4().hex[:12]}"
@@ -317,6 +321,7 @@ def create_print_job(payload: CreatePrintJobPayload, db: Session = Depends(get_d
 
 
 @router.get("/api/print-jobs/pending")
+@router.get("/print-jobs/pending")
 def get_pending_print_jobs(
     agent_id: str = Query(...),
     security_token: str = Query(...),
@@ -347,6 +352,7 @@ def get_pending_print_jobs(
 
 
 @router.post("/api/print-jobs/{job_id}/status")
+@router.post("/print-jobs/{job_id}/status")
 def update_print_job_status(
     job_id: str,
     payload: JobStatusUpdatePayload,
@@ -371,6 +377,7 @@ def update_print_job_status(
 
 
 @router.get("/api/print-jobs")
+@router.get("/print-jobs")
 def list_print_jobs(
     limit: int = Query(50, le=200),
     status: str | None = None,
