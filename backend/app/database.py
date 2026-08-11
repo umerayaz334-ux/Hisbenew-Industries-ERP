@@ -90,6 +90,8 @@ TENANT_SCOPED_TABLES = (
     "service_taker_order_items",
     "service_taker_inventory_transactions",
     "amazon_accounts",
+    "print_agents",
+    "print_jobs",
 )
 
 

@@ -1974,6 +1974,48 @@ TENANT_SCOPED_MODELS = (
 )
 
 
+class PrintAgentRecord(Base):
+    __tablename__ = "print_agents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    agent_id = Column(String, unique=True, index=True, nullable=False)
+    machine_name = Column(String, nullable=False)
+    security_token = Column(String, nullable=False)
+    company_name = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+    printer_name = Column(String, nullable=True)
+    printers_json = Column(Text, nullable=True, default="[]")
+    status = Column(String, default="online", index=True)
+    last_heartbeat = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PrintJobRecord(Base):
+    __tablename__ = "print_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    job_id = Column(String, unique=True, index=True, nullable=False)
+    agent_id = Column(String, nullable=True, index=True)
+    order_id = Column(String, nullable=True, index=True)
+    label_type = Column(String, nullable=False, default="product_label")
+    printer_name = Column(String, nullable=True)
+    payload_json = Column(Text, nullable=False, default="{}")
+    status = Column(String, default="pending", index=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    printed_at = Column(DateTime, nullable=True)
+
+
+TENANT_SCOPED_MODELS = (
+    *TENANT_SCOPED_MODELS,
+    PrintAgentRecord,
+    PrintJobRecord,
+)
+
+
 TENANT_LOADER_CRITERIA_CACHE_KEY = "tenant_loader_criteria_options"
 
 
