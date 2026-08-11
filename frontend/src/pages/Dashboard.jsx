@@ -1445,9 +1445,15 @@ function OperationalDashboard({ userRole, workerId, userName }) {
                 tone: "success",
               };
 
+  const fourteenDaySalesTotal = Number(dashboardData.sales_14_days_total || 0);
+
   const focusMetrics = [
     {
-      detail: `${pluralize(newOrdersLast7Days, "order")} · ERP + Amazon`,
+      detail: `${pluralize(newOrdersLast7Days, "order")} · ERP + Amazon${
+        fourteenDaySalesTotal > 0
+          ? ` · (14-day: $${fourteenDaySalesTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })})`
+          : ""
+      }`,
       href: "/portal/orders",
       label: "7-day sales",
       value: formatCompactAmount(sevenDaySales),

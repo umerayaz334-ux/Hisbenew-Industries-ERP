@@ -9041,6 +9041,8 @@ def dashboard_stats(
 
     week_start = today - timedelta(days=7)
     sales_start = today - timedelta(days=6)
+    fourteen_days_start = today - timedelta(days=13)
+    sales_14_days_total = 0.0
     sales_last_7_days = {
         sales_start + timedelta(days=offset): {
             "order_count": 0,
@@ -9165,19 +9167,19 @@ def dashboard_stats(
             order.id in amazon_linked_erp_order_ids
             or str(order.order_no or "").strip().lower() in amazon_order_numbers
         )
-        if (
-            order_day in sales_last_7_days
-            and order_status not in {"cancelled", "canceled"}
-            and not is_linked_amazon_order
-        ):
-            sales_last_7_days[order_day]["order_count"] += 1
-            sales_last_7_days[order_day]["erp_order_count"] += 1
+        if order_status not in {"cancelled", "canceled"} and not is_linked_amazon_order:
             order_sales_usd = max(
-                float(order.order_total_usd or 0),
+                float(order.order_total_usd or order.total_amount or 0),
                 0,
             )
-            sales_last_7_days[order_day]["sales_amount"] += order_sales_usd
-            sales_last_7_days[order_day]["erp_sales_amount"] += order_sales_usd
+            if order_day and order_day >= fourteen_days_start:
+                sales_14_days_total += order_sales_usd
+
+            if order_day in sales_last_7_days:
+                sales_last_7_days[order_day]["order_count"] += 1
+                sales_last_7_days[order_day]["erp_order_count"] += 1
+                sales_last_7_days[order_day]["sales_amount"] += order_sales_usd
+                sales_last_7_days[order_day]["erp_sales_amount"] += order_sales_usd
             platform_label = str(order.platform or "ERP").strip() or "ERP"
             platform_key = platform_label.casefold()
             platform_sales = sales_last_7_days[order_day]["platform_sales"]
@@ -9262,14 +9264,17 @@ def dashboard_stats(
             if amazon_order.purchase_date
             else None
         )
-        if order_day not in sales_last_7_days:
-            continue
-        sales_last_7_days[order_day]["order_count"] += 1
-        sales_last_7_days[order_day]["amazon_order_count"] += 1
         amazon_sales_usd = max(
             float(amazon_order.order_total or 0),
             0,
         )
+        if order_day and order_day >= fourteen_days_start:
+            sales_14_days_total += amazon_sales_usd
+
+        if order_day not in sales_last_7_days:
+            continue
+        sales_last_7_days[order_day]["order_count"] += 1
+        sales_last_7_days[order_day]["amazon_order_count"] += 1
         sales_last_7_days[order_day]["sales_amount"] += amazon_sales_usd
         sales_last_7_days[order_day]["amazon_sales_amount"] += amazon_sales_usd
         platform_sales = sales_last_7_days[order_day]["platform_sales"]
@@ -9523,6 +9528,7 @@ def dashboard_stats(
         "weekly_completed_tasks": weekly_completed_tasks,
         "weekly_pending_payouts": weekly_pending_payouts,
         "weekly_assigned_tasks": weekly_assigned_tasks,
+        "sales_14_days_total": round(sales_14_days_total, 2),
         "sales_last_7_days": [
             {
                 "date": sales_day.isoformat(),
