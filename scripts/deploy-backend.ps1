@@ -104,15 +104,17 @@ function Restart-Backend {
         [string]$Name
     )
 
-    # 1. Check exact or wildcard service match
+    # 1. Check exact or wildcard service match (exclude runner service itself!)
     $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
     if (-not $service) {
         $service = Get-Service | Where-Object { 
-            $_.DisplayName -eq $Name -or 
-            $_.Name -like "*hisbenew*" -or 
-            $_.DisplayName -like "*hisbenew*" -or
-            $_.Name -like "*erp*" -or
-            $_.DisplayName -like "*erp*"
+            $_.Name -notlike "*actions.runner*" -and
+            $_.DisplayName -notlike "*Actions Runner*" -and
+            ($_.DisplayName -eq $Name -or 
+             $_.Name -like "*hisbenew*backend*" -or 
+             $_.DisplayName -like "*hisbenew*backend*" -or
+             $_.Name -like "*erp*backend*" -or
+             $_.DisplayName -like "*erp*backend*")
         } | Select-Object -First 1
     }
 
@@ -126,8 +128,8 @@ function Restart-Backend {
     $task = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
     if (-not $task) {
         $task = Get-ScheduledTask | Where-Object { 
-            $_.TaskName -like "*hisbenew*" -or 
-            $_.TaskName -like "*erp*" 
+            $_.TaskName -notlike "*actions.runner*" -and
+            ($_.TaskName -like "*hisbenew*" -or $_.TaskName -like "*erp*")
         } | Select-Object -First 1
     }
 
