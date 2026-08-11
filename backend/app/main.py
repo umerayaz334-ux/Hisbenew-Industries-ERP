@@ -9231,37 +9231,37 @@ def dashboard_stats(
                 sales_last_7_days[order_day]["erp_order_count"] += 1
                 sales_last_7_days[order_day]["sales_amount"] += order_sales_usd
                 sales_last_7_days[order_day]["erp_sales_amount"] += order_sales_usd
-            platform_label = str(order.platform or "ERP").strip() or "ERP"
-            platform_key = platform_label.casefold()
-            platform_sales = sales_last_7_days[order_day]["platform_sales"]
-            platform_entry = platform_sales.setdefault(
-                platform_key,
-                {
-                    "platform": platform_label,
-                    "order_count": 0,
-                    "sales_amount": 0.0,
-                },
-            )
-            platform_entry["order_count"] += 1
-            platform_entry["sales_amount"] += order_sales_usd
-            for item in order.items:
-                item_quantity = max(int(item.quantity or 0), 0)
-                item_sales = max(
-                    float(
-                        item.line_total
-                        or item_quantity * float(item.unit_price or 0)
-                    ),
-                    0,
+                platform_label = str(order.platform or "ERP").strip() or "ERP"
+                platform_key = platform_label.casefold()
+                platform_sales = sales_last_7_days[order_day]["platform_sales"]
+                platform_entry = platform_sales.setdefault(
+                    platform_key,
+                    {
+                        "platform": platform_label,
+                        "order_count": 0,
+                        "sales_amount": 0.0,
+                    },
                 )
-                record_top_selling_product(
-                    product=item.product,
-                    fallback_sku=None,
-                    fallback_name=None,
-                    fallback_image_url=None,
-                    quantity=item_quantity,
-                    sales_amount=item_sales,
-                    platform=platform_label,
-                )
+                platform_entry["order_count"] += 1
+                platform_entry["sales_amount"] += order_sales_usd
+                for item in order.items:
+                    item_quantity = max(int(item.quantity or 0), 0)
+                    item_sales = max(
+                        float(
+                            item.line_total
+                            or item_quantity * float(item.unit_price or 0)
+                        ),
+                        0,
+                    )
+                    record_top_selling_product(
+                        product=item.product,
+                        fallback_sku=None,
+                        fallback_name=None,
+                        fallback_image_url=None,
+                        quantity=item_quantity,
+                        sales_amount=item_sales,
+                        platform=platform_label,
+                    )
 
         if not is_stock_deducted_shipping_status(order.shipping_status):
             customer_label, _customer_company_label = privacy_order_customer_labels(
