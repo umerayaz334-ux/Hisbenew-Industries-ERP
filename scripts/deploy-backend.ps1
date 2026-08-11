@@ -4,6 +4,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+
 function Get-Setting {
     param(
         [string]$Name,
@@ -18,6 +19,7 @@ function Get-Setting {
 
     return $value
 }
+
 
 function Invoke-Step {
     param(
@@ -36,6 +38,7 @@ function Invoke-Step {
     & $Action
 }
 
+
 function Invoke-CheckedCommand {
     param(
         [string]$FilePath,
@@ -50,6 +53,7 @@ function Invoke-CheckedCommand {
         throw "Command failed with exit code ${LASTEXITCODE}: $FilePath $($Arguments -join ' ')"
     }
 }
+
 
 function Wait-ForHttpOk {
     param(
@@ -67,16 +71,24 @@ function Wait-ForHttpOk {
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
 
         try {
-            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 10
+
+            $response = Invoke-WebRequest `
+                -Uri $Url `
+                -UseBasicParsing `
+                -TimeoutSec 10
 
             if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) {
+
                 Write-Host "$Label health check passed: $Url"
                 return
             }
 
-        } catch {
+        }
+        catch {
+
             Write-Host "$Label health check attempt $attempt failed: $($_.Exception.Message)"
         }
+
 
         if ($attempt -lt $Attempts) {
             Start-Sleep -Seconds $DelaySeconds
@@ -86,70 +98,116 @@ function Wait-ForHttpOk {
     throw "$Label health check failed after $Attempts attempts: $Url"
 }
 
+
 function Restart-Backend {
     param(
         [string]$Name
     )
 
-    $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    $service = Get-Service `
+        -Name $Name `
+        -ErrorAction SilentlyContinue
+
 
     if (-not $service) {
-        $service = Get-Service | Where-Object {
-            $_.DisplayName -eq $Name
-        } | Select-Object -First 1
+
+        $service = Get-Service |
+            Where-Object {
+                $_.DisplayName -eq $Name
+            } |
+            Select-Object -First 1
     }
+
 
     if ($service) {
-        Restart-Service -Name $service.Name -Force
+
+        Restart-Service `
+            -Name $service.Name `
+            -Force
+
         return
     }
 
-    $task = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+
+    $task = Get-ScheduledTask `
+        -TaskName $Name `
+        -ErrorAction SilentlyContinue
+
 
     if ($task) {
-        Stop-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+
+        Stop-ScheduledTask `
+            -TaskName $Name `
+            -ErrorAction SilentlyContinue
+
         Start-Sleep -Seconds 2
-        Start-ScheduledTask -TaskName $Name
+
+        Start-ScheduledTask `
+            -TaskName $Name
+
         return
     }
+
 
     throw "Could not find service or scheduled task named '$Name'."
 }
 
 
-$repoRoot = Get-Setting -Name "ERP_ROOT" -Default "C:\HisbenewERP"
 
-$backendPath = Join-Path $repoRoot "backend"
+$repoRoot = Get-Setting `
+    -Name "ERP_ROOT" `
+    -Default "C:\HisbenewERP"
+
+
+$backendPath = Join-Path `
+    $repoRoot `
+    "backend"
+
 
 $serviceName = Get-Setting `
     -Name "ERP_BACKEND_SERVICE_NAME" `
     -Default "Hisbenew ERP Backend"
 
+
 $localHealthUrl = Get-Setting `
     -Name "ERP_BACKEND_HEALTH_URL" `
     -Default "http://127.0.0.1:8000/health"
+
 
 $publicHealthUrl = Get-Setting `
     -Name "ERP_PUBLIC_API_HEALTH_URL" `
     -Default "https://api.hisbenew.com/health"
 
 
-$venvOverride = Get-Setting -Name "ERP_BACKEND_VENV" -Default ""
+$venvOverride = Get-Setting `
+    -Name "ERP_BACKEND_VENV" `
+    -Default ""
+
 
 if ($venvOverride) {
+
     $venvPath = $venvOverride
+
 }
 elseif (Test-Path (Join-Path $backendPath "venv\Scripts\python.exe")) {
+
     $venvPath = Join-Path $backendPath "venv"
+
 }
 else {
+
     $venvPath = Join-Path $backendPath ".venv"
 }
 
 
-$pythonPath = Join-Path $venvPath "Scripts\python.exe"
+$pythonPath = Join-Path `
+    $venvPath `
+    "Scripts\python.exe"
 
-$requirementsPath = Join-Path $backendPath "requirements.txt"
+
+$requirementsPath = Join-Path `
+    $backendPath `
+    "requirements.txt"
 
 
 Write-Host "Repository path: $repoRoot"
@@ -161,142 +219,153 @@ Write-Host "Public health URL: $publicHealthUrl"
 
 
 
-Invoke-Step -Message "Pull latest main branch" -Action {
+Invoke-Step `
+    -Message "Pull latest main branch" `
+    -Action {
 
-    Push-Location $repoRoot
+        Push-Location $repoRoot
 
-    try {
+        try {
 
-        # Fix Git ownership issue for GitHub runner service account
-        Invoke-CheckedCommand `
-            -FilePath "git" `
-            -Arguments @(
-                "config",
-                "--global",
-                "--add",
-                "safe.directory",
-                "C:/HisbenewERP"
-            )
+            $dirtyTrackedFiles = git `
+                -c safe.directory=C:/HisbenewERP `
+                status `
+                --porcelain `
+                --untracked-files=no
 
 
-        $dirtyTrackedFiles = git status --porcelain --untracked-files=no
+            if ($dirtyTrackedFiles) {
 
-        if ($dirtyTrackedFiles) {
+                Write-Host $dirtyTrackedFiles
 
-            Write-Host $dirtyTrackedFiles
+                throw "Production checkout has tracked local changes."
+            }
 
-            throw "Production checkout has tracked local changes."
-        }
-
-
-        Invoke-CheckedCommand `
-            -FilePath "git" `
-            -Arguments @(
-                "fetch",
-                "origin",
-                "main",
-                "--prune"
-            )
-
-
-        $branch = git branch --show-current
-
-
-        if ($branch -ne "main") {
 
             Invoke-CheckedCommand `
                 -FilePath "git" `
                 -Arguments @(
-                    "checkout",
+                    "-c",
+                    "safe.directory=C:/HisbenewERP",
+                    "fetch",
+                    "origin",
+                    "main",
+                    "--prune"
+                )
+
+
+            $branch = git `
+                -c safe.directory=C:/HisbenewERP `
+                branch `
+                --show-current
+
+
+            if ($branch -ne "main") {
+
+                Invoke-CheckedCommand `
+                    -FilePath "git" `
+                    -Arguments @(
+                        "-c",
+                        "safe.directory=C:/HisbenewERP",
+                        "checkout",
+                        "main"
+                    )
+            }
+
+
+            Invoke-CheckedCommand `
+                -FilePath "git" `
+                -Arguments @(
+                    "-c",
+                    "safe.directory=C:/HisbenewERP",
+                    "pull",
+                    "--ff-only",
+                    "origin",
                     "main"
                 )
-        }
 
+        }
+        finally {
+
+            Pop-Location
+        }
+    }
+Invoke-Step `
+    -Message "Ensure backend virtual environment exists" `
+    -Action {
+
+        if (-not (Test-Path $pythonPath)) {
+
+            $venvParent = Split-Path -Parent $venvPath
+
+
+            if (-not (Test-Path $venvParent)) {
+
+                New-Item `
+                    -ItemType Directory `
+                    -Force `
+                    -Path $venvParent | Out-Null
+            }
+
+
+            $pyLauncher = Get-Command `
+                "py" `
+                -ErrorAction SilentlyContinue
+
+
+            if ($pyLauncher) {
+
+                Invoke-CheckedCommand `
+                    -FilePath "py" `
+                    -Arguments @(
+                        "-3.12",
+                        "-m",
+                        "venv",
+                        $venvPath
+                    )
+
+            }
+            else {
+
+                Invoke-CheckedCommand `
+                    -FilePath "python" `
+                    -Arguments @(
+                        "-m",
+                        "venv",
+                        $venvPath
+                    )
+            }
+        }
+    }
+
+
+
+Invoke-Step `
+    -Message "Install backend dependencies" `
+    -Action {
 
         Invoke-CheckedCommand `
-            -FilePath "git" `
+            -FilePath $pythonPath `
             -Arguments @(
-                "pull",
-                "--ff-only",
-                "origin",
-                "main"
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                $requirementsPath
             )
-
     }
-    finally {
-        Pop-Location
-    }
-}
 
 
 
-Invoke-Step -Message "Ensure backend virtual environment exists" -Action {
+Invoke-Step `
+    -Message "Apply database migrations and tenant seeds" `
+    -Action {
 
-    if (-not (Test-Path $pythonPath)) {
+        Push-Location $backendPath
 
-        $venvParent = Split-Path -Parent $venvPath
+        try {
 
-        if (-not (Test-Path $venvParent)) {
-
-            New-Item `
-                -ItemType Directory `
-                -Force `
-                -Path $venvParent | Out-Null
-        }
-
-
-        $pyLauncher = Get-Command "py" -ErrorAction SilentlyContinue
-
-
-        if ($pyLauncher) {
-
-            Invoke-CheckedCommand `
-                -FilePath "py" `
-                -Arguments @(
-                    "-3.12",
-                    "-m",
-                    "venv",
-                    $venvPath
-                )
-
-        }
-        else {
-
-            Invoke-CheckedCommand `
-                -FilePath "python" `
-                -Arguments @(
-                    "-m",
-                    "venv",
-                    $venvPath
-                )
-        }
-    }
-}
-
-
-
-Invoke-Step -Message "Install backend dependencies" -Action {
-
-    Invoke-CheckedCommand `
-        -FilePath $pythonPath `
-        -Arguments @(
-            "-m",
-            "pip",
-            "install",
-            "-r",
-            $requirementsPath
-        )
-}
-
-
-
-Invoke-Step -Message "Apply database migrations and tenant seeds" -Action {
-
-    Push-Location $backendPath
-
-    try {
-
-        $seedCommand = @"
+            $seedCommand = @"
 from app.database import Base, engine, migrate_database, ensure_scaling_indexes
 from app.main import ensure_default_admin, ensure_default_modules
 
@@ -309,43 +378,52 @@ ensure_default_modules()
 print('Database migrations and tenant seeds applied.')
 "@
 
-        Invoke-CheckedCommand `
-            -FilePath $pythonPath `
-            -Arguments @(
-                "-c",
-                $seedCommand
-            )
 
+            Invoke-CheckedCommand `
+                -FilePath $pythonPath `
+                -Arguments @(
+                    "-c",
+                    $seedCommand
+                )
+
+        }
+        finally {
+
+            Pop-Location
+        }
     }
-    finally {
-        Pop-Location
+
+
+
+Invoke-Step `
+    -Message "Restart backend" `
+    -Action {
+
+        Restart-Backend `
+            -Name $serviceName
     }
-}
 
 
 
-Invoke-Step -Message "Restart backend" -Action {
+Invoke-Step `
+    -Message "Verify local backend health" `
+    -Action {
 
-    Restart-Backend -Name $serviceName
-}
-
-
-
-Invoke-Step -Message "Verify local backend health" -Action {
-
-    Wait-ForHttpOk `
-        -Url $localHealthUrl `
-        -Label "Local backend"
-}
+        Wait-ForHttpOk `
+            -Url $localHealthUrl `
+            -Label "Local backend"
+    }
 
 
 
-Invoke-Step -Message "Verify public API health" -Action {
+Invoke-Step `
+    -Message "Verify public API health" `
+    -Action {
 
-    Wait-ForHttpOk `
-        -Url $publicHealthUrl `
-        -Label "Public API"
-}
+        Wait-ForHttpOk `
+            -Url $publicHealthUrl `
+            -Label "Public API"
+    }
 
 
 
