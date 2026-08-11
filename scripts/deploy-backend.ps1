@@ -228,8 +228,10 @@ Invoke-Step `
             New-Item -ItemType Directory -Force -Path $backendPath | Out-Null
         }
 
-        # Grant access to destination if needed
-        icacls $repoRoot /grant "Users:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
+        # Grant access to destination if needed (ignore errors if runner lacks privilege)
+        try {
+            cmd /c "icacls `"$repoRoot`" /grant Users:(OI)(CI)F /T /C /Q 2>&1" | Out-Null
+        } catch {}
 
         $runnerBackend = Join-Path $env:GITHUB_WORKSPACE "backend"
 
