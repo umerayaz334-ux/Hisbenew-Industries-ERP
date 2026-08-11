@@ -152,10 +152,17 @@ function Restart-Backend {
         Start-Sleep -Seconds 2
     }
 
-    # 4. Start Uvicorn process directly in background
-    Write-Host "Launching Uvicorn backend process directly..."
-    Start-Process -FilePath $pythonPath -ArgumentList "-m uvicorn app.main:app --host 0.0.0.0 --port 8000" -WorkingDirectory $backendPath -WindowStyle Hidden
-    Start-Sleep -Seconds 3
+    # 4. Start Uvicorn process via Scheduled Task so GitHub Actions Runner post-job cleanup does not terminate it
+    Write-Host "Launching persistent Uvicorn backend process..."
+    $taskName = "HisbenewERP_Backend_Daemon"
+    $cmdPath = Join-Path $backendPath "start_backend_daemon.bat"
+
+    $batContent = "@echo off`r`ncd /d `"$backendPath`"`r`n`"$pythonPath`" -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    Set-Content -Path $cmdPath -Value $batContent -Encoding ASCII
+
+    cmd /c "schtasks /create /tn `"$taskName`" /tr `"$cmdPath`" /sc ONCE /st 00:00 /f 2>&1" | Out-Null
+    cmd /c "schtasks /run /tn `"$taskName`" 2>&1" | Out-Null
+    Start-Sleep -Seconds 4
 }
 
 
