@@ -141,16 +141,23 @@ function Restart-Backend {
         return
     }
 
-    # 3. Check for running python uvicorn backend processes and restart if needed
-    $pyProcesses = Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object { 
-        $_.CommandLine -like "*main:app*" -or $_.CommandLine -like "*uvicorn*" 
-    }
+    # 3. Kill any existing backend process listening on port 8000
+    try {
+        $connections = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
+        if ($connections) {
+            $owningPids = $connections.OwningProcess | Select-Object -Unique
+            foreach ($pId in $owningPids) {
+                if ($pId -gt 4) {
+                    Write-Host "Stopping process PID $pId currently listening on port 8000..."
+                    Stop-Process -Id $pId -Force -ErrorAction SilentlyContinue
+                }
+            }
+            Start-Sleep -Seconds 2
+        }
+    } catch {}
 
-    if ($pyProcesses) {
-        Write-Host "Stopping existing Python backend process(es)..."
-        $pyProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-    }
+    Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
 
     # 4. Start Uvicorn process via WMI so it's a top-level process independent of runner tree
     Write-Host "Launching persistent Uvicorn backend process..."
