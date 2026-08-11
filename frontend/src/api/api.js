@@ -67,15 +67,28 @@ const resolveApiBaseUrl = () => {
   const storedApiBase = getStoredApiBase();
   const browserNetworkApiBase = getBrowserNetworkApiBase();
   if (browserNetworkApiBase === "/api") return browserNetworkApiBase;
+
+  const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
+  const isPublicDomain = currentHost && !isPrivateNetworkHost(currentHost);
+
   if (storedApiBase) {
     const storedHost = getUrlHostname(storedApiBase);
-    const browserHost = getUrlHostname(browserNetworkApiBase);
-    const storedIsOldLocalNetwork =
-      browserHost &&
-      storedHost &&
-      isPrivateNetworkHost(storedHost) &&
-      storedHost !== browserHost;
-    if (!storedIsOldLocalNetwork) return storedApiBase;
+    const storedIsLoopback = isLoopbackHost(storedHost);
+    
+    // On public production domain (hisbenew.com), never use a stored local loopback URL (127.0.0.1/localhost)
+    if (isPublicDomain && storedIsLoopback) {
+      try {
+        window.localStorage.removeItem("erpApiBaseUrl");
+      } catch {}
+    } else {
+      const browserHost = getUrlHostname(browserNetworkApiBase);
+      const storedIsOldLocalNetwork =
+        browserHost &&
+        storedHost &&
+        isPrivateNetworkHost(storedHost) &&
+        storedHost !== browserHost;
+      if (!storedIsOldLocalNetwork) return storedApiBase;
+    }
   }
 
   if (browserNetworkApiBase && isConfiguredLoopback) {
@@ -84,7 +97,7 @@ const resolveApiBaseUrl = () => {
   if (configuredApiBase && !isConfiguredLoopback) return configuredApiBase;
   if (browserNetworkApiBase) return browserNetworkApiBase;
 
-  return import.meta.env.DEV ? "http://127.0.0.1:8000" : "";
+  return import.meta.env.DEV ? "http://127.0.0.1:8000" : "https://api.hisbenew.com";
 };
 
 export const API_BASE_URL = resolveApiBaseUrl();
