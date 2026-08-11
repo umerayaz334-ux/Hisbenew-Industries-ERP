@@ -1,0 +1,540 @@
+/* BarTender UltraLite Studio Edition Design System */
+.lp2-studio-page {
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  background-color: #f5f5f4;
+  min-height: 100vh;
+  padding: 16px 24px 40px;
+  color: #1c1917;
+  box-sizing: border-box;
+}
+
+.lp2-studio-page * {
+  box-sizing: border-box;
+}
+
+/* Main Appbar */
+.bt-main-appbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1c1917;
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
+.bt-brand-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.bt-brand-title svg {
+  width: 20px;
+  height: 20px;
+  color: #22c55e;
+}
+
+.bt-doc-tag {
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #e7e5e4;
+}
+
+.bt-appbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.lp2-qty-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #e7e5e4;
+}
+
+.lp2-qty-box input {
+  width: 48px;
+  background: #ffffff;
+  color: #1c1917;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.lp2-btn-print {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #22c55e;
+  color: #052e16;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lp2-btn-print:hover {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.lp2-btn-print svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Studio Toolbar */
+.bt-studio-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid #e7e5e4;
+  border-radius: 10px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  overflow-x: auto;
+}
+
+.bt-tb-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bt-tb-group select {
+  padding: 5px 10px;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c1917;
+  background: #fafaf9;
+  outline: none;
+}
+
+.bt-tb-divider {
+  width: 1px;
+  height: 22px;
+  background: #e7e5e4;
+}
+
+.bt-tb-label {
+  font-size: 11px;
+  color: #78716c;
+  font-weight: 600;
+}
+
+.bt-tb-val {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1c1917;
+  padding: 0 4px;
+  min-width: 32px;
+  text-align: center;
+}
+
+.bt-bold-btn {
+  min-width: 32px;
+}
+
+.bt-tb-btn {
+  padding: 5px 10px;
+  background: #fafaf9;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #57534e;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.bt-tb-btn:hover,
+.bt-tb-btn.is-active {
+  background: #1c1917;
+  color: #ffffff;
+  border-color: #1c1917;
+}
+
+/* Main Studio Layout */
+.lp2-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+  align-items: start;
+}
+
+.lp2-canvas-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* BarTender Interactive Canvas Stage */
+.bt-canvas-card {
+  background: #ffffff;
+  border: 1px solid #e7e5e4;
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bt-canvas-stage {
+  background: #e7e5e4;
+  border: 1px solid #d6d3d1;
+  border-radius: 10px;
+  padding: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 380px;
+  overflow: auto;
+  user-select: none;
+}
+
+/* Live Thermal Sticker Label (Matches BarTender UltraLite Screenshot) */
+.bt-sticker-label {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #d6d3d1;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  overflow: visible;
+  transition: width 0.2s ease, height 0.2s ease;
+}
+
+/* Layer Boxes & Selection Outline */
+.bt-layer-box {
+  position: relative;
+  cursor: grab;
+  padding: 4px;
+  border: 1px transparent solid;
+  border-radius: 4px;
+  transition: border-color 0.15s ease;
+  user-select: none;
+  width: 100%;
+}
+
+.bt-layer-box:hover {
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+/* Green Selection Bounding Box (Exact BarTender UltraLite Style) */
+.bt-layer-box.is-selected {
+  border: 1.5px solid #22c55e !important;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.2);
+}
+
+.bt-layer-title {
+  color: #000000;
+  text-transform: uppercase;
+  text-align: inherit;
+  line-height: 1.1;
+  word-break: break-word;
+}
+
+.bt-layer-barcode {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 4px 0;
+}
+
+.bt-layer-barcode svg {
+  max-width: 100%;
+}
+
+.bt-layer-sku {
+  color: #000000;
+  text-align: inherit;
+  line-height: 1;
+}
+
+/* BarTender 8 Selection Handles (Green dots on vertices) */
+.bt-selection-handles {
+  position: absolute;
+  inset: -5px;
+  pointer-events: none;
+}
+
+.bt-handle {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  background: #ffffff;
+  border: 1.5px solid #22c55e;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
+  z-index: 10;
+  transition: transform 0.1s ease;
+}
+
+.bt-handle:hover {
+  transform: scale(1.4);
+  background: #22c55e;
+}
+
+.handle-nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.handle-n  { top: -4px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.handle-ne { top: -4px; right: -4px; cursor: nesw-resize; }
+.handle-e  { top: 50%; right: -4px; transform: translateY(-50%); cursor: ew-resize; }
+.handle-se { bottom: -4px; right: -4px; cursor: nwse-resize; }
+.handle-s  { bottom: -4px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+.handle-sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.handle-w  { top: 50%; left: -4px; transform: translateY(-50%); cursor: ew-resize; }
+
+.bt-inline-editor {
+  background: transparent;
+  border: 1.5px dashed #22c55e;
+  outline: none;
+  width: 100%;
+  color: #000000;
+  padding: 0;
+  margin: 0;
+}
+
+.bt-canvas-hint {
+  font-size: 12px;
+  color: #78716c;
+  text-align: center;
+}
+
+/* Cards & Inspectors */
+.lp2-card {
+  background: #ffffff;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.lp2-card h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1c1917;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lp2-inspector-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lp2-size-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.lp2-size-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 10px;
+  background: #fafaf9;
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lp2-size-btn.is-selected {
+  border-color: #1c1917;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px #1c1917;
+}
+
+.lp2-size-btn strong {
+  font-size: 11px;
+  font-weight: 600;
+  color: #1c1917;
+}
+
+.lp2-size-btn span {
+  font-size: 10px;
+  color: #78716c;
+}
+
+.lp2-btn-add-custom {
+  grid-column: span 2;
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+}
+
+.lp2-field-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lp2-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lp2-field-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #57534e;
+}
+
+.lp2-field-group input[type="text"],
+.lp2-field-group input[type="number"],
+.lp2-field-group select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #1c1917;
+  background: #fafaf9;
+  outline: none;
+}
+
+.lp2-field-group input:focus,
+.lp2-field-group select:focus {
+  background: #ffffff;
+  border-color: #1c1917;
+}
+
+.lp2-field-group input[type="range"] {
+  width: 100%;
+  accent-color: #1c1917;
+}
+
+/* Template Save Bar */
+.lp2-template-save-bar {
+  display: flex;
+  gap: 6px;
+}
+
+.lp2-template-save-bar input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.lp2-btn-secondary {
+  padding: 6px 10px;
+  background: #fafaf9;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lp2-template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.lp2-template-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: #fafaf9;
+  border-radius: 6px;
+}
+
+.lp2-tpl-info {
+  cursor: pointer;
+}
+
+.lp2-tpl-info strong {
+  font-size: 12px;
+  color: #1c1917;
+}
+
+.lp2-btn-del {
+  background: none;
+  border: none;
+  color: #a8a29e;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* Off-screen Pre-rendered Thermal Print Container */
+.lp2-print-area {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  opacity: 0.001;
+  pointer-events: none;
+  z-index: -9999;
+}
+
+@media print {
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  .lp2-print-area, .lp2-print-area * {
+    visibility: visible !important;
+  }
+  .lp2-print-area {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    opacity: 1 !important;
+    z-index: 99999 !important;
+    width: 100% !important;
+  }
+  .lp2-print-label-item {
+    page-break-after: always;
+    break-after: page;
+    box-sizing: border-box;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

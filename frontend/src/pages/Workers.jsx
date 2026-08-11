@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
+import WorkerLedgerModal from "../components/WorkerLedgerModal";
 import { formatUtcLocal } from "../utils/dateUtils";
 import "./Workers.css";
 
@@ -113,6 +114,8 @@ function Workers() {
   const [productionTasks, setProductionTasks] = useState([]);
   const [orderWorkflowTasks, setOrderWorkflowTasks] = useState([]);
   const [workerPayments, setWorkerPayments] = useState([]);
+  const [selectedLedgerWorker, setSelectedLedgerWorker] = useState(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [taskBoardLoading, setTaskBoardLoading] = useState(true);
   const [taskBoardView, setTaskBoardView] = useState("open");
   const [taskWorkerFilter, setTaskWorkerFilter] = useState("all");
@@ -580,6 +583,32 @@ function Workers() {
       console.error("Complete worker task error:", error);
       setTaskBoardError(
         error.response?.data?.detail || "Task could not be marked completed."
+      );
+    } finally {
+      setTaskActionBusy("");
+    }
+  };
+
+  const startWorkerTask = async (task) => {
+    const taskId = task.original_id || task.id;
+    const isOrderTask = task.task_kind === "order";
+    setTaskActionBusy(`start-${task.task_kind || "production"}-${taskId}`);
+    setTaskBoardError("");
+    setTaskBoardMessage("");
+
+    try {
+      if (isOrderTask) {
+        await api.patch(`/order-workflow/tasks/${taskId}/start`);
+      } else {
+        await api.patch(`/production/tasks/${taskId}/start`);
+      }
+      setTaskBoardMessage("Task marked In Progress.");
+      await fetchProductionTasks();
+      await fetchOrderWorkflowTasks();
+    } catch (error) {
+      console.error("Start worker task error:", error);
+      setTaskBoardError(
+        error.response?.data?.detail || "Task could not be started."
       );
     } finally {
       setTaskActionBusy("");
@@ -1469,23 +1498,38 @@ function Workers() {
                   <div className="workers-task-actions">
                     {task.status === "Completed" ? (
                       <span className="workers-task-done">Closed</span>
-                    ) : canComplete ? (
-                      <button
-                        className="workers-task-complete"
-                        disabled={taskActionBusy === busyKey}
-                        onClick={() => completeWorkerTask(task)}
-                        type="button"
-                      >
-                        {taskActionBusy === busyKey
-                          ? task.status === "Pending Verification"
-                            ? "Verifying..."
-                            : "Closing..."
-                          : task.status === "Pending Verification"
-                            ? "Verify complete"
-                            : "Mark complete"}
-                      </button>
                     ) : (
-                      <span className="workers-task-waiting">Waiting</span>
+                      <>
+                        {(task.status === "Ready" || task.status === "New") && (
+                          <button
+                            className="workers-task-complete"
+                            style={{ backgroundColor: "#2563eb", borderColor: "#2563eb", color: "#fff" }}
+                            disabled={taskActionBusy === `start-${task.task_kind || "production"}-${task.original_id || task.id}`}
+                            onClick={() => startWorkerTask(task)}
+                            type="button"
+                          >
+                            {taskActionBusy === `start-${task.task_kind || "production"}-${task.original_id || task.id}`
+                              ? "Starting..."
+                              : "▶ Start Work"}
+                          </button>
+                        )}
+                        {canComplete && (
+                          <button
+                            className="workers-task-complete"
+                            disabled={taskActionBusy === busyKey}
+                            onClick={() => completeWorkerTask(task)}
+                            type="button"
+                          >
+                            {taskActionBusy === busyKey
+                              ? task.status === "Pending Verification"
+                                ? "Verifying..."
+                                : "Closing..."
+                              : task.status === "Pending Verification"
+                                ? "Verify complete"
+                                : "✔ Mark Complete"}
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 </article>
@@ -1787,6 +1831,14 @@ function Workers() {
                         <div className="workers-row-actions">
                           <button
                             className="workers-row-action"
+                            style={{ fontWeight: 600, color: "#2563eb" }}
+                            onClick={() => setSelectedLedgerWorker(worker)}
+                            type="button"
+                          >
+                            📜 View Ledger
+                          </button>
+                          <button
+                            className="workers-row-action"
                             onClick={() => setDetailsWorker(worker)}
                             type="button"
                           >
@@ -1918,6 +1970,18 @@ function Workers() {
                 </button>
                 <button
                   className="primary-btn"
+                  style={{ backgroundColor: "#2563eb" }}
+                  onClick={() => {
+                    const workerForLedger = detailsWorker;
+                    setDetailsWorker(null);
+                    setSelectedLedgerWorker(workerForLedger);
+                  }}
+                  type="button"
+                >
+                  📜 View Full Ledger
+                </button>
+                <button
+                  className="primary-btn"
                   onClick={() => {
                     const workerToEdit = detailsWorker;
                     setDetailsWorker(null);
@@ -1931,6 +1995,110 @@ function Workers() {
             </div>
           </section>
         </div>
+      )}
+
+      {/* Collapsible Section History (Closed by default) */}
+      <section className="panel workers-collapsible-history-panel" style={{ marginTop: "1.5rem" }}>
+        <button
+          className="workers-history-toggle-header"
+          onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+          type="button"
+          aria-expanded={isHistoryOpen}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "1rem 1.25rem",
+            background: "var(--bg-card, #ffffff)",
+            border: "1px solid var(--border-color, #e2e8f0)",
+            borderRadius: "12px",
+            fontSize: "1.1rem",
+            fontWeight: "700",
+            cursor: "pointer",
+            color: "var(--text-color, #0f172a)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span>📜 Work & Payout History</span>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted, #64748b)", fontWeight: "500" }}>
+              (Closed by default)
+            </span>
+          </div>
+          <span>{isHistoryOpen ? "▲ Hide History" : "▼ Expand History"}</span>
+        </button>
+
+        {isHistoryOpen && (
+          <div className="workers-history-content" style={{ padding: "1.25rem 0" }}>
+            <div style={{ marginBottom: "1rem", fontSize: "0.9rem", color: "var(--text-muted, #64748b)" }}>
+              Historical archive of completed worker jobs and recorded payouts.
+            </div>
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Date</th>
+                    <th>Worker</th>
+                    <th>Job / Payment Details</th>
+                    <th>Earned</th>
+                    <th>Paid</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {combinedWorkerTasks
+                    .filter((t) => t.status === "Completed")
+                    .concat(
+                      workerPayments.map((p) => ({
+                        id: `payment-${p.id}`,
+                        isPayment: true,
+                        rawDate: p.paid_at || p.created_at,
+                        dateFormatted: formatUtcLocal(p.paid_at || p.created_at),
+                        worker_name: p.worker_name || "Worker",
+                        step_name: `Payout via ${p.payment_method || "Cash"}`,
+                        earned: 0,
+                        paid: Number(p.amount || 0),
+                      }))
+                    )
+                    .sort((a, b) => new Date(b.rawDate || b.completed_at || 0) - new Date(a.rawDate || a.completed_at || 0))
+                    .slice(0, 50)
+                    .map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <span className={`badge ${item.isPayment ? "info" : "success"}`}>
+                            {item.isPayment ? "Payout" : "Job Done"}
+                          </span>
+                        </td>
+                        <td>{item.dateFormatted || (item.completed_at ? formatUtcLocal(item.completed_at) : "-")}</td>
+                        <td>{item.worker_name || "-"}</td>
+                        <td>
+                          <strong>{item.step_name}</strong>
+                          {item.product_name && (
+                            <small style={{ display: "block", color: "#64748b" }}>{item.product_name}</small>
+                          )}
+                        </td>
+                        <td>{item.isPayment ? "-" : formatCurrency(getTaskEarning(item))}</td>
+                        <td>{item.isPayment ? formatCurrency(item.paid) : "-"}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Worker Ledger Modal */}
+      {selectedLedgerWorker && (
+        <WorkerLedgerModal
+          worker={selectedLedgerWorker}
+          workers={workers}
+          tasks={combinedWorkerTasks}
+          payments={workerPayments}
+          onClose={() => setSelectedLedgerWorker(null)}
+          onSelectWorker={(w) => setSelectedLedgerWorker(w)}
+        />
       )}
     </div>
   );

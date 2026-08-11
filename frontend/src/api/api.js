@@ -1,4 +1,4 @@
-﻿import axios from "axios";
+import axios from "axios";
 
 const normalizeApiBase = (value) => String(value || "").trim().replace(/\/+$/, "");
 
@@ -108,6 +108,9 @@ export const getAuditHeaders = () => {
     if (user?.name || user?.username) {
       headers["X-ERP-User-Name"] = user.name || user.username;
     }
+    if (user?.impersonatedBySuperAdmin && user?.tenant_id) {
+      headers["X-ERP-Tenant-Id"] = String(user.tenant_id);
+    }
   } catch {
     // Keep API calls working even if local storage contains an old value.
   }
@@ -154,10 +157,12 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   config.headers = config.headers ?? {};
   Object.entries(getAuditHeaders()).forEach(([key, value]) => {
-    config.headers[key] = value;
+    if (config.headers[key] === undefined) {
+      config.headers[key] = value;
+    }
   });
   const token = getAuthToken();
-  if (token) {
+  if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, useCallback } from "react";
+import { Component, lazy, Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import "./App.css";
 
 import api from "./api/api";
@@ -26,12 +26,14 @@ const Shipping = lazy(() => import("./pages/Shipping"));
 const ShippingBalance = lazy(() => import("./pages/ShippingBalance"));
 const Fulfillment = lazy(() => import("./pages/Fulfillment"));
 const LabelPrinter = lazy(() => import("./pages/LabelPrinter"));
+const LabelPrinter2 = lazy(() => import("./pages/LabelPrinter2"));
 const ServiceTakers = lazy(() => import("./pages/ServiceTakers"));
 const ServiceTakerPortal = lazy(() => import("./pages/ServiceTakerPortal"));
 const FollowUps = lazy(() => import("./pages/FollowUps"));
 const Payouts = lazy(() => import("./pages/Payouts"));
 const Payments = lazy(() => import("./pages/Payments"));
 const WorkerPayouts = lazy(() => import("./pages/WorkerPayouts"));
+const WorkerAccounts2 = lazy(() => import("./pages/WorkerAccounts2"));
 const Accounting = lazy(() => import("./pages/Accounting"));
 const Production = lazy(() => import("./pages/Production"));
 const MyTasks = lazy(() => import("./pages/MyTasks"));
@@ -92,6 +94,7 @@ const pagePaths = {
   "Warehouse Shipments": "/portal/warehouse/shipments",
   "Warehouse Stock": "/portal/warehouse/stock",
   "Label Printer": "/portal/label-printer",
+  "Label Printer 2": "/portal/label-printer-2",
   "Service Takers": "/portal/service-takers",
   "Service Dashboard": "/portal/service-taker/dashboard",
   "Service Products": "/portal/service-taker/products",
@@ -101,6 +104,7 @@ const pagePaths = {
   "Follow Ups": "/portal/follow-ups",
   Payouts: "/portal/payouts",
   Billings: "/portal/billings",
+  "Worker Accounts": "/portal/worker-accounts",
   "Worker Payouts": "/portal/worker-payouts",
   Accounting: "/portal/accounting",
   Manufacturing: "/portal/manufacturing",
@@ -129,7 +133,7 @@ const serviceTakerPages = [
   "Service Charges",
 ];
 
-const PLATFORM_SUPER_ADMIN_PAGES = ["Dashboard", "Add Company", "Companies", "Users", "Settings"];
+const PLATFORM_SUPER_ADMIN_PAGES = ["Dashboard", "Companies", "Users", "Settings"];
 
 const rolePages = {
   admin: [
@@ -147,10 +151,12 @@ const rolePages = {
     "Products",
     "Inventory",
     "Label Printer",
+    "Label Printer 2",
     "Suppliers",
     "Manufacturing",
     "Production",
     "Workers",
+    "Worker Accounts",
     "Worker Payouts",
     "Reports",
     "Settings",
@@ -183,9 +189,11 @@ const rolePages = {
     "Products",
     "Inventory",
     "Label Printer",
+    "Label Printer 2",
     "Suppliers",
     "Manufacturing",
     "Production",
+    "Worker Accounts",
     "Worker Payouts",
     "Reports",
     "Settings",
@@ -199,6 +207,7 @@ const rolePages = {
   worker: [
     "Dashboard",
     "My Tasks",
+    "Worker Accounts",
     "Worker Payouts",
     "Manufacturing",
     "Production",
@@ -223,6 +232,7 @@ rolePages.super_admin = PLATFORM_SUPER_ADMIN_PAGES;
 const pathToPage = Object.fromEntries(
   Object.entries(pagePaths).map(([page, path]) => [path, page])
 );
+pathToPage["/portal/"] = "Dashboard";
 pathToPage["/portal/payments"] = "Billings";
 pathToPage["/portal/amazon/fba-inventory"] = "Products";
 pathToPage["/portal/service-taker"] = "Service Dashboard";
@@ -261,7 +271,8 @@ const pageFromPath = (pathname) => {
 const isSupplierLedgerPath = (pathname) =>
   /^\/portal\/suppliers\/\d+\/ledger\/?$/.test(normalizePath(pathname));
 
-const normalizeClientAllowedPages = (pages = [], role = "") => {
+const normalizeClientAllowedPages = (pages = [], role = "", impersonatedBySuperAdmin = false) => {
+  if (impersonatedBySuperAdmin) return rolePages.admin;
   if (role === "service_taker") return serviceTakerPages;
   if (role === "super_admin") return PLATFORM_SUPER_ADMIN_PAGES;
   const normalized = [];
@@ -273,13 +284,103 @@ const normalizeClientAllowedPages = (pages = [], role = "") => {
   });
 
   if (role === "admin" && !normalized.includes("Deployment")) normalized.push("Deployment");
+  if ((role === "admin" || role === "manager" || role === "worker")) {
+    if (!normalized.includes("Worker Accounts")) normalized.push("Worker Accounts");
+  }
   if (!normalized.includes("Dashboard")) normalized.unshift("Dashboard");
   return normalized;
 };
 
+class GlobalErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Uncaught ERP Portal Error:", error, errorInfo);
+  }
+
+  handleReset = () => {
+    try {
+      window.localStorage.removeItem("erpUser");
+    } catch (e) {
+      console.error(e);
+    }
+    window.location.href = "/login";
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "30px",
+          backgroundColor: "#fbfbf9",
+          color: "#1c1917",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Inter', sans-serif"
+        }}>
+          <h2 style={{ fontSize: "22px", fontWeight: "700", marginBottom: "8px" }}>Portal Error Detected</h2>
+          <p style={{ fontSize: "13px", color: "#dc2626", marginBottom: "16px", background: "#fef2f2", padding: "10px 16px", borderRadius: "8px", border: "1px solid #fee2e2", fontFamily: "monospace", maxWidth: "600px", wordBreak: "break-word" }}>
+            {this.state.error?.toString() || "Unknown Error"}
+          </p>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+              style={{
+                padding: "10px 18px",
+                backgroundColor: "#1c1917",
+                color: "#fff",
+                border: "none",
+                borderRadius: "8px",
+                fontWeight: "600",
+                cursor: "pointer"
+              }}
+            >
+              Reload Workspace
+            </button>
+            <button
+              onClick={this.handleReset}
+              style={{
+                padding: "10px 18px",
+                backgroundColor: "#fafaf9",
+                border: "1px solid #e7e5e4",
+                color: "#1c1917",
+                borderRadius: "8px",
+                fontWeight: "600",
+                cursor: "pointer"
+              }}
+            >
+              Sign In Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const getSavedUser = () => {
+  try {
+    const savedUser = window.localStorage.getItem("erpUser");
+    return savedUser ? JSON.parse(savedUser) : null;
+  } catch (error) {
+    console.error("Error reading saved user:", error);
+    return null;
+  }
+};
+
 function App() {
-  const savedUser = window.localStorage.getItem("erpUser");
-  const parsedSavedUser = savedUser ? JSON.parse(savedUser) : null;
+  const parsedSavedUser = getSavedUser();
   const [authenticatedUser, setAuthenticatedUser] = useState(
     parsedSavedUser
   );
@@ -314,10 +415,40 @@ function App() {
     : [];
   const normalizedAllowedPages = normalizeClientAllowedPages(
     rawAllowedPages,
-    authenticatedUser?.role
+    authenticatedUser?.role,
+    authenticatedUser?.impersonatedBySuperAdmin
   );
   const allowedPageKey = normalizedAllowedPages.join("|");
   const schoolWorkspaceActive = isSchoolWorkspacePage(activePage);
+  const [tenantModules, setTenantModules] = useState([]);
+
+  useEffect(() => {
+    if (!authenticatedUser) return;
+    let cancelled = false;
+    api
+      .get("/modules")
+      .then((res) => {
+        if (!cancelled && Array.isArray(res.data)) {
+          setTenantModules(res.data);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setTenantModules([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticatedUser?.tenant_id, authenticatedUser?.impersonatedBySuperAdmin]);
+
+  const hasSchoolPortalAccess = useMemo(() => {
+    if (!authenticatedUser) return false;
+    if (authenticatedUser.role === "super_admin") return true;
+    if (!Array.isArray(tenantModules) || tenantModules.length === 0) return true;
+    const schoolMod = tenantModules.find(
+      (m) => m.slug === "school-erp" || m.page_name === "School ERP" || m.name === "School ERP"
+    );
+    return schoolMod ? Boolean(schoolMod.enabled) : true;
+  }, [authenticatedUser, tenantModules]);
 
   useEffect(() => {
     if (!authenticatedUser) return;
@@ -386,7 +517,9 @@ function App() {
     if (!authenticatedUser) return;
 
     try {
-      const response = await api.get(`/users/${authenticatedUser.id}`);
+      const response = await api.get(`/users/${authenticatedUser.id}`, {
+        headers: { "X-ERP-Tenant-Id": "" },
+      });
       const freshUser = response.data;
       if (!freshUser.is_active) {
         logoutWithMessage("Your account has been deactivated. Contact admin.");
@@ -396,6 +529,11 @@ function App() {
       const refreshedUser = {
         ...authenticatedUser,
         ...freshUser,
+        role: authenticatedUser.role,
+        tenant_id: authenticatedUser.impersonatedBySuperAdmin ? authenticatedUser.tenant_id : freshUser.tenant_id,
+        tenant_name: authenticatedUser.impersonatedBySuperAdmin ? authenticatedUser.tenant_name : freshUser.tenant_name,
+        tenant_slug: authenticatedUser.impersonatedBySuperAdmin ? authenticatedUser.tenant_slug : freshUser.tenant_slug,
+        impersonatedBySuperAdmin: authenticatedUser.impersonatedBySuperAdmin,
         access_token: authenticatedUser.access_token,
         token_type: authenticatedUser.token_type,
       };
@@ -471,7 +609,7 @@ function App() {
         }
 
         if (
-          ["admin", "manager", "warehouse"].includes(sidebarRole) &&
+          ["admin", "manager", "warehouse", "super_admin"].includes(sidebarRole) &&
           allowedPagesForCounts.includes("Shipping")
         ) {
           const response = await api.get("/dashboard-stats");
@@ -479,7 +617,7 @@ function App() {
         }
 
         if (
-          ["admin", "manager", "warehouse"].includes(sidebarRole) &&
+          ["admin", "manager", "warehouse", "super_admin"].includes(sidebarRole) &&
           (allowedPagesForCounts.includes("Warehouse / Fulfillment") ||
             allowedPagesForCounts.includes("Warehouse Dispatch"))
         ) {
@@ -513,7 +651,9 @@ function App() {
     allowedPageKey,
     authenticatedUser?.id,
     authenticatedUser?.role,
+    authenticatedUser?.tenant_id,
     authenticatedUser?.worker_id,
+    authenticatedUser?.impersonatedBySuperAdmin,
   ]);
 
   useEffect(() => {
@@ -624,6 +764,34 @@ function App() {
 
   const handleLogout = () => logoutWithMessage("");
 
+  const handleSwitchToCompanyPortal = (tenant) => {
+    if (!authenticatedUser || (authenticatedUser.role !== "super_admin" && !authenticatedUser.impersonatedBySuperAdmin)) return;
+    const updatedUser = {
+      ...authenticatedUser,
+      tenant_id: tenant.id,
+      tenant_name: tenant.company_name,
+      tenant_slug: tenant.slug,
+      impersonatedBySuperAdmin: true,
+    };
+    setAuthenticatedUser(updatedUser);
+    saveAuthenticatedUser(updatedUser);
+    updatePath("Dashboard");
+  };
+
+  const handleReturnToSuperAdmin = () => {
+    if (!authenticatedUser?.impersonatedBySuperAdmin) return;
+    const superAdminUser = {
+      ...authenticatedUser,
+      tenant_id: null,
+      tenant_name: null,
+      tenant_slug: null,
+      impersonatedBySuperAdmin: false,
+    };
+    setAuthenticatedUser(superAdminUser);
+    saveAuthenticatedUser(superAdminUser);
+    updatePath("Dashboard");
+  };
+
   const toggleSidebar = () => {
     setSidebarCollapsed((current) => {
       const next = !current;
@@ -633,11 +801,7 @@ function App() {
   };
 
   const renderPage = () => {
-    if (activePage === "WebsiteStorefront") {
-      return <Website />;
-    }
-
-    if (activePage === "WebsiteCatalog") {
+    if (activePage === "WebsiteStorefront" || activePage === "WebsiteCatalog") {
       return <WebsiteCatalog />;
     }
 
@@ -690,16 +854,16 @@ function App() {
     }
 
     if (!normalizedAllowedPages.includes(activePage)) {
-      return authenticatedUser?.role === "super_admin" ? (
-        <SuperAdminDashboard authenticatedUser={authenticatedUser} onNavigate={updatePath} />
+      return authenticatedUser?.role === "super_admin" && !authenticatedUser?.impersonatedBySuperAdmin ? (
+        <SuperAdminDashboard authenticatedUser={authenticatedUser} onNavigate={updatePath} onSwitchToCompanyPortal={handleSwitchToCompanyPortal} />
       ) : (
         <Dashboard {...dashboardProps} />
       );
     }
 
     if (activePage === "Dashboard") {
-      return authenticatedUser?.role === "super_admin" ? (
-        <SuperAdminDashboard authenticatedUser={authenticatedUser} onNavigate={updatePath} />
+      return authenticatedUser?.role === "super_admin" && !authenticatedUser?.impersonatedBySuperAdmin ? (
+        <SuperAdminDashboard authenticatedUser={authenticatedUser} onNavigate={updatePath} onSwitchToCompanyPortal={handleSwitchToCompanyPortal} />
       ) : (
         <Dashboard {...dashboardProps} />
       );
@@ -725,6 +889,7 @@ function App() {
     }
     if (activePage === "Inventory") return <Inventory />;
     if (activePage === "Label Printer") return <LabelPrinter />;
+    if (activePage === "Label Printer 2") return <LabelPrinter2 />;
     if (activePage === "Inspiration") return <Inspiration />;
     if (activePage === "Quotes") return <Quotes />;
     if (activePage === "TempData") return <TempData />;
@@ -841,69 +1006,82 @@ function App() {
     if (activePage === "Website") return <WebsiteAdmin />;
     if (activePage === "Deployment") return <Deployment />;
     if (activePage === "Workers") return <Workers />;
+    if (activePage === "Worker Accounts") return <Suppliers />;
     if (activePage === "Users") return <Users authenticatedUser={authenticatedUser} />;
     if (activePage === "Companies" || activePage === "Add Company") {
-      return <Companies authenticatedUser={authenticatedUser} focusCreate={activePage === "Add Company"} />;
+      return (
+        <Companies
+          authenticatedUser={authenticatedUser}
+          focusCreate={activePage === "Add Company"}
+          onSwitchToCompanyPortal={handleSwitchToCompanyPortal}
+        />
+      );
     }
+    if (activePage === "Label Printer") return <LabelPrinter />;
+    if (activePage === "Label Printer 2") return <LabelPrinter2 />;
     if (activePage === "Copy Clipboard") return <CopyClipboard />;
 
     return <Dashboard />;
   };
 
   return (
-    <InternalCallProvider
-      user={
-        ["school", "service_taker"].includes(authenticatedUser?.role)
-          ? null
-          : authenticatedUser
-      }
-    >
-      <div
-        className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${
-          schoolWorkspaceActive ? "school-workspace-layout" : ""
-        }`.trim()}
-        style={schoolWorkspaceActive ? schoolThemeStyle(schoolSettings) : undefined}
-        dir={schoolWorkspaceActive && schoolSettings.interface_language === "ur" ? "rtl" : undefined}
+    <GlobalErrorBoundary>
+      <InternalCallProvider
+        user={
+          ["school", "service_taker"].includes(authenticatedUser?.role)
+            ? null
+            : authenticatedUser
+        }
       >
-        {authenticatedUser && schoolWorkspaceActive && showSchoolSplash && (
-          <SchoolSplash settings={schoolSettings} />
-        )}
-        {authenticatedUser && !isPublicPage(activePage) && (
-          <Sidebar
-            activePage={activePage}
-            setActivePage={updatePath}
-            workspace={schoolWorkspaceActive ? "school" : "factory"}
-            schoolSettings={schoolSettings}
-            schoolPermissions={schoolAccess?.permissions}
-            canSwitchToFactory={["admin", "super_admin"].includes(authenticatedUser.role)}
-            onSwitchWorkspace={
-              ["admin", "super_admin"].includes(authenticatedUser.role)
-                ? () => updatePath(schoolWorkspaceActive ? "Dashboard" : "School ERP")
-                : undefined
-            }
-            userRole={authenticatedUser?.role}
-            authenticatedUser={authenticatedUser}
-            allowedPages={normalizedAllowedPages}
-            notificationCounts={sidebarCounts}
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={toggleSidebar}
-            onLogout={handleLogout}
-          />
-        )}
-
-        <main
-          className={`main-content ${authenticatedUser || isPublicPage(activePage) ? "" : "login-page"} ${
-            isPublicPage(activePage)
-              ? "public-website-page"
-              : ""
-          }`}
+        <div
+          className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${
+            schoolWorkspaceActive ? "school-workspace-layout" : ""
+          }`.trim()}
+          style={schoolWorkspaceActive ? schoolThemeStyle(schoolSettings) : undefined}
+          dir={schoolWorkspaceActive && schoolSettings.interface_language === "ur" ? "rtl" : undefined}
         >
-          <Suspense fallback={<div className="erp-page-loading">Loading workspace...</div>}>
-            {renderPage()}
-          </Suspense>
-        </main>
-      </div>
-    </InternalCallProvider>
+          {authenticatedUser && schoolWorkspaceActive && showSchoolSplash && (
+            <SchoolSplash settings={schoolSettings} />
+          )}
+          {authenticatedUser && !isPublicPage(activePage) && (
+            <Sidebar
+              activePage={activePage}
+              setActivePage={updatePath}
+              workspace={schoolWorkspaceActive ? "school" : "factory"}
+              schoolSettings={schoolSettings}
+              schoolPermissions={schoolAccess?.permissions}
+              canSwitchToFactory={["admin", "super_admin"].includes(authenticatedUser.role)}
+              canSwitchToSchool={hasSchoolPortalAccess && ["admin", "super_admin"].includes(authenticatedUser.role)}
+              onSwitchWorkspace={
+                ["admin", "super_admin"].includes(authenticatedUser.role)
+                  ? () => updatePath(schoolWorkspaceActive ? "Dashboard" : "School ERP")
+                  : undefined
+              }
+              userRole={authenticatedUser?.role}
+              authenticatedUser={authenticatedUser}
+              allowedPages={normalizedAllowedPages}
+              notificationCounts={sidebarCounts}
+              collapsed={sidebarCollapsed}
+              onToggleCollapse={toggleSidebar}
+              onLogout={handleLogout}
+              onReturnToSuperAdmin={handleReturnToSuperAdmin}
+            />
+          )}
+
+          <main
+            className={`main-content ${authenticatedUser || isPublicPage(activePage) ? "" : "login-page"} ${
+              isPublicPage(activePage)
+                ? "public-website-page"
+                : ""
+            }`}
+          >
+            <Suspense fallback={<div className="erp-page-loading">Loading workspace...</div>}>
+              {renderPage()}
+            </Suspense>
+          </main>
+        </div>
+      </InternalCallProvider>
+    </GlobalErrorBoundary>
   );
 }
 

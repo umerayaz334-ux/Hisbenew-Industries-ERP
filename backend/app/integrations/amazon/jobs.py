@@ -65,6 +65,40 @@ def _sanitized_payload(payload: dict | None) -> str | None:
     return sanitize_external_message(serialized)[:4000]
 
 
+def _job_stale_after_minutes() -> int:
+    try:
+        return max(5, int(os.getenv("AMAZON_JOB_STALE_MINUTES", "30")))
+    except (TypeError, ValueError):
+        return 30
+
+
+def _active_job_started_at(job: AmazonSyncJob) -> datetime | None:
+    return job.locked_at or job.started_at or job.updated_at or job.scheduled_at
+
+
+def _is_stale_processing_job(job: AmazonSyncJob, *, now: datetime) -> bool:
+    if job.status != "Processing":
+        return False
+    started_at = _active_job_started_at(job)
+    if not started_at:
+        return True
+    return started_at <= now - timedelta(minutes=_job_stale_after_minutes())
+
+
+def _fail_stale_processing_job(job: AmazonSyncJob, *, now: datetime) -> None:
+    job.status = "Failed"
+    job.error_code = "amazon_job_interrupted"
+    job.error_message = (
+        "The previous Amazon synchronization was interrupted before it completed. "
+        "A fresh sync was queued."
+    )
+    job.completed_at = now
+    job.next_retry_at = None
+    job.locked_at = None
+    job.locked_by = None
+    job.updated_at = now
+
+
 def enqueue_amazon_job(
     db: Session,
     *,
@@ -120,7 +154,11 @@ def enqueue_unique_amazon_job(
         .first()
     )
     if existing:
-        return existing, False
+        now = datetime.utcnow()
+        if not _is_stale_processing_job(existing, now=now):
+            return existing, False
+        _fail_stale_processing_job(existing, now=now)
+        db.flush()
     return (
         enqueue_amazon_job(
             db,

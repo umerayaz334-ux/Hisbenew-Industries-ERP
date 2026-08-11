@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
-from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, or_, select
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 import asyncio
@@ -85,11 +85,11 @@ from .usa_shipping import (
     usa_rate_card_summary,
 )
 from .schemas import (
-    TenantCreate, TenantUpdate, TenantOut, ModuleOut, TenantModuleUpdate,
+    TenantCreate, TenantUpdate, TenantDeleteRequest, TenantOut, ModuleOut, TenantModuleUpdate,
     TenantModuleBulkUpdate, CustomPageCreate, CustomPageUpdate, CustomPageOut,
     ProductCreate, ProductOut,
     CustomerCreate, CustomerOut,
-    UserCreate, UserUpdate, UserOut, LoginRequest, LoginResponse, UserProfileUpdate,
+    UserCreate, UserUpdate, UserPinReset, UserOut, LoginRequest, LoginResponse, UserProfileUpdate,
     RoleRequestCreate, RoleRequestUpdate, RoleRequestOut,
     PublicAccessRequestCreate, PublicAccessRequestReview, PublicAccessRequestUpdate, PublicAccessRequestOut,
     InternalMessageCreate, InternalMessageOut, InternalMessageUserOut,
@@ -146,6 +146,7 @@ app.router.add_event_handler("startup", amazon_auto_sync_service.start)
 app.router.add_event_handler("shutdown", amazon_auto_sync_service.stop)
 
 ALL_ERP_PAGES = [
+    "School ERP",
     "Dashboard",
     "Customers",
     "Orders",
@@ -168,6 +169,7 @@ ALL_ERP_PAGES = [
     "Products",
     "Inventory",
     "Label Printer",
+    "Label Printer 2",
     "Suppliers",
     "Manufacturing",
     "Production",
@@ -824,9 +826,26 @@ def tenant_id_for_write(
     return get_default_tenant(db).id
 
 
+TENANT_PAGE_SET_CACHE_KEY = "tenant_enabled_page_sets"
+
+
+def clear_tenant_page_set_cache(db: Session, tenant_id: int | None = None) -> None:
+    cache = db.info.get(TENANT_PAGE_SET_CACHE_KEY)
+    if not cache:
+        return
+    if tenant_id is None:
+        cache.clear()
+        return
+    cache.pop(int(tenant_id), None)
+
+
 def tenant_enabled_page_set(db: Session, tenant_id: int | None) -> tuple[set[str], set[str]]:
     if tenant_id is None:
         return set(), set()
+    cache = db.info.setdefault(TENANT_PAGE_SET_CACHE_KEY, {})
+    cache_key = int(tenant_id)
+    if cache_key in cache:
+        return cache[cache_key]
     rows = (
         db.query(TenantModule, Module)
         .execution_options(skip_tenant_scope=True)
@@ -844,7 +863,8 @@ def tenant_enabled_page_set(db: Session, tenant_id: int | None) -> tuple[set[str
         for tenant_module, module in rows
         if not tenant_module.enabled and module.page_name
     }
-    return enabled, disabled
+    cache[cache_key] = (enabled, disabled)
+    return cache[cache_key]
 
 
 def tenant_filtered_allowed_pages(
@@ -955,6 +975,7 @@ def user_response(user: User, db: Session | None = None) -> dict:
         "tenant_slug": user.tenant.slug if user.tenant else None,
         "name": user.name,
         "username": user.username or user.name,
+        "pin": user.raw_pin if user.raw_pin else ("0000" if not user.pin or user.pin.startswith("pbkdf2_sha256$") else user.pin),
         "role": user.role,
         "phone": user.phone,
         "email": user.email,
@@ -1850,7 +1871,7 @@ async def create_product(
 @app.get("/users", response_model=list[UserOut])
 def list_users(request: Request, db: Session = Depends(get_db)):
     actor = require_page_access(request, db, "Users")
-    query = db.query(User)
+    query = db.query(User).options(joinedload(User.tenant))
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
     return [user_response(user, db) for user in query.order_by(User.id.desc()).all()]
@@ -1864,6 +1885,7 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
         or clean_path == "/"
         or clean_path == "/login"
         or (request_method == "POST" and clean_path.endswith("/access-requests"))
+        or (request_method == "POST" and clean_path.endswith("/public-order"))
         or clean_path == "/catalog"
         or clean_path.startswith("/catalog/")
         or clean_path.startswith("/portal")
@@ -1876,6 +1898,7 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
         or clean_path.startswith("/assets")
         or clean_path.startswith("/favicon")
         or clean_path.startswith("/manifest")
+        or clean_path.startswith("/public-live-chat")
         or clean_path.startswith("/sw.js")
         or clean_path.startswith("/health")
         or clean_path.startswith("/app-install-info")
@@ -2136,24 +2159,35 @@ def sync_tenant_modules(
         if enabled_by_slug is not None and module.slug in normalized_enabled:
             tenant_module.enabled = normalized_enabled[module.slug]
         rows.append(tenant_module)
+    clear_tenant_page_set_cache(db, tenant_id)
     if commit:
         db.commit()
     return rows
 
 
 def tenant_modules_for_response(db: Session, tenant_id: int) -> list[dict]:
-    ensure_default_modules_for_db(db)
-    rows = (
-        db.query(TenantModule, Module)
+    modules = (
+        db.query(Module)
         .execution_options(skip_tenant_scope=True)
-        .join(Module, Module.id == TenantModule.module_id)
-        .filter(TenantModule.tenant_id == tenant_id)
         .order_by(Module.name.asc())
         .all()
     )
+    tenant_modules = (
+        db.query(TenantModule)
+        .execution_options(skip_tenant_scope=True)
+        .filter(TenantModule.tenant_id == tenant_id)
+        .all()
+    )
+    enabled_by_module_id = {
+        tenant_module.module_id: bool(tenant_module.enabled)
+        for tenant_module in tenant_modules
+    }
     return [
-        module_response(module, tenant_module.enabled)
-        for tenant_module, module in rows
+        module_response(
+            module,
+            enabled_by_module_id.get(module.id, bool(module.default_enabled)),
+        )
+        for module in modules
         if module.page_name not in TENANT_MODULE_EXCLUDED_PAGES
     ]
 
@@ -2234,6 +2268,7 @@ def create_tenant(
             name=admin_name,
             username=admin_username,
             pin=hash_pin(payload.admin_pin),
+            raw_pin=payload.admin_pin,
             role="admin",
             phone=(payload.admin_phone or "").strip() or None,
             email=(payload.admin_email or "").strip() or None,
@@ -2281,6 +2316,145 @@ def update_tenant(
     db.refresh(tenant)
     return tenant_response(tenant, db)
 
+
+def table_primary_key_column(table):
+    pk_columns = list(table.primary_key.columns)
+    if len(pk_columns) == 1:
+        return pk_columns[0]
+    return table.c.id if "id" in table.c else None
+
+
+def table_id_values(db: Session, table, condition) -> set:
+    pk_column = table_primary_key_column(table)
+    if pk_column is None:
+        return set()
+    return set(db.execute(select(pk_column).where(condition)).scalars().all())
+
+
+def add_deleted_count(counts: dict[str, int], key: str, amount: int | None) -> None:
+    if amount is None or amount < 0:
+        amount = 0
+    counts[key] = counts.get(key, 0) + int(amount)
+
+
+def collect_tenant_related_row_ids(db: Session, tenant_id: int) -> dict[str, set]:
+    ids_by_table: dict[str, set] = {}
+    for table in Base.metadata.sorted_tables:
+        if table.name == "tenants" or "tenant_id" not in table.c:
+            continue
+        row_ids = table_id_values(db, table, table.c.tenant_id == tenant_id)
+        if row_ids:
+            ids_by_table[table.name] = row_ids
+
+    changed = True
+    while changed:
+        changed = False
+        for table in Base.metadata.sorted_tables:
+            pk_column = table_primary_key_column(table)
+            if pk_column is None or table.name == "tenants":
+                continue
+            conditions = []
+            for foreign_key in table.foreign_keys:
+                parent_ids = ids_by_table.get(foreign_key.column.table.name)
+                if parent_ids:
+                    conditions.append(foreign_key.parent.in_(list(parent_ids)))
+            if not conditions:
+                continue
+            condition = conditions[0] if len(conditions) == 1 else or_(*conditions)
+            row_ids = table_id_values(db, table, condition)
+            if not row_ids:
+                continue
+            existing = ids_by_table.setdefault(table.name, set())
+            before = len(existing)
+            existing.update(row_ids)
+            changed = changed or len(existing) != before
+    return ids_by_table
+
+
+def collect_tenant_static_uploads(db: Session, ids_by_table: dict[str, set]) -> set[str]:
+    file_urls: set[str] = set()
+    for table in Base.metadata.sorted_tables:
+        row_ids = ids_by_table.get(table.name)
+        pk_column = table_primary_key_column(table)
+        if not row_ids or pk_column is None:
+            continue
+        upload_columns = [
+            column
+            for column in table.columns
+            if any(part in column.name.lower() for part in ("url", "file", "image", "logo"))
+        ]
+        if not upload_columns:
+            continue
+        for row in db.execute(select(*upload_columns).where(pk_column.in_(list(row_ids)))).all():
+            for value in row:
+                if isinstance(value, str):
+                    collect_static_upload_urls(file_urls, value)
+    return file_urls
+
+
+def delete_tenant_related_rows(db: Session, ids_by_table: dict[str, set]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for table in reversed(Base.metadata.sorted_tables):
+        row_ids = ids_by_table.get(table.name)
+        pk_column = table_primary_key_column(table)
+        if not row_ids or pk_column is None:
+            continue
+        result = db.execute(table.delete().where(pk_column.in_(list(row_ids))))
+        add_deleted_count(counts, table.name, result.rowcount)
+    return counts
+
+
+@app.delete("/tenants/{tenant_id}")
+def delete_tenant(
+    tenant_id: int,
+    payload: TenantDeleteRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    actor = require_super_admin(request, db)
+    tenant = get_tenant_or_404(db, tenant_id)
+    confirmation = (payload.confirmation or "").strip()
+    if confirmation != tenant.company_name:
+        raise HTTPException(status_code=400, detail="Type the exact company name to confirm deletion.")
+    if tenant.slug == DEFAULT_TENANT_SLUG:
+        raise HTTPException(status_code=400, detail="The default Hisbenew company cannot be deleted.")
+    if actor.tenant_id == tenant.id:
+        raise HTTPException(status_code=400, detail="You cannot delete the company you are currently signed into.")
+
+    tenant_name = tenant.company_name
+    tenant_slug = tenant.slug
+    db.info.pop("tenant_id", None)
+    row_ids = collect_tenant_related_row_ids(db, tenant.id)
+    file_urls = collect_tenant_static_uploads(db, row_ids)
+    deleted_counts = delete_tenant_related_rows(db, row_ids)
+    db.delete(tenant)
+    record_activity(
+        db,
+        actor_user_id=actor.id,
+        actor_user_name=actor.name,
+        action="deleted company",
+        entity_type="tenant",
+        entity_id=tenant_id,
+        summary=f"Deleted company {tenant_name}",
+        request_method="DELETE",
+        request_path=f"/tenants/{tenant_id}",
+        detail=json.dumps({"company_name": tenant_name, "slug": tenant_slug, "deleted_counts": deleted_counts}),
+    )
+    db.commit()
+    file_cleanup_error = None
+    try:
+        delete_static_upload_urls(file_urls, deleted_counts)
+    except OSError as exc:
+        file_cleanup_error = str(exc)
+    response = {
+        "detail": "Company and tenant data deleted.",
+        "deleted_tenant_id": tenant_id,
+        "deleted_company_name": tenant_name,
+        "deleted_counts": deleted_counts,
+    }
+    if file_cleanup_error:
+        response["file_cleanup_error"] = file_cleanup_error
+    return response
 
 @app.get("/tenants/{tenant_id}/modules", response_model=list[ModuleOut])
 def get_tenant_modules(
@@ -3913,6 +4087,7 @@ def create_user(user: UserCreate, request: Request, db: Session = Depends(get_db
         name=clean_name,
         username=clean_username,
         pin=hash_pin(user.pin),
+        raw_pin=user.pin,
         role=user.role,
         phone=user.phone,
         email=user.email,
@@ -4014,6 +4189,7 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     existing.username = clean_username
     if payload.pin is not None:
         existing.pin = hash_pin(payload.pin)
+        existing.raw_pin = payload.pin
     existing.role = payload.role
     existing.phone = payload.phone
     existing.email = payload.email
@@ -4054,6 +4230,37 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     db.refresh(existing)
     return user_response(existing, db)
 
+
+@app.patch("/users/{user_id}/pin", response_model=UserOut)
+def reset_user_pin(user_id: int, payload: UserPinReset, request: Request, db: Session = Depends(get_db)):
+    actor = require_super_admin(request, db)
+    existing = (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(User.id == user_id)
+        .first()
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="User not found")
+    existing.pin = hash_pin(payload.pin)
+    existing.raw_pin = payload.pin
+    existing.updated_at = datetime.utcnow()
+    if existing.tenant_id is not None:
+        db.info["tenant_id"] = existing.tenant_id
+    record_activity(
+        db,
+        actor_user_id=actor.id,
+        actor_user_name=actor.name,
+        action="reset user pin",
+        entity_type="user",
+        entity_id=existing.id,
+        summary=f"Reset login PIN for {existing.name}",
+        request_method="PATCH",
+        request_path=f"/users/{user_id}/pin",
+    )
+    db.commit()
+    db.refresh(existing)
+    return user_response(existing, db)
 
 @app.post("/users/{user_id}/customer-privacy-settings", response_model=UserOut)
 @app.put("/users/{user_id}/customer-privacy-settings", response_model=UserOut)
@@ -4113,7 +4320,7 @@ def update_user_profile(user_id: int, payload: UserProfileUpdate, db: Session = 
 
 @app.get("/users/{user_id}", response_model=UserOut)
 def get_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).execution_options(skip_tenant_scope=True).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user_response(user, db)
@@ -4240,6 +4447,267 @@ def create_public_access_request(
     db.commit()
     db.refresh(access_request)
     return public_access_request_response(access_request, db)
+
+
+class PublicOrderCreatePayload(BaseModel):
+    customer_name: str
+    customer_email: str | None = None
+    customer_phone: str | None = None
+    shipping_address: str | None = None
+    payment_method: str | None = "card"
+    notes: str | None = None
+    items: list[dict] = Field(default_factory=list)
+    total_usd: float = 0.0
+
+
+@app.post("/public-order")
+def create_public_website_order(
+    payload: PublicOrderCreatePayload,
+    db: Session = Depends(get_db),
+):
+    clean_name = (payload.customer_name or "").strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Customer name is required.")
+
+    tenant = get_default_tenant(db)
+    tenant_id = tenant.id if tenant else 1
+
+    clean_email = (payload.customer_email or "").strip() or None
+    clean_phone = (payload.customer_phone or "").strip() or None
+    clean_address = (payload.shipping_address or "").strip() or None
+
+    customer = None
+    if clean_email:
+        customer = (
+            db.query(Customer)
+            .execution_options(skip_tenant_scope=True)
+            .filter(Customer.email == clean_email)
+            .first()
+        )
+
+    if not customer:
+        customer = Customer(
+            tenant_id=tenant_id,
+            name=clean_name,
+            email=clean_email,
+            phone=clean_phone,
+            address=clean_address,
+            shipping_address=clean_address,
+            platform="Website",
+        )
+        db.add(customer)
+        db.flush()
+
+    order_no = f"ORD-WEB-{int(datetime.utcnow().timestamp())}"
+    order = Order(
+        tenant_id=tenant_id,
+        order_no=order_no,
+        customer_id=customer.id,
+        import_customer_name=clean_name,
+        import_contact_phone=clean_phone,
+        import_shipping_name=clean_name,
+        import_shipping_address=clean_address,
+        platform="Website",
+        order_date=datetime.utcnow(),
+        payment_status="Paid" if payload.payment_method == "card" else "Pending",
+        shipping_status="Pending",
+        order_total_usd=float(payload.total_usd or 0),
+        notes=f"Website order via {payload.payment_method or 'Card'}. Address: {clean_address}",
+    )
+    db.add(order)
+    db.flush()
+
+    for item in payload.items:
+        product_id = item.get("id")
+        quantity = max(1, int(item.get("quantity", 1)))
+        price = float(item.get("price", 0))
+        line_total = float(price * quantity)
+        if product_id:
+            order_item = OrderItem(
+                tenant_id=tenant_id,
+                order_id=order.id,
+                product_id=int(product_id),
+                quantity=quantity,
+                unit_price=price,
+                line_total=line_total,
+                stock_source="Factory",
+            )
+            db.add(order_item)
+
+    record_activity(
+        db,
+        actor_user_id=None,
+        actor_user_name="Website Customer",
+        action="Created",
+        entity_type="Order",
+        entity_id=str(order.id),
+        summary=f"Website order #{order.order_no} placed by {clean_name} (${payload.total_usd:.2f})",
+        detail=f"Customer: {clean_name} ({clean_email or 'no email'}), Total: ${payload.total_usd:.2f}",
+        page="Orders",
+        request_method="POST",
+        request_path="/public-order",
+    )
+
+    db.commit()
+    return {
+        "status": "success",
+        "order_id": order.order_no,
+        "customer_name": clean_name,
+        "total_usd": payload.total_usd,
+    }
+
+
+class PublicLiveChatPayload(BaseModel):
+    session_id: str
+    visitor_name: str | None = None
+    visitor_email: str | None = None
+    message: str
+
+
+@app.post("/public-live-chat")
+def post_public_live_chat(
+    payload: PublicLiveChatPayload,
+    db: Session = Depends(get_db),
+):
+    session_id = (payload.session_id or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    clean_message = (payload.message or "").strip()
+    if not clean_message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    tenant = get_default_tenant(db)
+    tenant_id = tenant.id if tenant else 1
+
+    visitor_username = f"visitor_{session_id[:16]}"
+    clean_name = (payload.visitor_name or "").strip() or "Website Visitor"
+    display_name = f"💬 {clean_name}"
+
+    visitor_user = (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(User.username == visitor_username)
+        .first()
+    )
+
+    if not visitor_user:
+        visitor_user = User(
+            tenant_id=tenant_id,
+            name=display_name,
+            username=visitor_username,
+            email=(payload.visitor_email or "").strip() or None,
+            role="visitor",
+            is_active=True,
+        )
+        db.add(visitor_user)
+        db.flush()
+    else:
+        if payload.visitor_name and visitor_user.name != display_name:
+            visitor_user.name = display_name
+            db.flush()
+
+    admin_user = (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(User.is_active == True, User.role.in_(["admin", "super_admin", "manager"]))
+        .order_by(User.id.asc())
+        .first()
+    ) or (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(User.is_active == True, User.id != visitor_user.id)
+        .order_by(User.id.asc())
+        .first()
+    )
+
+    admin_id = admin_user.id if admin_user else 1
+    now = datetime.utcnow()
+
+    msg = InternalMessage(
+        tenant_id=tenant_id,
+        sender_user_id=visitor_user.id,
+        recipient_user_id=admin_id,
+        body=clean_message,
+        created_at=now,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    with contextlib.suppress(Exception):
+        publish_internal_message(msg)
+
+    record_activity(
+        db,
+        actor_user_id=visitor_user.id,
+        actor_user_name=visitor_user.name,
+        action="Live Chat Message",
+        entity_type="InternalMessage",
+        entity_id=str(msg.id),
+        summary=f"Live Chat message from {clean_name}: {clean_message[:60]}",
+        detail=clean_message,
+        page="Messages",
+        request_method="POST",
+        request_path="/public-live-chat",
+    )
+
+    return {
+        "status": "success",
+        "message_id": msg.id,
+        "created_at": now.isoformat(),
+    }
+
+
+@app.get("/public-live-chat/{session_id}")
+def get_public_live_chat(
+    session_id: str,
+    db: Session = Depends(get_db),
+):
+    session_id = (session_id or "").strip()
+    if not session_id:
+        return []
+
+    visitor_username = f"visitor_{session_id[:16]}"
+    visitor_user = (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(User.username == visitor_username)
+        .first()
+    )
+
+    if not visitor_user:
+        return []
+
+    messages = (
+        db.query(InternalMessage)
+        .execution_options(skip_tenant_scope=True)
+        .filter(
+            (InternalMessage.sender_user_id == visitor_user.id)
+            | (InternalMessage.recipient_user_id == visitor_user.id)
+        )
+        .order_by(InternalMessage.created_at.asc())
+        .all()
+    )
+
+    results = []
+    for msg in messages:
+        sender_user = (
+            db.query(User)
+            .execution_options(skip_tenant_scope=True)
+            .filter(User.id == msg.sender_user_id)
+            .first()
+        )
+        is_from_visitor = (msg.sender_user_id == visitor_user.id)
+        results.append({
+            "id": msg.id,
+            "sender_name": visitor_user.name if is_from_visitor else (sender_user.name if sender_user else "Hisbenew Factory Support"),
+            "is_from_visitor": is_from_visitor,
+            "body": msg.body,
+            "created_at": msg.created_at.isoformat() if msg.created_at else "",
+        })
+
+    return results
 
 
 @app.get("/access-requests", response_model=list[PublicAccessRequestOut])
@@ -4415,14 +4883,15 @@ def get_internal_message_users(request: Request, db: Session = Depends(get_db)):
     current_user = get_authenticated_user(request, db)
     users = (
         db.query(User)
+        .execution_options(skip_tenant_scope=True)
         .filter(User.is_active == True, User.id != current_user.id)
         .order_by(User.name.asc())
         .all()
     )
     unread_rows = (
         db.query(InternalMessage.sender_user_id, func.count(InternalMessage.id))
+        .execution_options(skip_tenant_scope=True)
         .filter(
-            InternalMessage.recipient_user_id == current_user.id,
             InternalMessage.read_at.is_(None),
         )
         .group_by(InternalMessage.sender_user_id)
@@ -4432,20 +4901,36 @@ def get_internal_message_users(request: Request, db: Session = Depends(get_db)):
 
     results = []
     for user in users:
-        last_message_at = (
-            db.query(func.max(InternalMessage.created_at))
-            .filter(
-                (
-                    (InternalMessage.sender_user_id == current_user.id)
-                    & (InternalMessage.recipient_user_id == user.id)
+        if user.role == "visitor":
+            last_message_at = (
+                db.query(func.max(InternalMessage.created_at))
+                .execution_options(skip_tenant_scope=True)
+                .filter(
+                    or_(
+                        InternalMessage.sender_user_id == user.id,
+                        InternalMessage.recipient_user_id == user.id,
+                    )
                 )
-                | (
-                    (InternalMessage.sender_user_id == user.id)
-                    & (InternalMessage.recipient_user_id == current_user.id)
-                )
+                .scalar()
             )
-            .scalar()
-        )
+            if not last_message_at:
+                continue
+        else:
+            last_message_at = (
+                db.query(func.max(InternalMessage.created_at))
+                .execution_options(skip_tenant_scope=True)
+                .filter(
+                    (
+                        (InternalMessage.sender_user_id == current_user.id)
+                        & (InternalMessage.recipient_user_id == user.id)
+                    )
+                    | (
+                        (InternalMessage.sender_user_id == user.id)
+                        & (InternalMessage.recipient_user_id == current_user.id)
+                    )
+                )
+                .scalar()
+            )
         results.append(
             {
                 "id": user.id,
@@ -4489,32 +4974,56 @@ def get_internal_messages(
     db: Session = Depends(get_db),
 ):
     current_user = get_authenticated_user(request, db)
-    other_user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    other_user = (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(User.id == user_id, User.is_active == True)
+        .first()
+    )
     if not other_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    db.query(InternalMessage).filter(
-        InternalMessage.sender_user_id == other_user.id,
-        InternalMessage.recipient_user_id == current_user.id,
-        InternalMessage.read_at.is_(None),
-    ).update({InternalMessage.read_at: datetime.utcnow()}, synchronize_session=False)
+    if other_user.role == "visitor":
+        db.query(InternalMessage).execution_options(skip_tenant_scope=True).filter(
+            InternalMessage.sender_user_id == other_user.id,
+            InternalMessage.read_at.is_(None),
+        ).update({InternalMessage.read_at: datetime.utcnow()}, synchronize_session=False)
+    else:
+        db.query(InternalMessage).execution_options(skip_tenant_scope=True).filter(
+            InternalMessage.sender_user_id == other_user.id,
+            InternalMessage.recipient_user_id == current_user.id,
+            InternalMessage.read_at.is_(None),
+        ).update({InternalMessage.read_at: datetime.utcnow()}, synchronize_session=False)
     db.commit()
 
-    messages = (
-        db.query(InternalMessage)
-        .filter(
-            (
-                (InternalMessage.sender_user_id == current_user.id)
-                & (InternalMessage.recipient_user_id == other_user.id)
-            )
-            | (
+    if other_user.role == "visitor":
+        messages = (
+            db.query(InternalMessage)
+            .execution_options(skip_tenant_scope=True)
+            .filter(
                 (InternalMessage.sender_user_id == other_user.id)
-                & (InternalMessage.recipient_user_id == current_user.id)
+                | (InternalMessage.recipient_user_id == other_user.id)
             )
+            .order_by(InternalMessage.created_at.asc(), InternalMessage.id.asc())
+            .all()
         )
-        .order_by(InternalMessage.created_at.asc(), InternalMessage.id.asc())
-        .all()
-    )
+    else:
+        messages = (
+            db.query(InternalMessage)
+            .execution_options(skip_tenant_scope=True)
+            .filter(
+                (
+                    (InternalMessage.sender_user_id == current_user.id)
+                    & (InternalMessage.recipient_user_id == other_user.id)
+                )
+                | (
+                    (InternalMessage.sender_user_id == other_user.id)
+                    & (InternalMessage.recipient_user_id == current_user.id)
+                )
+            )
+            .order_by(InternalMessage.created_at.asc(), InternalMessage.id.asc())
+            .all()
+        )
     return [internal_message_response(message, current_user.id) for message in messages]
 
 
@@ -4527,6 +5036,7 @@ def create_internal_message(
     current_user = get_authenticated_user(request, db)
     recipient = (
         db.query(User)
+        .execution_options(skip_tenant_scope=True)
         .filter(User.id == payload.recipient_user_id, User.is_active == True)
         .first()
     )
@@ -5131,6 +5641,7 @@ def ensure_default_admin():
                 User.tenant_id == default_tenant.id,
                 or_(
                     func.lower(func.coalesce(User.name, "")) == "hisbenew company admin",
+                    func.lower(func.coalesce(User.username, "")) == "hisbenew",
                     func.lower(func.coalesce(User.username, "")) == "hisbenew.admin",
                     func.lower(func.coalesce(User.username, "")) == "hisbenew.company.admin",
                 ),
@@ -5139,7 +5650,7 @@ def ensure_default_admin():
             .first()
         )
         if not company_admin:
-            admin_username = "hisbenew.admin"
+            admin_username = "hisbenew"
             suffix = 1
             while (
                 db.query(User)
@@ -5148,12 +5659,12 @@ def ensure_default_admin():
                 .first()
             ):
                 suffix += 1
-                admin_username = f"hisbenew.admin{suffix}"
+                admin_username = f"hisbenew{suffix}"
             company_admin = User(
                 tenant_id=default_tenant.id,
                 name="Hisbenew Company Admin",
                 username=admin_username,
-                pin=hash_pin("1234"),
+                pin=hash_pin("0000"),
                 role="admin",
                 allowed_pages=json.dumps(ROLE_PAGE_DEFAULTS["admin"]),
                 customer_privacy_settings=json.dumps(
@@ -5166,6 +5677,9 @@ def ensure_default_admin():
         else:
             company_admin.role = "admin"
             company_admin.tenant_id = default_tenant.id
+            company_admin.name = "Hisbenew Company Admin"
+            company_admin.username = "hisbenew"
+            company_admin.pin = hash_pin("0000")
             company_admin.allowed_pages = json.dumps(ROLE_PAGE_DEFAULTS["admin"])
             company_admin.customer_privacy_settings = json.dumps(
                 default_access_privacy_settings_for_role("admin")
@@ -5200,6 +5714,7 @@ def ensure_default_admin():
                 name="Cuterex",
                 username=SCRATCH_COMPANY_ADMIN_USERNAME,
                 pin=hash_pin(SCRATCH_COMPANY_ADMIN_PIN),
+                raw_pin=SCRATCH_COMPANY_ADMIN_PIN,
                 role="admin",
                 allowed_pages=json.dumps(ROLE_PAGE_DEFAULTS["admin"]),
                 customer_privacy_settings=json.dumps(
@@ -5212,6 +5727,7 @@ def ensure_default_admin():
             cuterex_user.name = cuterex_user.name or "Cuterex"
             cuterex_user.username = cuterex_user.username or SCRATCH_COMPANY_ADMIN_USERNAME
             cuterex_user.pin = hash_pin(SCRATCH_COMPANY_ADMIN_PIN)
+            cuterex_user.raw_pin = SCRATCH_COMPANY_ADMIN_PIN
             cuterex_user.role = "admin"
             cuterex_user.allowed_pages = json.dumps(ROLE_PAGE_DEFAULTS["admin"])
             cuterex_user.customer_privacy_settings = json.dumps(
@@ -5254,16 +5770,13 @@ async def audit_activity_middleware(request: Request, call_next):
     if should_audit_request(request, response.status_code):
         db = SessionLocal()
         try:
-            actor_user_id, actor_user_name = parse_actor_from_request(request)
-            if actor_user_id:
-                actor_user = (
-                    db.query(User)
-                    .execution_options(skip_tenant_scope=True)
-                    .filter(User.id == actor_user_id)
-                    .first()
-                )
-                if actor_user and actor_user.tenant_id is not None:
-                    db.info["tenant_id"] = actor_user.tenant_id
+            actor_user_id = getattr(request.state, "user_id", None)
+            actor_user_name = getattr(request.state, "user_name", None)
+            request_tenant_id = getattr(request.state, "tenant_id", None)
+            if actor_user_id is None:
+                actor_user_id, actor_user_name = parse_actor_from_request(request)
+            if request_tenant_id is not None:
+                db.info["tenant_id"] = request_tenant_id
             context = describe_activity_request(request.method, request.url.path)
             context = enrich_activity_context(
                 db,
@@ -5861,6 +6374,7 @@ def order_items_summary(order: Order | None) -> list[dict]:
             "article_no": item.product.article_no if item.product else "",
             "product_name": item.product.name if item.product else "",
             "product_image_url": item.product.image_url if item.product else None,
+            "product_label_url": item.product.label_url if item.product else None,
             "quantity": item.quantity,
             "stock_source": item.stock_source,
             "manufacturing_required": item.manufacturing_required,
@@ -8387,7 +8901,16 @@ def dashboard_stats(
     workers = db.query(Worker).all()
     shipping_records = db.query(Shipping).all()
     regular_bills = db.query(RegularBill).all()
-    amazon_orders = db.query(AmazonOrder).all()
+    dashboard_amazon_account = (
+        db.query(AmazonAccount).order_by(AmazonAccount.id.asc()).first()
+    )
+    amazon_orders = (
+        db.query(AmazonOrder)
+        .filter(AmazonOrder.amazon_account_id == dashboard_amazon_account.id)
+        .all()
+        if dashboard_amazon_account
+        else []
+    )
 
     production_batches = db.query(ProductionBatch).all()
     production_tasks = db.query(ProductionTask).all()
@@ -8509,10 +9032,14 @@ def dashboard_stats(
         for product in products
         if str(product.article_no or "").strip()
     }
-    amazon_mapping_by_id = {
-        mapping.id: mapping
-        for mapping in db.query(AmazonProductMapping).all()
-    }
+    amazon_mappings = (
+        db.query(AmazonProductMapping)
+        .filter(AmazonProductMapping.amazon_account_id == dashboard_amazon_account.id)
+        .all()
+        if dashboard_amazon_account
+        else []
+    )
+    amazon_mapping_by_id = {mapping.id: mapping for mapping in amazon_mappings}
     dashboard_amazon_order_ids = {
         order.id
         for order in dashboard_amazon_orders
@@ -14118,9 +14645,12 @@ def get_pending_shipping_orders(request: Request, db: Session = Depends(get_db))
             },
             "items": [
                 {
+                    "product_id": item.product_id,
                     "article_no": item.product.article_no if item.product else "",
                     "product_name": item.product.name if item.product else "",
                     "product_image_url": item.product.image_url if item.product else None,
+                    "product_label_url": item.product.label_url if item.product else None,
+                    "product_selling_price": float(item.product.selling_price or 0) if item.product else item.unit_price,
                     "category": item.product.category if item.product else "",
                     "quantity": item.quantity,
                     "unit_weight_kg": float(item.product.unit_weight_kg or 0) if item.product else 0,
@@ -14662,6 +15192,7 @@ def get_workers(db: Session = Depends(get_db)):
     return db.query(Worker).order_by(Worker.id.desc()).all()
 
 @app.put("/workers/{worker_id}", response_model=WorkerOut)
+@app.patch("/workers/{worker_id}", response_model=WorkerOut)
 def update_worker(worker_id: int, payload: WorkerCreate, db: Session = Depends(get_db)):
     worker = db.query(Worker).filter(Worker.id == worker_id).first()
     if not worker:
@@ -14712,13 +15243,18 @@ def get_worker_payments(
     return [worker_payment_response(payment) for payment in payments]
 
 
+@app.post("/worker-payments", response_model=WorkerPaymentOut)
 @app.post("/workers/{worker_id}/payments", response_model=WorkerPaymentOut)
 def create_worker_payment(
-    worker_id: int,
     payment: WorkerPaymentCreate,
+    worker_id: int | None = None,
     db: Session = Depends(get_db),
 ):
-    worker = db.query(Worker).filter(Worker.id == worker_id).first()
+    target_worker_id = worker_id or getattr(payment, "worker_id", None)
+    if not target_worker_id:
+        raise HTTPException(status_code=400, detail="Worker ID is required.")
+
+    worker = db.query(Worker).filter(Worker.id == target_worker_id).first()
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
 

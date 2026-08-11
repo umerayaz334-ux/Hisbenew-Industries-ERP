@@ -247,6 +247,7 @@ function Start-Backend {
 }
 
 function Start-Frontend {
+    $env:ERP_FRONTEND_HTTPS = "0"
     $existing = Get-ListenerProcessId -Port 5173
     if ($existing) {
         return
@@ -300,7 +301,7 @@ $statusLines = @(
     "Hisbenew ERP mobile server startup complete.",
     "Frontend listener: $(if ($frontendReady) { 'ready' } else { 'not ready' })",
     "Backend listener: $(if ($backendReady) { 'ready' } else { 'not ready' })",
-    "PC ERP URL: http://127.0.0.1:8000/portal",
+    "PC ERP URL: http://localhost:5173/portal",
     "ERP database: $(Join-Path $backendDir 'hisbenew_industries.db')",
     "ERP temp/cache: $portableDir"
 )
@@ -308,9 +309,9 @@ $statusLines = @(
 if ($lanIp) {
     $statusLines += "Mobile basic URL (messages work, microphone blocked): http://$lanIp`:8000/portal"
     if ($mobileHttps) {
-        $statusLines += "Mobile voice-call URL: https://$lanIp`:5173/portal"
+        $statusLines += "Mobile frontend URL: http://$lanIp`:5173/portal"
         $statusLines += "First-time phone certificate: http://$lanIp`:8000/static/hisbenew-erp-mobile.cer"
-        $statusLines += "On Android, install the downloaded file as a CA certificate, close Chrome, then open the secure mobile URL."
+        $statusLines += "HTTPS mobile mode is available by setting ERP_FRONTEND_HTTPS=1 before starting Vite."
     } else {
         $statusLines += "Mobile URL: http://$lanIp`:5173"
         $statusLines += "Voice-call HTTPS setup failed: $mobileHttpsError"

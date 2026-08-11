@@ -1179,7 +1179,7 @@ function Inventory() {
                   <article className="inventory-bulk-change-row" key={product.id}>
                     <div className="inventory-bulk-change-product">
                       {product.image_url ? (
-                        <img
+                        <img loading="lazy" decoding="async"
                           alt={product.article_no || "Product"}
                           src={getImageUrl(product.image_url)}
                         />
@@ -1413,7 +1413,7 @@ function Inventory() {
                     <tr key={product.id}>
                       <td className="inventory-product-cell">
                         {product.image_url ? (
-                          <img
+                          <img loading="lazy" decoding="async"
                             alt={product.article_no || "Product"}
                             className="inventory-thumbnail"
                             src={getImageUrl(product.image_url)}
@@ -1627,7 +1627,7 @@ function Inventory() {
                         data-label="Product"
                       >
                         {imageUrl ? (
-                          <img
+                          <img loading="lazy" decoding="async"
                             alt={movement.product_name || movement.article_no}
                             src={getImageUrl(imageUrl)}
                           />
@@ -1719,7 +1719,7 @@ function Inventory() {
                 <div className="inventory-modal-intro">
                   <div className="inventory-modal-product">
                     {movingProduct.image_url ? (
-                      <img
+                      <img loading="lazy" decoding="async"
                         alt={movingProduct.article_no || "Product"}
                         src={getImageUrl(movingProduct.image_url)}
                       />
@@ -1883,7 +1883,7 @@ function Inventory() {
                 <div className="inventory-modal-intro">
                   <div className="inventory-modal-product">
                     {editingProduct.image_url ? (
-                      <img
+                      <img loading="lazy" decoding="async"
                         alt={editingProduct.article_no || "Product"}
                         src={getImageUrl(editingProduct.image_url)}
                       />
@@ -2052,7 +2052,7 @@ function Inventory() {
                             type="button"
                           >
                             {product.image_url ? (
-                              <img
+                              <img loading="lazy" decoding="async"
                                 alt={product.article_no || "Product"}
                                 src={getImageUrl(product.image_url)}
                               />
@@ -2127,7 +2127,7 @@ function Inventory() {
                 <div className="inventory-modal-intro">
                   <div className="inventory-modal-product">
                     {addingProduct?.image_url ? (
-                      <img
+                      <img loading="lazy" decoding="async"
                         alt={addingProduct.article_no || "Product"}
                         src={getImageUrl(addingProduct.image_url)}
                       />

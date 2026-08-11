@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
+import WorkerLedgerModal from "../components/WorkerLedgerModal";
 import { formatUtcLocal } from "../utils/dateUtils";
 import "./WorkerPayouts.css";
 
@@ -178,6 +179,9 @@ function WorkerPayouts({ userRole, workerId, userName }) {
   const [payoutSearch, setPayoutSearch] = useState("");
   const [methodFilter, setMethodFilter] = useState("All methods");
   const [showPayoutForm, setShowPayoutForm] = useState(false);
+  const [selectedLedgerWorker, setSelectedLedgerWorker] = useState(null);
+  const [isTaskHistoryOpen, setIsTaskHistoryOpen] = useState(false);
+  const [isPayoutHistoryOpen, setIsPayoutHistoryOpen] = useState(false);
   const [form, setForm] = useState(emptyPaymentForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -703,14 +707,25 @@ function WorkerPayouts({ userRole, workerId, userName }) {
                     </div>
                   </div>
 
-                  <button
-                    className="wa-account-action"
-                    onClick={() => selectWorkerForPayout(item)}
-                    type="button"
-                  >
-                    {isWorkerPortal ? "View payouts" : "Record payout"}
-                    <Icon name="arrow" size={16} />
-                  </button>
+                  <div className="wa-account-actions-row" style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
+                    <button
+                      className="wa-account-action"
+                      style={{ background: "var(--bg-hover, #f1f5f9)", color: "var(--color-primary, #2563eb)", flex: 1 }}
+                      onClick={() => setSelectedLedgerWorker(item.worker)}
+                      type="button"
+                    >
+                      📜 View Ledger
+                    </button>
+                    <button
+                      className="wa-account-action"
+                      style={{ flex: 1 }}
+                      onClick={() => selectWorkerForPayout(item)}
+                      type="button"
+                    >
+                      {isWorkerPortal ? "View payouts" : "Record payout"}
+                      <Icon name="arrow" size={16} />
+                    </button>
+                  </div>
                 </article>
               );
             })}
@@ -842,181 +857,260 @@ function WorkerPayouts({ userRole, workerId, userName }) {
         </section>
       )}
 
-      <section className="wa-panel wa-task-panel">
-        <div className="wa-ledger-header">
-          <div>
-            <h2>Task earnings</h2>
-            <p>{visibleTasks.length} completed jobs shown</p>
+      {/* Collapsible Task Earnings History Section (Default Closed) */}
+      <section className="wa-panel wa-task-panel wa-collapsible-history-panel">
+        <button
+          className="wa-history-toggle-button"
+          onClick={() => setIsTaskHistoryOpen(!isTaskHistoryOpen)}
+          type="button"
+          aria-expanded={isTaskHistoryOpen}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "1rem 1.25rem",
+            background: "none",
+            border: "none",
+            fontSize: "1.1rem",
+            fontWeight: "700",
+            cursor: "pointer",
+            color: "var(--text-color, #0f172a)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span>📜 Task Earnings History</span>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted, #64748b)", fontWeight: "500" }}>
+              ({visibleTasks.length} completed jobs &bull; Closed by default)
+            </span>
           </div>
+          <span>{isTaskHistoryOpen ? "▲ Hide" : "▼ Expand History"}</span>
+        </button>
 
-          <div className="wa-ledger-filters">
-            {!isWorkerPortal && (
-              <select
-                aria-label="Filter task earnings by worker"
-                onChange={(event) => setWorkerFilter(event.target.value)}
-                value={workerFilter}
-              >
-                <option value="all">All workers</option>
-                {workers.map((worker) => (
-                  <option key={worker.id} value={worker.id}>
-                    {worker.name}
-                  </option>
-                ))}
-              </select>
+        {isTaskHistoryOpen && (
+          <>
+            <div className="wa-ledger-header" style={{ borderTop: "1px solid var(--border-color, #e2e8f0)" }}>
+              <div>
+                <h2>Completed Job Earnings</h2>
+              </div>
+
+              <div className="wa-ledger-filters">
+                {!isWorkerPortal && (
+                  <select
+                    aria-label="Filter task earnings by worker"
+                    onChange={(event) => setWorkerFilter(event.target.value)}
+                    value={workerFilter}
+                  >
+                    <option value="all">All workers</option>
+                    {workers.map((worker) => (
+                      <option key={worker.id} value={worker.id}>
+                        {worker.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <label className="wa-search-box wa-ledger-search">
+                  <Icon name="search" />
+                  <input
+                    aria-label="Search task earnings"
+                    onChange={(event) => setTaskSearch(event.target.value)}
+                    placeholder="Search task"
+                    value={taskSearch}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {visibleTasks.length === 0 ? (
+              <div className="wa-empty-state wa-empty-ledger">
+                <div className="wa-empty-icon">
+                  <Icon name="task" />
+                </div>
+                <h3>No completed paid jobs</h3>
+                <p>Completed production and order jobs with earnings will appear here.</p>
+              </div>
+            ) : (
+              <div className="wa-table-wrap">
+                <table className="wa-table">
+                  <thead>
+                    <tr>
+                      <th>Task</th>
+                      <th>Worker</th>
+                      <th>Qty</th>
+                      <th>Rate</th>
+                      <th className="wa-align-right">Earning</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleTasks.map((task) => (
+                      <tr key={task.id}>
+                        <td>
+                          <strong>{task.step_name}</strong>
+                          <small>
+                            {task.source_type === "Order" ? "Order task / " : ""}
+                            {task.product_name || task.article_no || "Custom work"}
+                          </small>
+                        </td>
+                        <td>{task.worker_name || "-"}</td>
+                        <td>
+                          {formatAmount(task.completed_quantity)}/
+                          {formatAmount(task.assigned_quantity)}
+                        </td>
+                        <td>{formatCurrency(task.rate_per_piece)} / pc</td>
+                        <td className="wa-amount-cell">
+                          {formatCurrency(getTaskEarning(task))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-            <label className="wa-search-box wa-ledger-search">
-              <Icon name="search" />
-              <input
-                aria-label="Search task earnings"
-                onChange={(event) => setTaskSearch(event.target.value)}
-                placeholder="Search task"
-                value={taskSearch}
-              />
-            </label>
-          </div>
-        </div>
-
-        {visibleTasks.length === 0 ? (
-          <div className="wa-empty-state wa-empty-ledger">
-            <div className="wa-empty-icon">
-              <Icon name="task" />
-            </div>
-            <h3>No completed paid jobs</h3>
-            <p>Completed production and order jobs with earnings will appear here.</p>
-          </div>
-        ) : (
-          <div className="wa-table-wrap">
-            <table className="wa-table">
-              <thead>
-                <tr>
-                  <th>Task</th>
-                  <th>Worker</th>
-                  <th>Qty</th>
-                  <th>Rate</th>
-                  <th className="wa-align-right">Earning</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleTasks.map((task) => (
-                  <tr key={task.id}>
-                    <td>
-                      <strong>{task.step_name}</strong>
-                      <small>
-                        {task.source_type === "Order" ? "Order task / " : ""}
-                        {task.product_name || task.article_no || "Custom work"}
-                      </small>
-                    </td>
-                    <td>{task.worker_name || "-"}</td>
-                    <td>
-                      {formatAmount(task.completed_quantity)}/
-                      {formatAmount(task.assigned_quantity)}
-                    </td>
-                    <td>{formatCurrency(task.rate_per_piece)} / pc</td>
-                    <td className="wa-amount-cell">
-                      {formatCurrency(getTaskEarning(task))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          </>
         )}
       </section>
 
-      <section className="wa-panel wa-ledger-panel">
-        <div className="wa-ledger-header">
-          <div>
-            <h2>Payout history</h2>
-            <p>{visiblePayments.length} transactions shown</p>
+      {/* Collapsible Payout History Section (Default Closed) */}
+      <section className="wa-panel wa-ledger-panel wa-collapsible-history-panel">
+        <button
+          className="wa-history-toggle-button"
+          onClick={() => setIsPayoutHistoryOpen(!isPayoutHistoryOpen)}
+          type="button"
+          aria-expanded={isPayoutHistoryOpen}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "1rem 1.25rem",
+            background: "none",
+            border: "none",
+            fontSize: "1.1rem",
+            fontWeight: "700",
+            cursor: "pointer",
+            color: "var(--text-color, #0f172a)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span>🧾 Payout History</span>
+            <span style={{ fontSize: "0.8rem", color: "var(--text-muted, #64748b)", fontWeight: "500" }}>
+              ({visiblePayments.length} recorded payouts &bull; Closed by default)
+            </span>
           </div>
+          <span>{isPayoutHistoryOpen ? "▲ Hide" : "▼ Expand History"}</span>
+        </button>
 
-          <div className="wa-ledger-filters">
-            <label className="wa-search-box wa-ledger-search">
-              <Icon name="search" />
-              <input
-                aria-label="Search payouts"
-                onChange={(event) => setPayoutSearch(event.target.value)}
-                placeholder="Search payout"
-                value={payoutSearch}
-              />
-            </label>
-            <select
-              aria-label="Filter by payment method"
-              onChange={(event) => setMethodFilter(event.target.value)}
-              value={methodFilter}
-            >
-              <option>All methods</option>
-              {availableMethods.map((method) => (
-                <option key={method}>{method}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        {isPayoutHistoryOpen && (
+          <>
+            <div className="wa-ledger-header" style={{ borderTop: "1px solid var(--border-color, #e2e8f0)" }}>
+              <div>
+                <h2>Payout Transactions</h2>
+              </div>
 
-        {visiblePayments.length === 0 ? (
-          <div className="wa-empty-state wa-empty-ledger">
-            <div className="wa-empty-icon">
-              <Icon name="receipt" />
+              <div className="wa-ledger-filters">
+                <label className="wa-search-box wa-ledger-search">
+                  <Icon name="search" />
+                  <input
+                    aria-label="Search payouts"
+                    onChange={(event) => setPayoutSearch(event.target.value)}
+                    placeholder="Search payout"
+                    value={payoutSearch}
+                  />
+                </label>
+                <select
+                  aria-label="Filter by payment method"
+                  onChange={(event) => setMethodFilter(event.target.value)}
+                  value={methodFilter}
+                >
+                  <option>All methods</option>
+                  {availableMethods.map((method) => (
+                    <option key={method}>{method}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <h3>No matching payouts</h3>
-            <p>Recorded worker payouts will appear here.</p>
-          </div>
-        ) : (
-          <div className="wa-table-wrap">
-            <table className="wa-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Worker</th>
-                  <th>Method</th>
-                  <th>Reference</th>
-                  <th>Note</th>
-                  <th className="wa-align-right">Amount</th>
-                  {!isWorkerPortal && <th aria-label="Actions" />}
-                </tr>
-              </thead>
-              <tbody>
-                {visiblePayments.map((payment) => (
-                  <tr key={payment.id}>
-                    <td>{formatUtcLocal(payment.paid_at)}</td>
-                    <td>
-                      <div className="wa-worker-cell is-table-cell">
-                        <span>{getInitials(payment.worker_name)}</span>
-                        <strong>{payment.worker_name || "Worker"}</strong>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="wa-method-pill">
-                        {payment.payment_method || "Payout"}
-                      </span>
-                    </td>
-                    <td>{payment.payment_reference || "-"}</td>
-                    <td>{payment.note || "-"}</td>
-                    <td className="wa-amount-cell">
-                      {formatCurrency(payment.amount)}
-                    </td>
-                    {!isWorkerPortal && (
-                      <td>
-                        <button
-                          aria-label={`Delete payout for ${
-                            payment.worker_name || "worker"
-                          }`}
-                          className="wa-delete-button"
-                          onClick={() => deletePayment(payment)}
-                          title="Delete payout"
-                          type="button"
-                        >
-                          <Icon name="trash" size={16} />
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+            {visiblePayments.length === 0 ? (
+              <div className="wa-empty-state wa-empty-ledger">
+                <div className="wa-empty-icon">
+                  <Icon name="receipt" />
+                </div>
+                <h3>No matching payouts</h3>
+                <p>Recorded worker payouts will appear here.</p>
+              </div>
+            ) : (
+              <div className="wa-table-wrap">
+                <table className="wa-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Worker</th>
+                      <th>Method</th>
+                      <th>Reference</th>
+                      <th>Note</th>
+                      <th className="wa-align-right">Amount</th>
+                      {!isWorkerPortal && <th aria-label="Actions" />}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visiblePayments.map((payment) => (
+                      <tr key={payment.id}>
+                        <td>{formatUtcLocal(payment.paid_at)}</td>
+                        <td>
+                          <div className="wa-worker-cell is-table-cell">
+                            <span>{getInitials(payment.worker_name)}</span>
+                            <strong>{payment.worker_name || "Worker"}</strong>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="wa-method-pill">
+                            {payment.payment_method || "Payout"}
+                          </span>
+                        </td>
+                        <td>{payment.payment_reference || "-"}</td>
+                        <td>{payment.note || "-"}</td>
+                        <td className="wa-amount-cell">
+                          {formatCurrency(payment.amount)}
+                        </td>
+                        {!isWorkerPortal && (
+                          <td>
+                            <button
+                              aria-label={`Delete payout for ${
+                                payment.worker_name || "worker"
+                              }`}
+                              className="wa-delete-button"
+                              onClick={() => deletePayment(payment)}
+                              title="Delete payout"
+                              type="button"
+                            >
+                              <Icon name="trash" size={16} />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
+
+      {/* Worker Ledger Modal */}
+      {selectedLedgerWorker && (
+        <WorkerLedgerModal
+          worker={selectedLedgerWorker}
+          workers={workers}
+          tasks={tasks}
+          payments={payments}
+          onClose={() => setSelectedLedgerWorker(null)}
+          onSelectWorker={(w) => setSelectedLedgerWorker(w)}
+          onRecordPayout={(w) => {
+            selectWorkerForPayout({ worker: w, balance: ledger.find((l) => l.worker.id === w.id)?.balance || 0 });
+          }}
+        />
+      )}
     </div>
   );
 }

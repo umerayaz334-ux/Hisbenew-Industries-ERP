@@ -197,29 +197,26 @@ function AmazonOrders({ authenticatedUser }) {
 
   return (
     <main className="amazon-orders-page">
-      <header className="amazon-orders-header">
-        <div>
-          <span className="amazon-orders-eyebrow">
-            Amazon Seller Central · Phase 4
-          </span>
-          <h1>FBA Orders</h1>
-          <p>
-            Read-only Amazon-fulfilled orders. No buyer addresses are requested,
-            and these orders never reserve factory stock or enter factory
-            picking, packing, shipping, or dispatch.
-          </p>
-        </div>
-        <div className="amazon-orders-header-actions">
+      <header className="amazon-orders-top-bar">
+        <div className="amazon-orders-top-title">
+          <h1>📦 Amazon FBA Orders</h1>
           <span
-            className={`amazon-orders-connection ${
+            className={`amazon-orders-badge ${
               connection?.connection_status === "Connected"
                 ? "is-connected"
                 : "is-offline"
             }`}
           >
-            {connection?.connection_status || "Not configured"}
+            ● {connection?.connection_status || "Not configured"}
           </span>
-          <span className="amazon-orders-safety">No customer PII</span>
+          <span className="amazon-orders-safety-badge">FBA Fulfill · Isolated</span>
+        </div>
+        <div className="amazon-orders-top-meta">
+          {jobs[0] && (
+            <small>
+              Synced {formatDateTime(jobs[0].completed_at || jobs[0].created_at)}
+            </small>
+          )}
         </div>
       </header>
 
@@ -231,28 +228,53 @@ function AmazonOrders({ authenticatedUser }) {
           <div className="amazon-orders-notice is-error">{error}</div>
         ) : null}
 
-        <section className="amazon-orders-summary-grid">
-          {cards.map(([label, value, detail]) => (
-            <article key={label}>
-              <span>{label}</span>
-              <strong>{typeof value === "string" ? value : number(value)}</strong>
-              <small>{detail}</small>
-            </article>
-          ))}
-        </section>
+        {/* Single Executive FBA Orders Summary Banner */}
+        <section className="amazon-orders-exec-bar">
+          <div className="amazon-orders-exec-block is-primary">
+            <span className="amazon-orders-exec-label">Total FBA Orders</span>
+            <strong className="amazon-orders-exec-value">
+              {number(summary.order_count)}
+            </strong>
+            <div className="amazon-orders-exec-sub">
+              <span>Today: <strong>{number(summary.orders_today)}</strong></span>
+              <span className="dot">•</span>
+              <span>Units: <strong>{number(summary.unit_count)}</strong></span>
+            </div>
+          </div>
 
-        <section className="amazon-orders-safety-strip">
-          <div>
-            <strong>Fulfillment channel: AMAZON</strong>
-            <span>Amazon controls fulfillment and shipment status.</span>
+          <div className="amazon-orders-exec-divider" />
+
+          <div className="amazon-orders-exec-strip">
+            <div className="amazon-orders-exec-item">
+              <span>Shipped</span>
+              <strong className="is-green">{number(summary.shipped_count)}</strong>
+            </div>
+            <div className="amazon-orders-exec-item">
+              <span>Unshipped</span>
+              <strong className="is-amber">{number(summary.unshipped_count)}</strong>
+            </div>
+            <div className="amazon-orders-exec-item">
+              <span>Pending</span>
+              <strong className="is-slate">{number(summary.pending_count)}</strong>
+            </div>
+            <div className="amazon-orders-exec-item">
+              <span>Cancelled</span>
+              <strong className="is-red">{number(summary.cancelled_count)}</strong>
+            </div>
           </div>
-          <div>
-            <strong>Factory workflow isolated</strong>
-            <span>No ERP sales order, reservation, pick, pack, or dispatch record.</span>
-          </div>
-          <div>
-            <strong>Non-restricted data only</strong>
-            <span>Buyer and recipient datasets are not requested or stored.</span>
+
+          <div className="amazon-orders-exec-divider" />
+
+          <div className="amazon-orders-exec-block is-highlight">
+            <span className="amazon-orders-exec-label">Total FBA Revenue</span>
+            <strong className="amazon-orders-exec-value is-blue">
+              {money(summary.revenue)}
+            </strong>
+            <small className="amazon-orders-exec-badge">
+              {summary.unmapped_item_count > 0
+                ? `⚠️ ${summary.unmapped_item_count} unmapped items`
+                : `✓ ${summary.mapped_item_count} mapped items`}
+            </small>
           </div>
         </section>
 

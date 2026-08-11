@@ -1439,6 +1439,8 @@ function OperationalDashboard({ userRole, workerId, userName }) {
                 action: "Open orders",
                 detail: "No urgent operational issues are waiting.",
                 href: "/portal/orders",
+                icon: "OK",
+                label: "All clear",
                 title: "Operations are clear",
                 tone: "success",
               };
@@ -1900,10 +1902,10 @@ function OperationalDashboard({ userRole, workerId, userName }) {
           className={`dashboard-modern-alert is-${focusNotice.tone}`}
         >
           <span className="dashboard-modern-alert-icon" aria-hidden="true">
-            !
+            {focusNotice.icon || (focusNotice.tone === "info" ? "i" : "!")}
           </span>
           <div className="dashboard-modern-alert-copy">
-            <span>Priority</span>
+            <span>{focusNotice.label || "Priority"}</span>
             <h2>{focusNotice.title}</h2>
             {focusNotice.detail && <p>{focusNotice.detail}</p>}
           </div>

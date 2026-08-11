@@ -14,12 +14,13 @@ const formatTime = (value) => {
   });
 };
 
-export default function SuperAdminDashboard({ authenticatedUser, onNavigate }) {
+export default function SuperAdminDashboard({ authenticatedUser, onNavigate, onSwitchToCompanyPortal }) {
   const [tenants, setTenants] = useState([]);
   const [users, setUsers] = useState([]);
   const [activityLogs, setActivityLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [companySearch, setCompanySearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -30,7 +31,7 @@ export default function SuperAdminDashboard({ authenticatedUser, onNavigate }) {
         const [tenantsResponse, usersResponse, activityResponse] = await Promise.all([
           api.get("/tenants"),
           api.get("/users"),
-          api.get("/activity-logs?limit=12"),
+          api.get("/activity-logs?limit=15"),
         ]);
         if (cancelled) return;
         setTenants(Array.isArray(tenantsResponse.data) ? tenantsResponse.data : []);
@@ -50,94 +51,195 @@ export default function SuperAdminDashboard({ authenticatedUser, onNavigate }) {
     };
   }, []);
 
-  const tenantById = useMemo(
-    () => new Map(tenants.map((tenant) => [Number(tenant.id), tenant])),
-    [tenants]
-  );
   const activeCompanies = tenants.filter((tenant) => tenant.status === "active").length;
   const companyUsers = users.filter((user) => user.role !== "super_admin");
   const companyAdmins = users.filter((user) => user.role === "admin");
-  const recentCompanies = tenants.slice(0, 5);
+
+  const filteredCompanies = useMemo(() => {
+    const q = companySearch.trim().toLowerCase();
+    if (!q) return tenants.slice(0, 5);
+    return tenants
+      .filter(
+        (t) =>
+          t.company_name?.toLowerCase().includes(q) ||
+          t.slug?.toLowerCase().includes(q) ||
+          t.email?.toLowerCase().includes(q)
+      )
+      .slice(0, 5);
+  }, [companySearch, tenants]);
+
+  const greetingName = authenticatedUser?.name || authenticatedUser?.username || "Admin";
 
   return (
-    <div className="super-admin-page">
-      <header className="super-admin-header">
-        <div>
-          <span>Platform dashboard</span>
-          <h1>Super admin</h1>
-          <p>{authenticatedUser?.name || "Hafiz Umer"} can manage companies, users, access, and activity from here.</p>
-        </div>
-        <div className="super-admin-actions">
-          <button onClick={() => onNavigate?.("Companies")} type="button">Companies</button>
-          <button onClick={() => onNavigate?.("Users")} type="button">Users</button>
-        </div>
+    <div className="faire-dashboard">
+      {/* Faire Serif Greeting Header */}
+      <header className="faire-header">
+        <h1 className="faire-greeting">Good day, {greetingName}!</h1>
+        <button className="faire-link-btn" onClick={() => onNavigate?.("Companies")} type="button">
+          See all companies →
+        </button>
       </header>
 
-      {error && <div className="super-admin-alert">{error}</div>}
+      {error && (
+        <div className="faire-alert faire-alert-error">
+          <span>{error}</span>
+        </div>
+      )}
 
-      <section className="super-admin-metrics" aria-label="Platform metrics">
-        <article>
-          <span>Companies</span>
-          <strong>{loading ? "..." : tenants.length}</strong>
-          <small>{activeCompanies} active</small>
-        </article>
-        <article>
-          <span>Company users</span>
-          <strong>{loading ? "..." : companyUsers.length}</strong>
-          <small>{companyAdmins.length} admins</small>
-        </article>
-        <article>
-          <span>Recent activity</span>
-          <strong>{loading ? "..." : activityLogs.length}</strong>
-          <small>Latest platform feed</small>
-        </article>
+      {/* Target Action Banner Block */}
+      <section className="faire-card faire-banner-card">
+        <div className="faire-banner-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16"/><path d="M1 21h22"/><path d="M9 7h1"/><path d="M9 11h1"/><path d="M14 7h1"/><path d="M14 11h1"/></svg>
+        </div>
+        <div className="faire-banner-content">
+          <h2>Provision & Manage Tenant Workspaces</h2>
+          <p>Instantly deploy new enterprise companies, enable ERP modules, inspect login PINs, or enter company portals.</p>
+          <div className="faire-banner-actions">
+            <button className="faire-text-action" onClick={() => onNavigate?.("Companies")} type="button">
+              + Create new company
+            </button>
+            <span className="faire-dot-sep">•</span>
+            <button className="faire-text-action" onClick={() => onNavigate?.("Users")} type="button">
+              Manage system users & PINs
+            </button>
+          </div>
+        </div>
       </section>
 
-      <div className="super-admin-grid">
-        <section className="super-admin-panel">
-          <div className="super-admin-panel-heading">
-            <h2>Companies</h2>
-            <button onClick={() => onNavigate?.("Companies")} type="button">Manage</button>
+      {/* Analytics Snapshot Card */}
+      <section className="faire-card faire-snapshot-card">
+        <div className="faire-card-header">
+          <div className="faire-title-row">
+            <h2>Analytics snapshot</h2>
           </div>
-          <div className="super-admin-company-list">
-            {recentCompanies.length === 0 ? (
-              <div className="super-admin-empty">No companies yet.</div>
+          <button className="faire-link-btn" onClick={() => onNavigate?.("Companies")} type="button">
+            Go to companies directory →
+          </button>
+        </div>
+
+        <div className="faire-snapshot-grid">
+          <div className="faire-metric-col">
+            <span className="faire-metric-label">Total Companies</span>
+            <div className="faire-metric-num">{loading ? "..." : tenants.length}</div>
+            <span className="faire-trend-pill faire-pill-green">
+              ↑ {activeCompanies} Active
+            </span>
+          </div>
+
+          <div className="faire-metric-col">
+            <span className="faire-metric-label">Platform Users</span>
+            <div className="faire-metric-num">{loading ? "..." : companyUsers.length}</div>
+            <span className="faire-trend-pill faire-pill-green">
+              ↑ {companyAdmins.length} Admins
+            </span>
+          </div>
+
+          <div className="faire-metric-col">
+            <span className="faire-metric-label">Engine Health</span>
+            <div className="faire-metric-num">
+              {loading ? "..." : `${Math.round((activeCompanies / (tenants.length || 1)) * 100)}%`}
+            </div>
+            <span className="faire-trend-pill faire-pill-green">
+              ↑ 100% Operational
+            </span>
+          </div>
+
+          <div className="faire-metric-col">
+            <span className="faire-metric-label">Recent Audit Feed</span>
+            <div className="faire-metric-num">{loading ? "..." : activityLogs.length}</div>
+            <span className="faire-trend-pill faire-pill-neutral">
+              Realtime Logs
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* Main Split Content: Companies Overview & Activity */}
+      <div className="faire-split-grid">
+        {/* Companies Directory Card */}
+        <section className="faire-card faire-section-card">
+          <div className="faire-card-header">
+            <div>
+              <h2>Companies Directory</h2>
+              <span className="faire-subtext">{tenants.length} provisioned tenant entities</span>
+            </div>
+            <button className="faire-link-btn" onClick={() => onNavigate?.("Companies")} type="button">
+              View all ({tenants.length})
+            </button>
+          </div>
+
+          <div className="faire-search-input-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input
+              type="text"
+              placeholder="Search companies by name or slug..."
+              value={companySearch}
+              onChange={(e) => setCompanySearch(e.target.value)}
+            />
+          </div>
+
+          <div className="faire-list">
+            {loading ? (
+              <div className="faire-empty-msg">Loading companies...</div>
+            ) : filteredCompanies.length === 0 ? (
+              <div className="faire-empty-msg">No companies found matching search.</div>
             ) : (
-              recentCompanies.map((tenant) => (
-                <article className="super-admin-company-row" key={tenant.id}>
-                  <div>
-                    <strong>{tenant.company_name}</strong>
-                    <small>{tenant.slug}</small>
+              filteredCompanies.map((tenant) => (
+                <div className="faire-list-row" key={tenant.id}>
+                  <div className="faire-row-main">
+                    <span className={`faire-status-pill is-${tenant.status}`}>
+                      {tenant.status === "active" ? "Active" : "Inactive"}
+                    </span>
+                    <strong className="faire-company-title">{tenant.company_name}</strong>
+                    <code className="faire-slug-tag">{tenant.slug}</code>
                   </div>
-                  <span className={`super-admin-status is-${tenant.status}`}>{tenant.status}</span>
-                  <span>{tenant.user_count || 0} users</span>
-                </article>
+
+                  <div className="faire-row-actions">
+                    <span className="faire-user-count">{tenant.user_count || 0} users</span>
+                    <button
+                      className="faire-btn-enter"
+                      onClick={() => onSwitchToCompanyPortal?.(tenant)}
+                      title={`Enter ${tenant.company_name} portal`}
+                      type="button"
+                    >
+                      Enter Portal ↗
+                    </button>
+                  </div>
+                </div>
               ))
             )}
           </div>
         </section>
 
-        <section className="super-admin-panel">
-          <div className="super-admin-panel-heading">
-            <h2>Activity</h2>
-            <button onClick={() => onNavigate?.("Users")} type="button">Open users</button>
+        {/* Live System Feed Card */}
+        <section className="faire-card faire-section-card">
+          <div className="faire-card-header">
+            <div>
+              <h2>Recent System Activity</h2>
+              <span className="faire-subtext">Realtime audit events & page views</span>
+            </div>
+            <button className="faire-link-btn" onClick={() => onNavigate?.("Users")} type="button">
+              Manage users →
+            </button>
           </div>
-          <div className="super-admin-activity-list">
-            {activityLogs.length === 0 ? (
-              <div className="super-admin-empty">No recent activity yet.</div>
+
+          <div className="faire-list">
+            {loading ? (
+              <div className="faire-empty-msg">Loading audit activity...</div>
+            ) : activityLogs.length === 0 ? (
+              <div className="faire-empty-msg">No activity logged.</div>
             ) : (
-              activityLogs.map((activity) => {
-                const tenant = tenantById.get(Number(activity.tenant_id));
-                return (
-                  <article className="super-admin-activity-row" key={activity.id}>
-                    <div>
-                      <strong>{activity.summary || activity.action}</strong>
-                      <small>{activity.actor_user_name || "Unknown user"} - {tenant?.company_name || "Platform"}</small>
-                    </div>
-                    <span>{formatTime(activity.created_at)}</span>
-                  </article>
-                );
-              })
+              activityLogs.slice(0, 5).map((log) => (
+                <div className="faire-list-row" key={log.id}>
+                  <div className="faire-row-main">
+                    <span className="faire-actor-pill">
+                      {log.actor_user_name || "System"}
+                    </span>
+                    <span className="faire-activity-text">{log.summary || log.action}</span>
+                  </div>
+                  <span className="faire-time-text">{formatTime(log.created_at)}</span>
+                </div>
+              ))
             )}
           </div>
         </section>

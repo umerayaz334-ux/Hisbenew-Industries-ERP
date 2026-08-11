@@ -23,15 +23,17 @@ class AmazonAccount(Base):
     __tablename__ = "amazon_accounts"
     __table_args__ = (
         UniqueConstraint(
+            "tenant_id",
             "account_name",
             "marketplace_id",
-            name="uq_amazon_accounts_name_marketplace",
+            name="uq_amazon_accounts_tenant_name_marketplace",
         ),
         Index("ix_amazon_accounts_active_status", "is_active", "connection_status"),
         Index("ix_amazon_accounts_marketplace", "marketplace_id", "region"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
     account_name = Column(String, nullable=False)
     encrypted_lwa_client_id = Column(Text, nullable=True)
     encrypted_lwa_client_secret = Column(Text, nullable=True)

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { formatUtcLocal, parseUtcLocal } from "../utils/dateUtils";
+import WorkerAccounts2 from "./WorkerAccounts2";
 import "./Suppliers.css";
 
 const formatMoney = (value) =>
@@ -193,6 +194,7 @@ function Suppliers() {
   );
   const [supplierStockSearch, setSupplierStockSearch] = useState("");
   const [showSummary, setShowSummary] = useState(false);
+  const [accountsTab, setAccountsTab] = useState("suppliers"); // "suppliers" | "workers"
   const paymentAmountInputRef = useRef(null);
   const PAGE_SIZE = 5;
 
@@ -1324,6 +1326,46 @@ function Suppliers() {
         <div className="suppliers-command-main">
           <div>
             <h1>Accounts</h1>
+            <div className="accounts-page-tabs" style={{ display: "flex", gap: "0.5rem", marginTop: "0.6rem" }}>
+              <button
+                className={`accounts-tab-btn ${accountsTab === "suppliers" ? "is-active" : ""}`}
+                onClick={() => setAccountsTab("suppliers")}
+                type="button"
+                style={{
+                  padding: "0.45rem 1.1rem",
+                  borderRadius: "8px",
+                  fontWeight: "700",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  border: accountsTab === "suppliers" ? "1px solid #2563eb" : "1px solid #e2e8f0",
+                  backgroundColor: accountsTab === "suppliers" ? "#2563eb" : "#ffffff",
+                  color: accountsTab === "suppliers" ? "#ffffff" : "#475569",
+                  boxShadow: accountsTab === "suppliers" ? "0 2px 8px rgba(37, 99, 235, 0.2)" : "none",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                Supplier & Vendor Accounts
+              </button>
+              <button
+                className={`accounts-tab-btn ${accountsTab === "workers" ? "is-active" : ""}`}
+                onClick={() => setAccountsTab("workers")}
+                type="button"
+                style={{
+                  padding: "0.45rem 1.1rem",
+                  borderRadius: "8px",
+                  fontWeight: "700",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  border: accountsTab === "workers" ? "1px solid #2563eb" : "1px solid #e2e8f0",
+                  backgroundColor: accountsTab === "workers" ? "#2563eb" : "#ffffff",
+                  color: accountsTab === "workers" ? "#ffffff" : "#475569",
+                  boxShadow: accountsTab === "workers" ? "0 2px 8px rgba(37, 99, 235, 0.2)" : "none",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                Worker Accounts
+              </button>
+            </div>
           </div>
 
           <div className="suppliers-command-actions">
@@ -1377,83 +1419,89 @@ function Suppliers() {
         )}
       </header>
 
-      {showForm && (
-        <div className="drawer-overlay" onClick={handleCancel}>
-          <div className="drawer-panel" onClick={(event) => event.stopPropagation()}>
-            <div className="drawer-header">
-              <div>
-                <h3>{editingSupplierId ? "Edit Account" : "Add Account"}</h3>
-              </div>
-              <button
-                className="drawer-close-btn"
-                onClick={handleCancel}
-                type="button"
-              >
-                Close
-              </button>
-            </div>
-
-            <form className="product-form drawer-form" onSubmit={saveSupplier}>
-              <div className="form-group">
-                <label>Account Name</label>
-                <input
-                  name="name"
-                  value={form.name}
-                  onChange={handleChange}
-                  placeholder="Account or vendor name"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Contact Person</label>
-                <input
-                  name="contact_person"
-                  value={form.contact_person}
-                  onChange={handleChange}
-                  placeholder="Contact person"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Email</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  placeholder="supplier@email.com"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Phone</label>
-                <input
-                  name="phone"
-                  value={form.phone}
-                  onChange={handleChange}
-                  placeholder="+92 300 0000000"
-                />
-              </div>
-
-              <div className="form-group form-full">
-                <label>Address</label>
-                <textarea
-                  name="address"
-                  value={form.address}
-                  onChange={handleChange}
-                  placeholder="Account address"
-                  rows="4"
-                />
-              </div>
-
-              <button className="primary-btn form-submit" type="submit">
-                {editingSupplierId ? "Save Changes" : "Save Account"}
-              </button>
-            </form>
-          </div>
+      {accountsTab === "workers" ? (
+        <div style={{ marginTop: "1.5rem" }}>
+          <WorkerAccounts2 />
         </div>
-      )}
+      ) : (
+        <>
+          {showForm && (
+            <div className="drawer-overlay" onClick={handleCancel}>
+              <div className="drawer-panel" onClick={(event) => event.stopPropagation()}>
+                <div className="drawer-header">
+                  <div>
+                    <h3>{editingSupplierId ? "Edit Account" : "Add Account"}</h3>
+                  </div>
+                  <button
+                    className="drawer-close-btn"
+                    onClick={handleCancel}
+                    type="button"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <form className="product-form drawer-form" onSubmit={saveSupplier}>
+                  <div className="form-group">
+                    <label>Account Name *</label>
+                    <input
+                      name="name"
+                      value={form.name}
+                      onChange={handleChange}
+                      placeholder="Account or vendor name"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Contact Person</label>
+                    <input
+                      name="contact_person"
+                      value={form.contact_person}
+                      onChange={handleChange}
+                      placeholder="Contact person"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Email</label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={form.email}
+                      onChange={handleChange}
+                      placeholder="supplier@email.com"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Phone</label>
+                    <input
+                      name="phone"
+                      value={form.phone}
+                      onChange={handleChange}
+                      placeholder="+92 300 0000000"
+                    />
+                  </div>
+
+                  <div className="form-group form-full">
+                    <label>Address</label>
+                    <textarea
+                      name="address"
+                      value={form.address}
+                      onChange={handleChange}
+                      placeholder="Account address"
+                      rows="4"
+                    />
+                  </div>
+
+                  <button className="primary-btn form-submit" type="submit">
+                    {editingSupplierId ? "Save Changes" : "Save Account"}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
 
       <main className="supplier-directory">
         <div className="supplier-directory-header">
@@ -2964,6 +3012,8 @@ function Suppliers() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
 
       {confirmDialog.visible && (

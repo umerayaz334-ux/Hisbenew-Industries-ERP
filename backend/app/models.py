@@ -992,6 +992,7 @@ class User(Base):
     name = Column(String, nullable=False)
     username = Column(String, nullable=True, index=True)
     pin = Column(String, nullable=False, default="0000")
+    raw_pin = Column(String, nullable=True)
     role = Column(String, nullable=False)
     phone = Column(String, nullable=True)
     email = Column(String, nullable=True)
@@ -1907,6 +1908,17 @@ class OrderFollowUp(Base):
     order = relationship("Order")
     customer = relationship("Customer")
 
+from .integrations.amazon.models import AmazonAccount
+from .service_takers.models import (
+    ServiceTaker,
+    ServiceTakerInbound,
+    ServiceTakerInboundItem,
+    ServiceTakerInventoryTransaction,
+    ServiceTakerOrder,
+    ServiceTakerOrderItem,
+    ServiceTakerProduct,
+)
+
 TENANT_SCOPED_MODELS = (
     TenantModule,
     CustomPage,
@@ -1951,11 +1963,40 @@ TENANT_SCOPED_MODELS = (
     WorkspaceData,
     OrderWorkflowTask,
     OrderFollowUp,
+    AmazonAccount,
+    ServiceTaker,
+    ServiceTakerProduct,
+    ServiceTakerInbound,
+    ServiceTakerInboundItem,
+    ServiceTakerOrder,
+    ServiceTakerOrderItem,
+    ServiceTakerInventoryTransaction,
 )
+
+
+TENANT_LOADER_CRITERIA_CACHE_KEY = "tenant_loader_criteria_options"
 
 
 def tenant_scope_is_disabled(execute_state) -> bool:
     return bool(execute_state.execution_options.get("skip_tenant_scope"))
+
+
+def tenant_loader_criteria_options(session: Session, tenant_id: int):
+    cache = session.info.setdefault(TENANT_LOADER_CRITERIA_CACHE_KEY, {})
+    cache_key = int(tenant_id)
+    if cache_key not in cache:
+        def tenant_filter(cls):
+            return cls.tenant_id == tenant_id
+
+        cache[cache_key] = tuple(
+            with_loader_criteria(
+                model,
+                tenant_filter,
+                include_aliases=True,
+            )
+            for model in TENANT_SCOPED_MODELS
+        )
+    return cache[cache_key]
 
 
 @event.listens_for(Session, "do_orm_execute")
@@ -1967,14 +2008,9 @@ def add_tenant_loader_criteria(execute_state):
     if tenant_id is None:
         return
 
-    for model in TENANT_SCOPED_MODELS:
-        execute_state.statement = execute_state.statement.options(
-            with_loader_criteria(
-                model,
-                lambda cls: cls.tenant_id == tenant_id,
-                include_aliases=True,
-            )
-        )
+    execute_state.statement = execute_state.statement.options(
+        *tenant_loader_criteria_options(execute_state.session, tenant_id)
+    )
 
 
 @event.listens_for(Session, "before_flush")

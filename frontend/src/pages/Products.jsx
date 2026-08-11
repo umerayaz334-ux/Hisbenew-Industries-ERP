@@ -222,13 +222,21 @@ function Icon({ name, size = 18 }) {
 }
 
 function Products({ authenticatedUser, initialCatalogTab = "products", userRole }) {
+  const effectiveRole = userRole || authenticatedUser?.role;
+  const userAllowedPages = Array.isArray(authenticatedUser?.allowed_pages)
+    ? authenticatedUser.allowed_pages
+    : [];
+  const hasAmazonCatalogAccess =
+    ["admin", "super_admin"].includes(effectiveRole) &&
+    (effectiveRole === "super_admin" ||
+      userAllowedPages.some((page) => String(page || "").startsWith("Amazon")));
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(createEmptyForm);
   const [catalogTab, setCatalogTab] = useState(() =>
-    initialCatalogTab === "amazon" && ["admin", "super_admin"].includes(authenticatedUser?.role)
+    initialCatalogTab === "amazon" && hasAmazonCatalogAccess
       ? "amazon"
       : "products"
   );
@@ -254,7 +262,6 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
   const [notice, setNotice] = useState(null);
   const [selectedProductIds, setSelectedProductIds] = useState(() => new Set());
   const faireFileInputRef = useRef(null);
-  const effectiveRole = userRole || authenticatedUser?.role;
   const isAdmin = ["admin", "super_admin"].includes(effectiveRole);
   const isWorkerView = effectiveRole === "worker";
   const confirmDialog = useConfirmDialog();
@@ -524,14 +531,15 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
   };
 
   const selectCatalogTab = (nextTab) => {
-    setCatalogTab(nextTab);
+    const allowedNextTab = nextTab === "amazon" && !hasAmazonCatalogAccess ? "products" : nextTab;
+    setCatalogTab(allowedNextTab);
     setCategoryFilter("all");
     setStockFilter("all");
     setSelectedProductIds(new Set());
     const nextPath =
-      nextTab === "products"
+      allowedNextTab === "products"
         ? "/portal/products"
-        : `/portal/products?tab=${nextTab}`;
+        : `/portal/products?tab=${allowedNextTab}`;
     window.history.replaceState({}, "", nextPath);
     window.dispatchEvent(new Event("erp:navigation"));
   };
@@ -545,7 +553,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
         ? "amazon"
         : new URLSearchParams(window.location.search).get("tab");
       const nextTab =
-        requestedTab === "amazon" && isAdmin
+        requestedTab === "amazon" && hasAmazonCatalogAccess
           ? "amazon"
           : requestedTab === "supplies"
             ? "supplies"
@@ -553,7 +561,11 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
 
       setCatalogTab(nextTab);
       if (legacyAmazonPath) {
-        window.history.replaceState({}, "", "/portal/products?tab=amazon");
+        window.history.replaceState(
+          {},
+          "",
+          hasAmazonCatalogAccess ? "/portal/products?tab=amazon" : "/portal/products"
+        );
       }
     };
 
@@ -564,7 +576,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
       window.removeEventListener("erp:navigation", syncCatalogTabFromPath);
       window.removeEventListener("popstate", syncCatalogTabFromPath);
     };
-  }, [isAdmin]);
+  }, [hasAmazonCatalogAccess]);
 
   const closeSupplyForm = () => {
     if (saving) return;
@@ -1304,7 +1316,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
               Factory supplies
               <span>{formatNumber(factorySupplies.length)}</span>
             </button>
-            {isAdmin && (
+            {hasAmazonCatalogAccess && (
               <button
                 aria-selected={catalogTab === "amazon"}
                 className={`products-tab-button ${
@@ -1465,7 +1477,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
           </div>
         )}
 
-        {catalogTab === "amazon" ? (
+        {catalogTab === "amazon" && hasAmazonCatalogAccess ? (
           <AmazonFbaInventory
             authenticatedUser={authenticatedUser}
             embedded
@@ -1620,7 +1632,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                       type="button"
                     >
                       {imageUrl ? (
-                        <img
+                        <img loading="lazy" decoding="async"
                           alt={product.article_no || "Product"}
                           className="products-worker-image"
                           src={imageUrl}
@@ -1718,7 +1730,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                             type="button"
                           >
                             {product.image_url ? (
-                              <img
+                              <img loading="lazy" decoding="async"
                                 alt={product.name}
                                 className="products-thumbnail"
                                 src={getStaticUrl(product.image_url)}
@@ -1888,7 +1900,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                       })}
                       type="checkbox"
                     />
-                    <img alt="" src={getStaticUrl(product.image_url)} />
+                    <img loading="lazy" decoding="async" alt="" src={getStaticUrl(product.image_url)} />
                     <span>
                       <strong>{product.name}</strong>
                       <small>SKU {product.article_no} | {product.category || "Uncategorized"}</small>
@@ -2454,7 +2466,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                         type="file"
                       />
                       {imagePreviewUrl ? (
-                        <img alt="Product preview" src={imagePreviewUrl} />
+                        <img loading="lazy" decoding="async" alt="Product preview" src={imagePreviewUrl} />
                       ) : (
                         <span className="products-upload-icon">
                           <Icon name="image" size={22} />
@@ -2474,7 +2486,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                         type="file"
                       />
                       {shareImagePreviewUrl ? (
-                        <img alt="Share preview" src={shareImagePreviewUrl} />
+                        <img loading="lazy" decoding="async" alt="Share preview" src={shareImagePreviewUrl} />
                       ) : (
                         <span className="products-upload-icon">
                           <Icon name="image" size={22} />
@@ -2599,7 +2611,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                     <div className="products-details-media">
                       {detailImageUrl ? (
                         <div className="products-details-image-frame">
-                          <img
+                          <img loading="lazy" decoding="async"
                             alt={detailProduct.name || detailProduct.article_no}
                             src={detailImageUrl}
                           />
@@ -2696,7 +2708,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                           }
                           type="button"
                         >
-                          <img
+                          <img loading="lazy" decoding="async"
                             alt={detailProduct.name || detailProduct.article_no || "Share image"}
                             src={detailShareImageUrl}
                           />
@@ -2860,7 +2872,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
               </button>
             </div>
             <div className="products-image-preview-body">
-              <img
+              <img loading="lazy" decoding="async"
                 alt={productImagePreview.alt}
                 src={productImagePreview.url}
               />

@@ -34,7 +34,11 @@ _CREDENTIAL_INPUTS = {
 
 
 def get_amazon_account(db: Session) -> AmazonAccount | None:
-    return db.query(AmazonAccount).order_by(AmazonAccount.id.asc()).first()
+    query = db.query(AmazonAccount)
+    tenant_id = db.info.get("tenant_id")
+    if tenant_id is not None:
+        query = query.filter(AmazonAccount.tenant_id == tenant_id)
+    return query.order_by(AmazonAccount.id.asc()).first()
 
 
 def credentials_complete(account: AmazonAccount | None) -> bool:
@@ -72,6 +76,7 @@ def public_amazon_settings(
 ) -> AmazonSettingsResponse:
     if not account:
         return AmazonSettingsResponse(
+            tenant_id=None,
             encryption_key_configured=encryption_is_configured()
         )
     auto_sync_next_run_at = None
@@ -88,6 +93,7 @@ def public_amazon_settings(
         )
     return AmazonSettingsResponse(
         id=account.id,
+        tenant_id=account.tenant_id,
         account_name=account.account_name,
         marketplace_id=account.marketplace_id,
         region=account.region,
@@ -166,6 +172,7 @@ def update_amazon_account(
     created = account is None
     if account is None:
         account = AmazonAccount(
+            tenant_id=db.info.get("tenant_id") or user.tenant_id,
             account_name=DEFAULT_ACCOUNT_NAME,
             marketplace_id=DEFAULT_MARKETPLACE_ID,
             region=DEFAULT_REGION,

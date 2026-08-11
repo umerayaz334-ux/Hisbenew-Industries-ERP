@@ -139,6 +139,9 @@ class TenantUpdate(BaseModel):
     status: str | None = None
 
 
+class TenantDeleteRequest(BaseModel):
+    confirmation: str = Field(min_length=1, max_length=160)
+
 class TenantOut(BaseModel):
     id: int
     company_name: str
@@ -237,6 +240,9 @@ class UserUpdate(BaseModel):
     worker_id: int | None = None
 
 
+class UserPinReset(BaseModel):
+    pin: constr(pattern=r"^\d{4}$")
+
 class UserOut(BaseModel):
     id: int
     tenant_id: int | None = None
@@ -244,6 +250,7 @@ class UserOut(BaseModel):
     tenant_slug: str | None = None
     name: str
     username: str
+    pin: str | None = None
     role: str
     phone: str | None = None
     email: str | None = None
@@ -622,6 +629,7 @@ class OrderItemOut(BaseModel):
     product_name: str
     article_no: str
     product_image_url: str | None = None
+    product_label_url: str | None = None
     quantity: int
     unit_price: float
     line_total: float

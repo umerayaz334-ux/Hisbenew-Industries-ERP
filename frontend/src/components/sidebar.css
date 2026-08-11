@@ -1491,3 +1491,355 @@
     pointer-events: auto !important;
   }
 }
+
+/* Super Admin Sidebar Additions */
+.sidebar-menu-item-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menu-section-header {
+  padding: 8px 10px 4px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #6366f1;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: 1px dashed rgba(99, 102, 241, 0.2);
+  margin-bottom: 4px;
+}
+
+.menu-button.super-admin-button {
+  border-left: 2px solid #6366f1;
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.menu-button.super-admin-button:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: #4f46e5;
+}
+
+.menu-button.super-admin-button.active {
+  background: #6366f1;
+  color: #ffffff;
+}
+
+.super-admin-badge {
+  margin-left: auto;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #e0e7ff;
+  color: #4338ca;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.menu-button.active .super-admin-badge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+/* Return to Super Admin Banner */
+.super-admin-return-banner {
+  padding: 8px;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.return-to-sa-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+}
+
+.return-to-sa-btn:hover {
+  background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+  transform: translateY(-1px);
+}
+
+.return-to-sa-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Faire Wholesale Sidebar Design Overrides */
+.sidebar {
+  background: #fbfbf9;
+  border-right: 1px solid #e7e5e4;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  color: #1c1917;
+}
+
+.brand-box {
+  border-bottom: 1px solid #e7e5e4;
+  padding: 12px 10px;
+}
+
+.brand-mark {
+  background: #1c1917;
+  border: 1px solid #1c1917;
+  color: #ffffff;
+  border-radius: 8px;
+}
+
+.brand-copy h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1c1917;
+  letter-spacing: -0.2px;
+}
+
+.brand-copy span {
+  font-size: 11px;
+  color: #78716c;
+}
+
+.menu-section-header {
+  padding: 12px 10px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #a8a29e;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  border-bottom: none;
+  margin-bottom: 2px;
+}
+
+.menu-button {
+  border-radius: 8px;
+  color: #57534e;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 10px;
+  transition: all 0.15s ease;
+}
+
+.menu-button:hover {
+  background: #f5f5f4;
+  color: #1c1917;
+}
+
+.menu-button.active {
+  background: #1c1917;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.menu-button.super-admin-button {
+  border-left: none;
+  background: transparent;
+  color: #57534e;
+}
+
+.menu-button.super-admin-button:hover {
+  background: #f5f5f4;
+  color: #1c1917;
+}
+
+.menu-button.super-admin-button.active {
+  background: #1c1917;
+  color: #ffffff;
+}
+
+.super-admin-badge {
+  background: #fafaf9;
+  border: 1px solid #e7e5e4;
+  color: #57534e;
+}
+
+.menu-button.active .super-admin-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.super-admin-return-banner {
+  padding: 10px 12px;
+  background: #f5f5f4;
+  border-bottom: 1px solid #e7e5e4;
+}
+
+.return-to-sa-btn {
+  background: #1c1917;
+  border: 1px solid #1c1917;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.return-to-sa-btn:hover {
+  background: #334155;
+  border-color: #334155;
+  transform: none;
+}
+
+/* Workspace Switcher Modal Styles */
+.ws-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(28, 25, 23, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.ws-modal-card {
+  width: 100%;
+  max-width: 480px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+  border: 1px solid #e7e5e4;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+}
+
+.ws-modal-header {
+  position: relative;
+  padding: 24px;
+  border-bottom: 1px solid #f5f5f4;
+}
+
+.ws-modal-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: #78716c;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.ws-modal-header h2 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1c1917;
+}
+
+.ws-modal-header p {
+  margin: 0;
+  font-size: 12px;
+  color: #78716c;
+}
+
+.ws-modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #a8a29e;
+  cursor: pointer;
+}
+
+.ws-portal-list {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ws-portal-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ws-portal-card:hover {
+  border-color: #1c1917;
+  background: #fafaf9;
+}
+
+.ws-portal-card.is-active {
+  border-color: #1c1917;
+  background: #f5f5f4;
+}
+
+.ws-portal-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ws-portal-icon.is-factory {
+  background: #1c1917;
+  color: #ffffff;
+}
+
+.ws-portal-icon.is-school {
+  background: #137333;
+  color: #ffffff;
+}
+
+.ws-portal-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.ws-portal-info {
+  flex: 1;
+}
+
+.ws-portal-info h3 {
+  margin: 0 0 2px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1917;
+}
+
+.ws-portal-info span {
+  font-size: 11px;
+  color: #78716c;
+  display: block;
+}
+
+.ws-active-pill {
+  font-size: 11px;
+  font-weight: 600;
+  background: #e6f4ea;
+  color: #137333;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.ws-btn-select {
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c1917;
+  cursor: pointer;
+}
+
+

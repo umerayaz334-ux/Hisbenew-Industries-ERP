@@ -40,8 +40,11 @@ MAX_PRODUCT_IMAGE_BYTES = 8 * 1024 * 1024
 ACTIVE_ORDER_STATUSES = ("Submitted", "Awaiting label", "Processing", "Ready")
 
 
-def get_db():
+def get_db(request: Request):
     db = SessionLocal()
+    tenant_id = getattr(getattr(request, "state", None), "tenant_id", None) if request else None
+    if tenant_id is not None:
+        db.info["tenant_id"] = tenant_id
     try:
         yield db
     finally:
@@ -99,11 +102,23 @@ def portal_service_taker(request: Request, db: Session) -> ServiceTaker:
 
 
 def next_number(db: Session, model, field_name: str, prefix: str) -> str:
-    next_id = int(db.query(func.max(model.id)).scalar() or 0) + 1
+    # These fields still have global unique constraints in existing local databases.
+    next_id = int(
+        db.query(func.max(model.id))
+        .execution_options(skip_tenant_scope=True)
+        .scalar()
+        or 0
+    ) + 1
     field = getattr(model, field_name)
     while True:
         value = f"{prefix}-{next_id:05d}"
-        if not db.query(model.id).filter(field == value).first():
+        exists = (
+            db.query(model.id)
+            .execution_options(skip_tenant_scope=True)
+            .filter(field == value)
+            .first()
+        )
+        if not exists:
             return value
         next_id += 1
 

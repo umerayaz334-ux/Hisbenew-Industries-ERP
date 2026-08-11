@@ -26,16 +26,17 @@ const menuItems = [
   { name: "Follow Ups", icon: "message" },
   { name: "Products", icon: "box" },
   { name: "Inventory", icon: "inventory" },
-  { name: "Label Printer", label: "Label Printer 1", icon: "inventory" },
+  { name: "Label Printer", icon: "inventory" },
+  { name: "Label Printer 2", icon: "inventory" },
   { name: "Inspiration", label: "Inspirations", icon: "spark" },
   { name: "Suppliers", label: "Accounts", icon: "suppliers" },
   { name: "Manufacturing", icon: "factory" },
   { name: "Production", icon: "gear" },
   { name: "Workers", icon: "workers" },
   {
-    name: "Worker Payouts",
+    name: "Worker Accounts",
     label: "Worker Accounts",
-    workerLabel: "Payouts",
+    workerLabel: "Accounts",
     icon: "wallet",
   },
   { name: "Reports", label: "Reports & Analytics", icon: "chart" },
@@ -49,7 +50,6 @@ const menuItems = [
   { name: "Quotes", icon: "quote" },
   { name: "Website", icon: "spark" },
   { name: "Deployment", icon: "deployment" },
-  { name: "Add Company", icon: "building" },
   { name: "Companies", icon: "building" },
   { name: "Users", icon: "users" },
   { name: "TempData", label: "Temp Data", icon: "database" },
@@ -57,7 +57,7 @@ const menuItems = [
   { name: "Copy Clipboard", icon: "clipboard" },
 ];
 
-const platformSuperAdminPages = ["Dashboard", "Add Company", "Companies", "Users", "Settings"];
+const platformSuperAdminPages = ["Dashboard", "Companies", "Users", "Settings"];
 
 const roleAllowedPages = {
   admin: [
@@ -75,13 +75,14 @@ const roleAllowedPages = {
     "Products",
     "Inventory",
     "Label Printer",
+    "Label Printer 2",
     "Quotes",
     "Inspiration",
     "Suppliers",
     "Manufacturing",
     "Production",
     "Workers",
-    "Worker Payouts",
+    "Worker Accounts",
     "Reports",
     "Website",
     "Deployment",
@@ -111,13 +112,14 @@ const roleAllowedPages = {
     "Products",
     "Inventory",
     "Label Printer",
+    "Label Printer 2",
     "Quotes",
     "Inspiration",
     "Website",
     "Suppliers",
     "Manufacturing",
     "Production",
-    "Worker Payouts",
+    "Worker Accounts",
     "Reports",
     "Settings",
     "TempData",
@@ -133,7 +135,7 @@ const roleAllowedPages = {
     "Messages",
     "Settings",
   ],
-  worker: ["Dashboard", "My Tasks", "Worker Payouts", "Manufacturing", "Production", "Messages", "Settings"],
+  worker: ["Dashboard", "My Tasks", "Worker Accounts", "Manufacturing", "Production", "Messages", "Settings"],
   service_taker: [
     "Service Dashboard",
     "Service Products",
@@ -151,6 +153,7 @@ const mainMenuOrder = [
   "Suppliers",
   "Inventory",
   "Label Printer",
+  "Label Printer 2",
   "Payouts",
   "Billings",
   "Accounting",
@@ -174,7 +177,7 @@ const secondaryMenuOrder = [
   "Production",
   "Manufacturing",
   "Workers",
-  "Worker Payouts",
+  "Worker Accounts",
   "Reports",
   "Quotes",
   "Website",
@@ -182,7 +185,6 @@ const secondaryMenuOrder = [
   "Messages",
   "Copy Clipboard",
   "Inspiration",
-  "Add Company",
   "Companies",
   "Users",
   "Amazon Listings",
@@ -477,6 +479,7 @@ function Sidebar({
   schoolSettings,
   schoolPermissions,
   canSwitchToFactory = true,
+  canSwitchToSchool = true,
   onSwitchWorkspace,
   userRole,
   authenticatedUser,
@@ -485,8 +488,10 @@ function Sidebar({
   collapsed = false,
   onToggleCollapse,
   onLogout,
+  onReturnToSuperAdmin,
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const desktopMenuRef = useRef(null);
   const isSchoolWorkspace = workspace === "school";
   const effectiveAllowedPages = Array.isArray(allowedPages)
@@ -591,7 +596,7 @@ function Sidebar({
 
   const handleWorkspaceSwitch = () => {
     setMobileMenuOpen(false);
-    onSwitchWorkspace?.();
+    setShowWorkspaceModal(true);
   };
 
   const currentWorkspaceName = isSchoolWorkspace
@@ -601,7 +606,7 @@ function Sidebar({
     ? "Hisbenew Industries ERP"
     : `${schoolSettings?.school_name || "Dar-e-Arqam"} ${schoolSettings?.campus_name || "School ERP"}`;
   const schoolLogoSource = schoolSettings?.logo_data_url || defaultSchoolLogo;
-  const showWorkspaceSwitch = Boolean(onSwitchWorkspace) && (!isSchoolWorkspace || canSwitchToFactory);
+  const showWorkspaceSwitch = Boolean(onSwitchWorkspace) && (!isSchoolWorkspace || canSwitchToFactory) && (isSchoolWorkspace || canSwitchToSchool);
 
   const getItemLabel = (item) =>
     userRole === "worker" && item.workerLabel
@@ -656,36 +661,63 @@ function Sidebar({
         </button>
       </div>
 
+      {authenticatedUser?.impersonatedBySuperAdmin && (
+        <div className="super-admin-return-banner">
+          <button
+            className="return-to-sa-btn"
+            onClick={() => onReturnToSuperAdmin?.()}
+            title="Exit company tenant view and return to Super Admin Portal"
+            type="button"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Exit to Super Admin</span>
+          </button>
+        </div>
+      )}
+
       <nav
         aria-label="Main navigation"
         className="sidebar-menu sidebar-menu-desktop"
         ref={desktopMenuRef}
       >
-        {visibleMenuItems.map((item) => {
+        {visibleMenuItems.map((item, index) => {
           const notificationCount = getNotificationCount(item);
           const itemLabel = getItemLabel(item);
+          const isSuperAdminItem = userRole === "super_admin" && !authenticatedUser?.impersonatedBySuperAdmin && platformSuperAdminPages.includes(item.name);
+          const showSectionHeader = userRole === "super_admin" && !authenticatedUser?.impersonatedBySuperAdmin && index === 0;
 
           return (
-            <button
-              aria-current={activePage === item.name ? "page" : undefined}
-              aria-label={itemLabel}
-              className={`menu-button ${
-                isSchoolWorkspace || mainMenuOrder.includes(item.name) ? "" : "menu-secondary-button"
-              } ${activePage === item.name ? "active" : ""}`.trim()}
-              key={item.name}
-              onClick={() => handleNavigation(item.name)}
-              title={itemLabel}
-              type="button"
-            >
-              <SidebarIcon name={item.icon} />
-              <span className="menu-initial">{getMenuInitials(itemLabel)}</span>
-              <span className="menu-label">{itemLabel}</span>
-              {notificationCount > 0 && (
-                <span className="menu-badge">
-                  {formatNotificationCount(notificationCount)}
-                </span>
+            <div key={item.name} className="sidebar-menu-item-wrapper">
+              {showSectionHeader && (
+                <div className="menu-section-header">
+                  <span>Platform Super Admin</span>
+                </div>
               )}
-            </button>
+              <button
+                aria-current={activePage === item.name ? "page" : undefined}
+                aria-label={itemLabel}
+                className={`menu-button ${
+                  isSuperAdminItem ? "super-admin-button" : ""
+                } ${
+                  isSchoolWorkspace || mainMenuOrder.includes(item.name) ? "" : "menu-secondary-button"
+                } ${activePage === item.name ? "active" : ""}`.trim()}
+                onClick={() => handleNavigation(item.name)}
+                title={itemLabel}
+                type="button"
+              >
+                <SidebarIcon name={item.icon} />
+                <span className="menu-initial">{getMenuInitials(itemLabel)}</span>
+                <span className="menu-label">{itemLabel}</span>
+                {isSuperAdminItem && item.name === "Companies" && (
+                  <span className="super-admin-badge">Admin</span>
+                )}
+                {notificationCount > 0 && (
+                  <span className="menu-badge">
+                    {formatNotificationCount(notificationCount)}
+                  </span>
+                )}
+              </button>
+            </div>
           );
         })}
       </nav>
@@ -847,6 +879,67 @@ function Sidebar({
           <span className="sidebar-logout-short">Exit</span>
         </button>
       </div>
+
+      {showWorkspaceModal && (
+        <div className="ws-modal-overlay" onClick={() => setShowWorkspaceModal(false)}>
+          <div className="ws-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="ws-modal-header">
+              <div className="ws-modal-badge">PORTAL WORKSPACES</div>
+              <h2>Switch Portal Workspace</h2>
+              <p>Select an active portal environment for your tenant operations.</p>
+              <button className="ws-modal-close" onClick={() => setShowWorkspaceModal(false)} type="button">×</button>
+            </div>
+
+            <div className="ws-portal-list">
+              {/* Factory / Enterprise ERP Option */}
+              <div
+                className={`ws-portal-card ${!isSchoolWorkspace ? "is-active" : ""}`}
+                onClick={() => {
+                  setShowWorkspaceModal(false);
+                  if (isSchoolWorkspace) onSwitchWorkspace?.();
+                }}
+              >
+                <div className="ws-portal-icon is-factory">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-3"/></svg>
+                </div>
+                <div className="ws-portal-info">
+                  <h3>Hisbenew Enterprise ERP</h3>
+                  <span>Core operations, Orders, Inventory, Suppliers & Manufacturing</span>
+                </div>
+                {!isSchoolWorkspace ? (
+                  <span className="ws-active-pill">Active</span>
+                ) : (
+                  <button className="ws-btn-select" type="button">Switch ↗</button>
+                )}
+              </div>
+
+              {/* School / Academic ERP Option */}
+              {canSwitchToSchool && (
+                <div
+                  className={`ws-portal-card ${isSchoolWorkspace ? "is-active" : ""}`}
+                  onClick={() => {
+                    setShowWorkspaceModal(false);
+                    if (!isSchoolWorkspace) onSwitchWorkspace?.();
+                  }}
+                >
+                  <div className="ws-portal-icon is-school">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                  </div>
+                  <div className="ws-portal-info">
+                    <h3>Dar-e-Arqam School ERP</h3>
+                    <span>Academic management, Students, Attendance & Fee Finance</span>
+                  </div>
+                  {isSchoolWorkspace ? (
+                    <span className="ws-active-pill">Active</span>
+                  ) : (
+                    <button className="ws-btn-select" type="button">Switch ↗</button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

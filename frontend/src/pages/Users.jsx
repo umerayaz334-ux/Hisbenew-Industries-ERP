@@ -1005,212 +1005,12 @@ export default function Users({ authenticatedUser }) {
     <div className="users-page">
       <header className="users-command-header">
         <div>
-          <span className="users-eyebrow">Administration</span>
-          <h1>Users and access</h1>
-          <p>
-            Create ERP accounts, manage login identity, and give each person
-            access only to the pages they need.
-          </p>
+          <h1>Users & Access Control</h1>
         </div>
         <button className="users-add-button" onClick={openForm} type="button">
-          <span aria-hidden="true">+</span>
-          Add user
+          + Add user
         </button>
       </header>
-
-      <section className="users-summary-grid" aria-label="User summary">
-        <article>
-          <span>Total users</span>
-          <strong>{users.length}</strong>
-          <small>ERP accounts</small>
-        </article>
-        <article>
-          <span>Active</span>
-          <strong>{activeUsers}</strong>
-          <small>Can sign in</small>
-        </article>
-        <article>
-          <span>Inactive</span>
-          <strong>{users.length - activeUsers}</strong>
-          <small>Access suspended</small>
-        </article>
-        <article>
-          <span>Custom access</span>
-          <strong>{customAccessUsers}</strong>
-          <small>Different from role default</small>
-        </article>
-        {isSuperAdmin && (
-          <article>
-            <span>Companies</span>
-            <strong>{tenants.length}</strong>
-            <small>Tenant workspaces</small>
-          </article>
-        )}
-      </section>
-
-      <section className="users-role-requests users-signup-requests" aria-label="Signup approvals">
-        <div className="users-role-requests-header">
-          <div>
-            <span className="users-eyebrow">Signup approvals</span>
-            <h2>Website account requests</h2>
-            <p>
-              Requests submitted from the public signup page. Approve one to create
-              a login with role defaults, privacy, and custom page access.
-            </p>
-          </div>
-          <strong>{openAccessRequests.length} pending</strong>
-        </div>
-
-        {accessRequests.length === 0 ? (
-          <div className="users-role-request-empty">
-            No website signup requests submitted yet.
-          </div>
-        ) : (
-          <div className="users-role-request-list">
-            {accessRequests.slice(0, 8).map((request) => {
-              const statusClass = requestStatusClass(request.status);
-              const approved = Boolean(request.approved_user_id) || statusClass === "approved";
-              const rejected = statusClass === "rejected";
-              const disabled = accessRequestUpdatingId === request.id;
-              return (
-                <article className="users-role-request-card" key={request.id}>
-                  <div className="users-role-request-main">
-                    <span className={`users-role-request-status is-${statusClass}`}>
-                      {request.status || "Pending"}
-                    </span>
-                    <h3>{request.full_name}</h3>
-                    <p>
-                      {request.message ||
-                        `Requested ${request.requested_workspace || "ERP access"}.`}
-                    </p>
-                    <div className="users-role-request-meta">
-                      <span>@{request.preferred_username || usernameFromAccessRequest(request)}</span>
-                      <span>{request.requested_workspace || "Workspace not specified"}</span>
-                      <span>{roleLabel(suggestedRoleForAccessRequest(request))}</span>
-                      {request.phone && <span>{request.phone}</span>}
-                      {request.work_email && <span>{request.work_email}</span>}
-                      {request.approved_user_id && <span>User #{request.approved_user_id}</span>}
-                      <span>{formatUtcLocal(request.created_at)}</span>
-                    </div>
-                  </div>
-                  <div className="users-role-request-actions">
-                    {!approved && !rejected && (
-                      <button
-                        className="is-primary"
-                        disabled={disabled}
-                        onClick={() => startApproveAccessRequest(request)}
-                        type="button"
-                      >
-                        Approve
-                      </button>
-                    )}
-                    {!approved && !rejected && (
-                      <button
-                        disabled={disabled}
-                        onClick={() => updateAccessRequestStatus(request, "Contacted")}
-                        type="button"
-                      >
-                        Contacted
-                      </button>
-                    )}
-                    {!approved && !rejected && (
-                      <button
-                        className="is-danger"
-                        disabled={disabled}
-                        onClick={() => updateAccessRequestStatus(request, "Rejected")}
-                        type="button"
-                      >
-                        Reject
-                      </button>
-                    )}
-                    <button
-                      className="is-danger"
-                      disabled={disabled}
-                      onClick={() => deleteAccessRequest(request)}
-                      type="button"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section className="users-role-requests" aria-label="Pending role requests">
-        <div className="users-role-requests-header">
-          <div>
-            <span className="users-eyebrow">Access requests</span>
-            <h2>Role assignment messages</h2>
-            <p>
-              Messages submitted by users who are waiting for a role or page access.
-            </p>
-          </div>
-          <strong>{openRoleRequests.length} open</strong>
-        </div>
-
-        {roleRequests.length === 0 ? (
-          <div className="users-role-request-empty">
-            No role assignment messages submitted yet.
-          </div>
-        ) : (
-          <div className="users-role-request-list">
-            {roleRequests.slice(0, 6).map((request) => (
-              <article className="users-role-request-card" key={request.id}>
-                <div className="users-role-request-main">
-                  <span
-                    className={`users-role-request-status is-${String(
-                      request.status || "open"
-                    )
-                      .toLowerCase()
-                      .replace(/\s+/g, "-")}`}
-                  >
-                    {request.status || "Open"}
-                  </span>
-                  <h3>{request.user_name}</h3>
-                  <p>
-                    {request.message ||
-                      "No message added. User is waiting for role assignment."}
-                  </p>
-                  <div className="users-role-request-meta">
-                    <span>@{request.username || request.user_name}</span>
-                    <span>{request.requested_role || "Role not specified"}</span>
-                    {request.contact_phone && <span>{request.contact_phone}</span>}
-                    {request.contact_email && <span>{request.contact_email}</span>}
-                    <span>{formatUtcLocal(request.created_at)}</span>
-                  </div>
-                </div>
-                <div className="users-role-request-actions">
-                  <button
-                    disabled={roleRequestUpdatingId === request.id}
-                    onClick={() => updateRoleRequestStatus(request.id, "Contacted")}
-                    type="button"
-                  >
-                    Contacted
-                  </button>
-                  <button
-                    disabled={roleRequestUpdatingId === request.id}
-                    onClick={() => updateRoleRequestStatus(request.id, "Reviewed")}
-                    type="button"
-                  >
-                    Reviewed
-                  </button>
-                  <button
-                    className="is-danger"
-                    disabled={roleRequestUpdatingId === request.id}
-                    onClick={() => deleteRoleRequest(request)}
-                    type="button"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
 
       <main className="users-directory">
         <div className="users-directory-header">
@@ -1462,6 +1262,11 @@ export default function Users({ authenticatedUser }) {
                       type="password"
                       value={pin}
                     />
+                    <small>
+                      {editingUserId
+                        ? "Current PIN is protected. Enter a new 4-digit PIN to change it."
+                        : "Set a 4-digit login PIN for this user."}
+                    </small>
                   </label>
                   <label>
                     Phone

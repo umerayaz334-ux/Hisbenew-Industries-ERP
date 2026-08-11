@@ -14,7 +14,8 @@ const allowedHosts = [
 ]
 
 const mobileHttpsPfx = process.env.ERP_MOBILE_HTTPS_PFX
-const mobileHttps = mobileHttpsPfx && fs.existsSync(mobileHttpsPfx)
+const enableMobileHttps = process.env.ERP_FRONTEND_HTTPS === '1'
+const mobileHttps = enableMobileHttps && mobileHttpsPfx && fs.existsSync(mobileHttpsPfx)
   ? {
       pfx: fs.readFileSync(mobileHttpsPfx),
       passphrase: process.env.ERP_MOBILE_HTTPS_PFX_PASSWORD || '',
@@ -48,5 +49,18 @@ export default defineConfig({
     allowedHosts,
     https: mobileHttps,
     proxy: apiProxy,
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react') || id.includes('axios')) return 'vendor'
+            if (id.includes('jsbarcode')) return 'barcode'
+          }
+        },
+      },
+    },
   },
 })

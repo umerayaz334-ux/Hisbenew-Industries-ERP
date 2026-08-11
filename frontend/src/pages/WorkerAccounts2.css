@@ -1,0 +1,26 @@
+.worker-accounts-ui {
+  width: 100%;
+  color: var(--suppliers-ink, #050505);
+  font-family: inherit;
+}
+
+.worker-alert {
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.worker-alert.alert-success {
+  background-color: #e4f2eb;
+  color: #176247;
+  border: 1px solid #b7e0ce;
+}
+
+.worker-alert.alert-danger {
+  background-color: #fff0ed;
+  color: #942e23;
+  border: 1px solid #e4aaa0;
+}

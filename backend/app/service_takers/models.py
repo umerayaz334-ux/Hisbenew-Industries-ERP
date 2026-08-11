@@ -21,6 +21,7 @@ class ServiceTaker(Base):
     __tablename__ = "service_takers"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
     company_name = Column(String, nullable=False, index=True)
     contact_name = Column(String, nullable=False)
@@ -74,6 +75,7 @@ class ServiceTakerProduct(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
     service_taker_id = Column(
         Integer,
         ForeignKey("service_takers.id"),
@@ -120,6 +122,7 @@ class ServiceTakerInbound(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
     service_taker_id = Column(
         Integer,
         ForeignKey("service_takers.id"),
@@ -162,6 +165,7 @@ class ServiceTakerInboundItem(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
     inbound_id = Column(
         Integer,
         ForeignKey("service_taker_inbounds.id"),
@@ -192,6 +196,7 @@ class ServiceTakerOrder(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
     service_taker_id = Column(
         Integer,
         ForeignKey("service_takers.id"),
@@ -253,6 +258,7 @@ class ServiceTakerOrderItem(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
     order_id = Column(
         Integer,
         ForeignKey("service_taker_orders.id"),
@@ -283,6 +289,7 @@ class ServiceTakerInventoryTransaction(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
     service_taker_id = Column(
         Integer,
         ForeignKey("service_takers.id"),

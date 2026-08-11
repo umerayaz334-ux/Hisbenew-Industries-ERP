@@ -337,7 +337,44 @@
 }
 
 .is-focus-dashboard .dashboard-modern-alert.is-success {
-  --alert-accent: #34d399;
+  --alert-accent: #2dd4bf;
+  border: 1px solid rgba(45, 212, 191, 0.22);
+  background:
+    radial-gradient(circle at 8% 50%, rgba(45, 212, 191, 0.2), transparent 12rem),
+    radial-gradient(circle at 82% 16%, rgba(129, 140, 248, 0.16), transparent 16rem),
+    linear-gradient(135deg, #111827 0%, #1b2332 52%, #123236 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.14) inset,
+    0 16px 34px rgba(15, 23, 42, 0.16);
+}
+
+.is-focus-dashboard .dashboard-modern-alert.is-success .dashboard-modern-alert-icon {
+  border-color: rgba(94, 234, 212, 0.42);
+  color: #ecfeff;
+  background:
+    linear-gradient(135deg, rgba(45, 212, 191, 0.36), rgba(59, 130, 246, 0.16));
+  box-shadow: 0 10px 24px rgba(20, 184, 166, 0.18);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+}
+
+.is-focus-dashboard .dashboard-modern-alert.is-success .dashboard-modern-alert-copy > span {
+  color: #5eead4;
+}
+
+.is-focus-dashboard .dashboard-modern-alert.is-success .dashboard-modern-alert-copy p,
+.is-focus-dashboard .dashboard-modern-alert.is-success dt {
+  color: #b8c5d8;
+}
+
+.is-focus-dashboard .dashboard-modern-alert.is-success > a {
+  border-color: rgba(94, 234, 212, 0.34);
+  color: #ecfeff;
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.is-focus-dashboard .dashboard-modern-alert.is-success > a:hover {
+  background: rgba(45, 212, 191, 0.18);
 }
 
 .is-focus-dashboard .dashboard-modern-alert-icon {

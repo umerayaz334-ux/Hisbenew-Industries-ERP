@@ -1,7 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
-import { API_BASE_URL, apiFetch, getAuthHeaders, getStaticUrl } from "../api/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import JsBarcode from "jsbarcode";
+import api, { API_BASE_URL, apiFetch, getAuthHeaders, getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
 import { formatUtcLocal, parseUtcLocal } from "../utils/dateUtils";
+import {
+  COPY_STYLE_FIELDS,
+  DEFAULT_LOCAL_PRINT_BRIDGE_URL,
+  applyLabelDesignToItem,
+  createLabelPrinterItemForProduct,
+  fetchLocalPrinterBridge,
+  getBarcodeHeightScale,
+  getInitialLocalPrintBridgeUrl,
+  getInitialPrinterConnectionMode,
+  getLabelPrintCount,
+  getLayerAlignment,
+  getLayerOffset,
+  getLayerOrder,
+  getPrinterApiError,
+  normalizeApiBaseUrl,
+  pickLabelFields,
+  readLabelPrinterSettings,
+  shouldUseLocalPrinterBridgeByDefault,
+} from "../utils/labelPrintUtils";
 import "./Shipping.css";
 
 function Icon({ name, size = 18 }) {
@@ -74,6 +94,15 @@ function Icon({ name, size = 18 }) {
       </>
     ),
     close: <path d="M6 6l12 12M18 6 6 18" />,
+    plus: <path d="M12 5v14M5 12h14" />,
+    minus: <path d="M5 12h14" />,
+    print: (
+      <>
+        <path d="M6 9V3h12v6" />
+        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+        <path d="M6 14h12v7H6z" />
+      </>
+    ),
     chevron: <path d="m9 18 6-6-6-6" />,
   };
 
@@ -114,6 +143,111 @@ const getProductInitials = (articleNo, productName) =>
     .replace(/[^a-z0-9]/gi, "")
     .slice(0, 2)
     .toUpperCase();
+const ShippingBarcodePreview = ({ value, height, scale = 1, heightScale = 1 }) => {
+  const barcodeRef = useRef(null);
+
+  useEffect(() => {
+    if (!barcodeRef.current) return;
+    try {
+      JsBarcode(barcodeRef.current, String(value || "LABEL"), {
+        format: "CODE128",
+        width: Math.max(0.8, 1.2 * Number(scale || 1)),
+        height: height * Number(scale || 1) * Number(heightScale || 1),
+        margin: 0,
+        displayValue: false,
+        background: "#ffffff",
+        lineColor: "#000000",
+      });
+    } catch {
+      barcodeRef.current.innerHTML = "";
+    }
+  }, [height, heightScale, scale, value]);
+
+  return <svg aria-label={`Barcode ${value || "label"}`} ref={barcodeRef} role="img" />;
+};
+
+const ShippingLabelPreview = ({ item, size }) => {
+  const width = Number(size?.width || 50);
+  const height = Number(size?.height || 25);
+  const scale = Math.min(5.4, 360 / width, 300 / height);
+  const previewWidth = Math.max(180, width * scale);
+  const previewHeight = Math.max(90, height * scale);
+  const compact = height <= 30;
+  const textBaseSize = Math.max(9, Math.min(18, height * 0.42));
+  const independentTextBaseSize = Math.max(9, Math.min(18, textBaseSize * 1.3));
+  const barcodeHeight = Math.max(20, Math.min(54, previewHeight * (compact ? 0.21 : 0.19)));
+  const barcodeScale = Math.max(0.55, Math.min(1.6, Number(item.barcodeScale || 1)));
+  const barcodeHeightScale = getBarcodeHeightScale(item);
+  const sku = item.sku || item.subtitle || item.barcode || "LABEL";
+
+  const renderLayer = (layerId) => {
+    if (layerId === "brand") {
+      return item.showBrand && item.brand ? (
+        <span className={`shipping-label-preview-brand is-align-${item.brandAlign || "left"}`}>{item.brand}</span>
+      ) : null;
+    }
+    if (layerId === "title") {
+      return (
+        <strong className={`shipping-label-preview-title is-align-${item.titleAlign || "left"}`}>
+          {item.title || "Untitled label"}
+        </strong>
+      );
+    }
+    if (layerId === "price") {
+      return item.showPrice && item.price ? (
+        <span className={`shipping-label-preview-price is-align-${item.priceAlign || "left"}`}>{item.price}</span>
+      ) : null;
+    }
+    if (layerId === "image") {
+      return item.showImage && item.imageUrl ? (
+        <div className="shipping-label-preview-image"><img alt="" src={getStaticUrl(item.imageUrl)} /></div>
+      ) : null;
+    }
+    if (layerId === "barcode") {
+      return item.showBarcode ? (
+        <div className="shipping-label-preview-barcode">
+          <ShippingBarcodePreview height={barcodeHeight} heightScale={barcodeHeightScale} scale={barcodeScale} value={item.barcode} />
+        </div>
+      ) : null;
+    }
+    if (layerId === "sku") {
+      return item.showBarcode ? (
+        <small className={`shipping-label-preview-sku is-align-${item.skuAlign || "center"}`}>{sku}</small>
+      ) : null;
+    }
+    return null;
+  };
+
+  return (
+    <article
+      className={`shipping-label-preview ${compact ? "is-compact" : ""} ${item.showImage ? "has-image" : ""}`}
+      style={{
+        "--label-preview-width": `${previewWidth}px`,
+        "--label-preview-height": `${previewHeight}px`,
+        "--label-brand-size": `${Math.max(7, independentTextBaseSize * 0.48 * Number(item.brandScale || 1))}px`,
+        "--label-title-size": `${Math.max(9, Math.min(18, textBaseSize * Number(item.titleScale || 1)))}px`,
+        "--label-sku-size": `${Math.max(9, independentTextBaseSize * 0.78 * Number(item.skuScale || 1))}px`,
+        "--label-price-size": `${Math.max(7, independentTextBaseSize * 0.62 * Number(item.priceScale || 1))}px`,
+        "--barcode-scale": barcodeScale,
+        "--barcode-height-scale": barcodeHeightScale,
+      }}
+    >
+      {getLayerOrder(item).map((layerId) => {
+        const layer = renderLayer(layerId);
+        if (!layer) return null;
+        return (
+          <div
+            className={`shipping-label-preview-layer is-align-${getLayerAlignment(item, layerId)}`}
+            key={layerId}
+            style={{ "--layer-offset": `${getLayerOffset(item, layerId) * scale}px` }}
+          >
+            {layer}
+          </div>
+        );
+      })}
+    </article>
+  );
+};
 
 const getOrderShippingPhone = (order) =>
   String(order?.shipping_phone || order?.order_contact_phone || order?.customer_phone || "")
@@ -156,6 +290,13 @@ function Shipping({ userRole }) {
   const [uploadingRateSheet, setUploadingRateSheet] = useState(false);
   const [weightEdits, setWeightEdits] = useState({});
   const [savingWeightOrderId, setSavingWeightOrderId] = useState(null);
+  const [labelPrintDraft, setLabelPrintDraft] = useState(null);
+  const [labelPrinterOptions, setLabelPrinterOptions] = useState([]);
+  const [labelPrinterStatus, setLabelPrinterStatus] = useState({ loading: false, error: "" });
+  const [labelDirectPrinter, setLabelDirectPrinter] = useState("");
+  const [labelPrinterConnectionMode, setLabelPrinterConnectionMode] = useState(getInitialPrinterConnectionMode);
+  const [labelLocalPrintBridgeUrl, setLabelLocalPrintBridgeUrl] = useState(getInitialLocalPrintBridgeUrl);
+  const [labelDirectPrinting, setLabelDirectPrinting] = useState(false);
 
   const loadShippingData = async ({ quiet = false } = {}) => {
     if (!quiet) setRefreshing(true);
@@ -277,6 +418,168 @@ function Shipping({ userRole }) {
     } catch (error) {
       console.error("Error copying to clipboard:", error);
       setNotice("Order details could not be copied.");
+    }
+  };
+
+  const usesPrintAgentBridgeForMode = (mode) =>
+    mode === "local" && shouldUseLocalPrinterBridgeByDefault();
+
+  const getLabelPrinterStatus = (mode, bridgeUrl) => {
+    if (usesPrintAgentBridgeForMode(mode)) return api.get("/print-agent/printers");
+    return mode === "local"
+      ? fetchLocalPrinterBridge(bridgeUrl, "/local-label-printers")
+      : api.get("/label-printers");
+  };
+
+  const postLabelPrinterLabels = (mode, bridgeUrl, payload) => {
+    if (usesPrintAgentBridgeForMode(mode)) return api.post("/print-agent/print", payload);
+    return mode === "local"
+      ? fetchLocalPrinterBridge(bridgeUrl, "/local-label-printers/print", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      : api.post("/label-printers/print", payload);
+  };
+
+  const loadShippingLabelPrinters = async ({ showNotice = false } = {}) => {
+    const nextMode = getInitialPrinterConnectionMode();
+    const nextBridgeUrl = getInitialLocalPrintBridgeUrl();
+    const nextModeLabel = nextMode === "local" ? usesPrintAgentBridgeForMode(nextMode) ? "This laptop Print Agent" : "This laptop" : "ERP server";
+
+    setLabelPrinterConnectionMode(nextMode);
+    setLabelLocalPrintBridgeUrl(nextBridgeUrl);
+    setLabelPrinterStatus({ loading: true, error: "" });
+
+    try {
+      const response = await getLabelPrinterStatus(nextMode, nextBridgeUrl);
+      const printers = Array.isArray(response.data?.printers) ? response.data.printers : [];
+      setLabelPrinterOptions(printers);
+      setLabelDirectPrinter((current) => {
+        if (current && printers.some((printer) => printer.name === current)) return current;
+        return response.data?.default_printer || printers.find((printer) => printer.is_default)?.name || printers[0]?.name || "";
+      });
+      setLabelPrinterStatus({ loading: false, error: "" });
+      if (showNotice) {
+        const connectedCount = printers.filter((printer) => printer.is_connected).length;
+        setNotice(
+          printers.length
+            ? `${connectedCount} of ${printers.length} label printer${printers.length === 1 ? "" : "s"} connected on ${nextModeLabel}.`
+            : `No label printers were found on ${nextModeLabel}.`
+        );
+      }
+    } catch (error) {
+      const detail = getPrinterApiError(error, "Printer status could not be checked.");
+      setLabelPrinterOptions([]);
+      setLabelDirectPrinter("");
+      setLabelPrinterStatus({ loading: false, error: detail });
+      if (showNotice || nextMode === "local") setNotice(detail);
+    }
+  };
+  const openLabelPrintDialog = (order, item) => {
+    const settings = readLabelPrinterSettings();
+    const latestDesign = settings.latestSavedDesign?.values ? settings.latestSavedDesign : null;
+    const latestDesignLayout = latestDesign ? pickLabelFields(latestDesign.values, COPY_STYLE_FIELDS) : null;
+    const product = {
+      id: item.product_id || null,
+      article_no: item.article_no || "",
+      category: item.category || "",
+      image_url: item.product_image_url || "",
+      name: item.product_name || "",
+      selling_price: item.product_selling_price ?? item.unit_price ?? 0,
+    };
+    const productLabelItem = createLabelPrinterItemForProduct(product, {
+      productDesigns: settings.productDesigns,
+      quantity: item.quantity,
+    });
+    const baseLabelItem = latestDesignLayout
+      ? { ...applyLabelDesignToItem(productLabelItem, latestDesignLayout), quantity: getLabelPrintCount(item.quantity) }
+      : productLabelItem;
+    const skuValue = String(item.article_no || baseLabelItem.sku || baseLabelItem.barcode || "").trim();
+    const labelItem = {
+      ...baseLabelItem,
+      articleNo: skuValue || baseLabelItem.articleNo || "",
+      sku: skuValue || baseLabelItem.sku || "",
+      barcode: skuValue || baseLabelItem.barcode || "LABEL",
+    };
+
+    setNotice("");
+    setLabelPrintDraft({
+      activeSize: settings.activeSize,
+      articleNo: item.article_no || "",
+      designName: latestDesign?.name || "Saved product layout",
+      labelItem,
+      orderId: order.order_id,
+      orderNo: order.order_no || "",
+      printRotation: settings.printRotation,
+      productImageUrl: item.product_image_url || "",
+      productName: item.product_name || "",
+      quantity: getLabelPrintCount(labelItem),
+    });
+    loadShippingLabelPrinters();
+  };
+
+  const updateLabelPrintQuantity = (value) => {
+    const quantity = getLabelPrintCount(value);
+    setLabelPrintDraft((current) =>
+      current
+        ? {
+            ...current,
+            labelItem: { ...current.labelItem, quantity },
+            quantity,
+          }
+        : current
+    );
+  };
+
+  const adjustLabelPrintQuantity = (delta) => {
+    setLabelPrintDraft((current) => {
+      if (!current) return current;
+      const quantity = getLabelPrintCount(Number(current.quantity || 1) + delta);
+      return {
+        ...current,
+        labelItem: { ...current.labelItem, quantity },
+        quantity,
+      };
+    });
+  };
+
+  const printShippingItemLabels = async () => {
+    if (!labelPrintDraft) return;
+    const quantity = getLabelPrintCount(labelPrintDraft.quantity);
+    const size = labelPrintDraft.activeSize || readLabelPrinterSettings().activeSize;
+
+    if (!labelDirectPrinter || !selectedLabelPrinter) {
+      setNotice("Choose a connected label printer before sending labels.");
+      loadShippingLabelPrinters({ showNotice: true });
+      return;
+    }
+    if (selectedLabelPrinterOffline) {
+      setNotice(`${selectedLabelPrinter.name} is ${selectedLabelPrinter.status || "not connected"}. Check the cable, power, and Windows printer queue.`);
+      loadShippingLabelPrinters();
+      return;
+    }
+    if (selectedLabelPrinterUnsupported) {
+      setNotice(`${selectedLabelPrinter.name} is connected, but direct printing needs a TSPL-compatible thermal label printer.`);
+      return;
+    }
+
+    setLabelDirectPrinting(true);
+    try {
+      const response = await postLabelPrinterLabels(labelPrinterConnectionMode, resolvedLabelBridgeUrl, {
+        labels: [{ ...labelPrintDraft.labelItem, quantity }],
+        size: { width: size.width, height: size.height, gap: size.gap },
+        printer_name: labelDirectPrinter,
+      });
+      setNotice(
+        `Sent ${response.data.label_count} label${response.data.label_count === 1 ? "" : "s"} directly to ${response.data.printer} through ${labelPrinterConnectionModeLabel} (${labelPrinterTransportLabel}).`
+      );
+      loadShippingLabelPrinters();
+    } catch (error) {
+      setNotice(getPrinterApiError(error, "The direct label job could not be sent to the printer."));
+      loadShippingLabelPrinters();
+    } finally {
+      setLabelDirectPrinting(false);
     }
   };
 
@@ -703,6 +1006,49 @@ function Shipping({ userRole }) {
   const formatAmount = (value) =>
     Number(value || 0).toLocaleString("en-PK", { maximumFractionDigits: 0 });
 
+  const labelUsesLocalPrinterBridge = labelPrinterConnectionMode === "local";
+  const labelUsesPrintAgentBridge = labelUsesLocalPrinterBridge && shouldUseLocalPrinterBridgeByDefault();
+  const resolvedLabelBridgeUrl = normalizeApiBaseUrl(labelLocalPrintBridgeUrl) || DEFAULT_LOCAL_PRINT_BRIDGE_URL;
+  const labelPrinterConnectionModeLabel = labelUsesLocalPrinterBridge ? "This laptop" : "ERP server";
+  const labelPrinterTransportLabel = labelUsesPrintAgentBridge ? "Print Agent" : labelUsesLocalPrinterBridge ? "Local bridge" : "ERP server";
+  const selectedLabelPrinter = labelPrinterOptions.find((printer) => printer.name === labelDirectPrinter) || null;
+  const selectedLabelPrinterOffline = selectedLabelPrinter?.is_connected === false;
+  const selectedLabelPrinterUnsupported = selectedLabelPrinter && !selectedLabelPrinter.supports_direct_labels;
+  const labelDirectPrintDisabled =
+    labelDirectPrinting ||
+    labelPrinterStatus.loading ||
+    !labelPrintDraft ||
+    !selectedLabelPrinter ||
+    selectedLabelPrinterOffline ||
+    selectedLabelPrinterUnsupported;
+  const labelPrinterStatusClass = labelPrinterStatus.loading
+    ? "is-checking"
+    : labelPrinterStatus.error || selectedLabelPrinterOffline
+      ? "is-error"
+      : selectedLabelPrinter?.is_connected
+        ? "is-connected"
+        : "is-offline";
+  const labelPrinterStatusText = labelPrinterStatus.loading
+    ? "Checking printers"
+    : labelPrinterStatus.error
+      ? labelUsesPrintAgentBridge ? "Print Agent offline" : labelUsesLocalPrinterBridge ? "Local bridge unavailable" : "Printer status unavailable"
+      : !labelPrinterOptions.length
+        ? "No printers found"
+        : !labelDirectPrinter || !selectedLabelPrinter
+          ? "Choose printer"
+          : selectedLabelPrinterOffline
+            ? selectedLabelPrinter.status || "Not connected"
+            : selectedLabelPrinterUnsupported
+              ? "Connected, direct unavailable"
+              : selectedLabelPrinter.status || "Ready";
+  const labelDirectPrintTitle = !labelDirectPrinter
+    ? "Choose a connected TSPL label printer"
+    : selectedLabelPrinterOffline
+      ? "Selected printer is not connected"
+      : selectedLabelPrinterUnsupported
+        ? "Direct printing needs a TSPL-compatible thermal label printer"
+        : "Send labels directly to the selected thermal printer";
+
   const missingCostCount = shippingRecords.filter(
     (record) => !Number(record.shipping_cost || 0)
   ).length;
@@ -1016,7 +1362,7 @@ function Shipping({ userRole }) {
                               key={`${order.order_id}-${item.article_no}`}
                             >
                               {item.product_image_url ? (
-                                <img
+                                <img loading="lazy" decoding="async"
                                   alt=""
                                   className="shipping-item-thumbnail"
                                   src={getStaticUrl(item.product_image_url)}
@@ -1039,9 +1385,23 @@ function Shipping({ userRole }) {
                                     : "Weight missing"}
                                 </span>
                               </div>
-                              <span className="shipping-item-source">
-                                {item.stock_source}
-                              </span>
+                              <div className="shipping-item-actions">
+                                <span className="shipping-item-source">
+                                  {item.stock_source}
+                                </span>
+                                <button
+                                  aria-label={`Print labels for ${
+                                    item.article_no || item.product_name || "product"
+                                  }`}
+                                  className="shipping-item-label-button"
+                                  onClick={() => openLabelPrintDialog(order, item)}
+                                  title="Print product labels"
+                                  type="button"
+                                >
+                                  <Icon name="print" size={14} />
+                                  Label
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -1675,6 +2035,123 @@ function Shipping({ userRole }) {
           </div>
         )}
       </section>
+
+      {labelPrintDraft && (
+        <div
+          className="shipping-label-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setLabelPrintDraft(null);
+          }}
+        >
+          <section
+            aria-label="Print product label"
+            aria-modal="true"
+            className="shipping-label-modal"
+            role="dialog"
+          >
+            <div className="shipping-label-modal-header shipping-label-modal-header-compact">
+              <button
+                aria-label="Close label print popup"
+                className="shipping-label-modal-close"
+                onClick={() => setLabelPrintDraft(null)}
+                type="button"
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+
+            <div className="shipping-label-preview-card">
+              <div className="shipping-label-preview-heading">
+                <span>Barcode preview</span>
+                <strong>{labelPrintDraft.articleNo || labelPrintDraft.labelItem.sku || labelPrintDraft.labelItem.barcode || "SKU"}</strong>
+              </div>
+              <div className="shipping-label-preview-stage">
+                <ShippingLabelPreview item={labelPrintDraft.labelItem} size={labelPrintDraft.activeSize} />
+              </div>
+            </div>
+
+            <div className="shipping-label-printer-row">
+              <label>
+                <span>Printer</span>
+                <select
+                  disabled={labelPrinterStatus.loading || labelPrinterOptions.length === 0}
+                  onChange={(event) => setLabelDirectPrinter(event.target.value)}
+                  value={labelDirectPrinter}
+                >
+                  <option value="">Select printer</option>
+                  {labelPrinterOptions.map((printer) => (
+                    <option key={printer.name} value={printer.name}>
+                      {`${printer.name}${printer.is_default ? " (default)" : ""}${printer.is_connected ? "" : " - offline"}${printer.supports_direct_labels ? "" : " - direct unavailable"}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div>
+                <span className={`shipping-label-printer-status ${labelPrinterStatusClass}`} title={selectedLabelPrinter?.status_detail || labelPrinterStatus.error || ""}>
+                  {labelPrinterStatusText}
+                </span>
+                <small>{labelPrinterConnectionModeLabel} ({labelPrinterTransportLabel})</small>
+              </div>
+              <button
+                className="shipping-label-refresh-button"
+                disabled={labelPrinterStatus.loading}
+                onClick={() => loadShippingLabelPrinters({ showNotice: true })}
+                type="button"
+              >
+                {labelPrinterStatus.loading ? "Checking" : "Refresh"}
+              </button>
+            </div>
+
+            <div className="shipping-label-quantity-row">
+              <span>Quantity</span>
+              <div className="shipping-label-stepper">
+                <button
+                  aria-label="Decrease label quantity"
+                  onClick={() => adjustLabelPrintQuantity(-1)}
+                  type="button"
+                >
+                  <Icon name="minus" size={15} />
+                </button>
+                <input
+                  aria-label="Label print quantity"
+                  max="999"
+                  min="1"
+                  onChange={(event) => updateLabelPrintQuantity(event.target.value)}
+                  type="number"
+                  value={labelPrintDraft.quantity}
+                />
+                <button
+                  aria-label="Increase label quantity"
+                  onClick={() => adjustLabelPrintQuantity(1)}
+                  type="button"
+                >
+                  <Icon name="plus" size={15} />
+                </button>
+              </div>
+            </div>
+
+            <div className="shipping-label-modal-actions">
+              <button
+                className="shipping-share-button"
+                onClick={() => setLabelPrintDraft(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="shipping-ship-button shipping-label-print-button"
+                disabled={labelDirectPrintDisabled}
+                onClick={printShippingItemLabels}
+                title={labelDirectPrintTitle}
+                type="button"
+              >
+                <Icon name="print" size={16} />
+                {labelDirectPrinting ? "Sending..." : "Print labels"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 DEFAULT_MARKETPLACE_ID = "ATVPDKIKX0DER"
 DEFAULT_REGION = "NA"
 DEFAULT_CURRENCY = "USD"
-DEFAULT_ACCOUNT_NAME = "Hisbenew Industries Amazon USA"
+DEFAULT_ACCOUNT_NAME = "Amazon Seller Account"
 
 REGION_ENDPOINTS = {
     "NA": "https://sellingpartnerapi-na.amazon.com",

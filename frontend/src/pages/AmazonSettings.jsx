@@ -10,7 +10,7 @@ const REGION_ENDPOINTS = {
 };
 
 const EMPTY_FORM = {
-  account_name: "Hisbenew Industries Amazon USA",
+  account_name: "Amazon Seller Account",
   client_identifier: "",
   client_secret: "",
   app_id: "",

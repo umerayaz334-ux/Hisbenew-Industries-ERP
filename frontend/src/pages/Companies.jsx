@@ -68,6 +68,47 @@ const formatActivityTime = (value) => {
   });
 };
 
+const getInitials = (name = "") =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "CO";
+
+const getModuleIconSvg = (name = "") => {
+  const lower = name.toLowerCase();
+  if (lower.includes("label")) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>
+    );
+  }
+  if (lower.includes("amazon")) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 17c3.5 2.3 8.2 2.5 12 .2"/><path d="M16.5 19.5 19 17l-3-.5"/><path d="M8 8.5c.5-2.2 2-3.5 4.4-3.5 2.7 0 4.1 1.3 4.1 3.7V15"/></svg>
+    );
+  }
+  if (lower.includes("school")) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 6 2 6 2s6 0 6-2v-5"/></svg>
+    );
+  }
+  if (lower.includes("account") || lower.includes("pay") || lower.includes("bill") || lower.includes("finance")) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+    );
+  }
+  if (lower.includes("ship") || lower.includes("fulfill") || lower.includes("deliver")) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+  );
+};
+
 const normalizePageList = (pages = []) => {
   const next = [];
   pages.forEach((page) => {
@@ -77,7 +118,7 @@ const normalizePageList = (pages = []) => {
   return next;
 };
 
-export default function Companies({ authenticatedUser, focusCreate = false }) {
+export default function Companies({ authenticatedUser, focusCreate = false, onSwitchToCompanyPortal }) {
   const isSuperAdmin = authenticatedUser?.role === "super_admin";
   const [tenants, setTenants] = useState([]);
   const [modules, setModules] = useState([]);
@@ -86,6 +127,24 @@ export default function Companies({ authenticatedUser, focusCreate = false }) {
   const [accessOptions, setAccessOptions] = useState({ pages: [], role_defaults: {} });
   const [modulesByTenant, setModulesByTenant] = useState({});
   const [selectedTenantId, setSelectedTenantId] = useState(null);
+  
+  // UI Controls
+  const [viewMode, setViewMode] = useState("grid"); // "grid" | "table"
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all"); // "all" | "active" | "inactive"
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [detailTab, setDetailTab] = useState("details"); // "details" | "modules" | "users" | "activity"
+
+  // Modules Tab Filtering & Search
+  const [moduleSearch, setModuleSearch] = useState("");
+  const [moduleCategoryFilter, setModuleCategoryFilter] = useState("all");
+
+  // User PIN View & Update State
+  const [revealedPins, setRevealedPins] = useState({}); // { [userId]: boolean }
+  const [pinModalUser, setPinModalUser] = useState(null);
+  const [newPinValue, setNewPinValue] = useState("");
+  const [updatingPin, setUpdatingPin] = useState(false);
+
   const [companyForm, setCompanyForm] = useState(emptyCompanyForm);
   const [editForm, setEditForm] = useState({ company_name: "", slug: "", email: "", phone: "", status: "active" });
   const [userForm, setUserForm] = useState(emptyUserForm);
@@ -103,6 +162,36 @@ export default function Companies({ authenticatedUser, focusCreate = false }) {
   );
 
   const selectedModules = selectedTenantId ? modulesByTenant[selectedTenantId] || [] : [];
+
+  const filteredModules = useMemo(() => {
+    let result = selectedModules;
+    if (moduleCategoryFilter === "core") {
+      result = result.filter((m) => {
+        const name = (m.page_name || m.name || m.slug || "").toLowerCase();
+        return !name.includes("school") && !name.includes("amazon") && !name.includes("website") && !name.includes("service");
+      });
+    } else if (moduleCategoryFilter === "integrations") {
+      result = result.filter((m) => {
+        const name = (m.page_name || m.name || m.slug || "").toLowerCase();
+        return name.includes("amazon") || name.includes("website") || name.includes("service");
+      });
+    } else if (moduleCategoryFilter === "school") {
+      result = result.filter((m) => {
+        const name = (m.page_name || m.name || m.slug || "").toLowerCase();
+        return name.includes("school");
+      });
+    }
+    if (moduleSearch.trim()) {
+      const q = moduleSearch.trim().toLowerCase();
+      result = result.filter(
+        (m) =>
+          (m.page_name || "").toLowerCase().includes(q) ||
+          (m.name || "").toLowerCase().includes(q) ||
+          (m.slug || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [moduleCategoryFilter, moduleSearch, selectedModules]);
   const selectedCompanyUsers = useMemo(
     () => users.filter((user) => Number(user.tenant_id) === Number(selectedTenantId)),
     [selectedTenantId, users]
@@ -111,7 +200,7 @@ export default function Companies({ authenticatedUser, focusCreate = false }) {
     () =>
       activityLogs
         .filter((activity) => Number(activity.tenant_id) === Number(selectedTenantId))
-        .slice(0, 8),
+        .slice(0, 12),
     [activityLogs, selectedTenantId]
   );
   const activeTenants = tenants.filter((tenant) => tenant.status === "active").length;
@@ -206,11 +295,9 @@ export default function Companies({ authenticatedUser, focusCreate = false }) {
   }, [loadCompanies]);
 
   useEffect(() => {
-    if (!focusCreate || !isSuperAdmin) return undefined;
-    const timer = window.setTimeout(() => {
-      createPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
-    return () => window.clearTimeout(timer);
+    if (focusCreate && isSuperAdmin) {
+      setShowCreateModal(true);
+    }
   }, [focusCreate, isSuperAdmin]);
 
   useEffect(() => {
@@ -295,6 +382,43 @@ export default function Companies({ authenticatedUser, focusCreate = false }) {
     });
   };
 
+  // PIN Viewing & Editing Functions
+  const toggleRevealPin = (userId) => {
+    setRevealedPins((prev) => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
+  const handleOpenResetPinModal = (user) => {
+    setPinModalUser(user);
+    setNewPinValue(user.pin || "0000");
+    setError("");
+    setSuccess("");
+  };
+
+  const handleSaveUserPin = async (e) => {
+    e.preventDefault();
+    if (!pinModalUser) return;
+    if (!/^\d{4}$/.test(newPinValue)) {
+      setError("PIN must be exactly 4 digits.");
+      return;
+    }
+    setUpdatingPin(true);
+    setError("");
+    setSuccess("");
+    try {
+      await api.patch(`/users/${pinModalUser.id}/pin`, { pin: newPinValue });
+      setUsers((current) =>
+        current.map((u) => (u.id === pinModalUser.id ? { ...u, pin: newPinValue } : u))
+      );
+      setSuccess(`PIN updated successfully for ${pinModalUser.name}.`);
+      setPinModalUser(null);
+    } catch (err) {
+      console.error("PIN update error:", err);
+      setError(err.response?.data?.detail || "Failed to update user PIN.");
+    } finally {
+      setUpdatingPin(false);
+    }
+  };
+
   const createCompany = async (event) => {
     event.preventDefault();
     setError("");
@@ -336,7 +460,8 @@ export default function Companies({ authenticatedUser, focusCreate = false }) {
         setSelectedTenantId(created.id);
         await loadTenantModules(created.id);
       }
-      setSuccess("Company created.");
+      setSuccess("Company created successfully.");
+      setShowCreateModal(false);
     } catch (saveError) {
       console.error("Company create error:", saveError);
       setError(saveError.response?.data?.detail || "Unable to create company.");
@@ -362,7 +487,7 @@ export default function Companies({ authenticatedUser, focusCreate = false }) {
       setTenants((current) =>
         current.map((tenant) => (tenant.id === selectedTenant.id ? response.data : tenant))
       );
-      setSuccess("Company updated.");
+      setSuccess("Company details updated.");
     } catch (saveError) {
       console.error("Company update error:", saveError);
       setError(saveError.response?.data?.detail || "Unable to update company.");
@@ -432,415 +557,775 @@ export default function Companies({ authenticatedUser, focusCreate = false }) {
     }
   };
 
+  // Filtered companies list
+  const filteredTenants = useMemo(() => {
+    let result = tenants;
+    if (statusFilter !== "all") {
+      result = result.filter((t) => t.status === statusFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (t) =>
+          t.company_name?.toLowerCase().includes(q) ||
+          t.slug?.toLowerCase().includes(q) ||
+          t.email?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [searchQuery, statusFilter, tenants]);
+
   if (!isSuperAdmin) {
     return (
-      <div className="companies-page">
-        <section className="companies-state-panel">
-          <span className="companies-eyebrow">Companies</span>
-          <h1>Super admin access required</h1>
-          <p>Company creation, tenant modules, and cross-company user assignment are only available to Hafiz Umer as super admin.</p>
+      <div className="cmp-wrapper">
+        <section className="cmp-unauthorized-card">
+          <div className="cmp-unauthorized-icon">🔒</div>
+          <h1>Super Admin Authorization Required</h1>
+          <p>Multi-tenant company administration, module access control, and cross-tenant user management are restricted to Super Admin role.</p>
         </section>
       </div>
     );
   }
 
   return (
-    <div className="companies-page">
-      <header className="companies-header">
-        <div>
-          <span className="companies-eyebrow">Super admin</span>
-          <h1>Companies</h1>
-          <p>Manage company tenants, company users, and enabled ERP modules.</p>
+    <div className="cmp-wrapper">
+      {/* Top Header & Metric Bar */}
+      <header className="cmp-header">
+        <div className="cmp-header-left">
+          <div className="cmp-badge-pill">Platform Tenant Engine</div>
+          <h1 className="cmp-title">Companies Management</h1>
+          <p className="cmp-subtitle">Manage enterprise tenant entities, configure ERP module access, manage PINs/passwords, and switch into tenant company portals.</p>
         </div>
-        <div className="companies-summary-strip" aria-label="Company summary">
-          <article>
-            <span>Total</span>
-            <strong>{tenants.length}</strong>
-          </article>
-          <article>
-            <span>Active</span>
-            <strong>{activeTenants}</strong>
-          </article>
-          <article>
-            <span>Users</span>
-            <strong>{selectedCompanyUsers.length}</strong>
-          </article>
+
+        <div className="cmp-metrics-strip">
+          <div className="cmp-metric-pill">
+            <span className="cmp-metric-num">{tenants.length}</span>
+            <span className="cmp-metric-label">Total Companies</span>
+          </div>
+          <div className="cmp-metric-pill cmp-metric-active">
+            <span className="cmp-metric-num">{activeTenants}</span>
+            <span className="cmp-metric-label">Active Tenants</span>
+          </div>
+          <div className="cmp-metric-pill">
+            <span className="cmp-metric-num">{users.length}</span>
+            <span className="cmp-metric-label">System Users</span>
+          </div>
         </div>
       </header>
 
-      {error && <div className="companies-message is-error">{error}</div>}
-      {success && <div className="companies-message is-success">{success}</div>}
+      {/* Control Toolbar */}
+      <div className="cmp-toolbar">
+        <div className="cmp-search-field">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input
+            type="text"
+            placeholder="Search companies by name, slug, or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button className="cmp-clear-btn" onClick={() => setSearchQuery("")}>×</button>
+          )}
+        </div>
 
-      <div className="companies-layout">
-        <section
-          className={`companies-panel companies-create-panel ${focusCreate ? "is-focused" : ""}`.trim()}
-          ref={createPanelRef}
-        >
-          <div className="companies-panel-heading">
-            <span className="companies-eyebrow">New company</span>
-            <h2>Create tenant</h2>
-          </div>
-          <form className="companies-form" onSubmit={createCompany}>
-            <div className="companies-form-grid">
-              <label>
-                Company name
-                <input
-                  onChange={(event) => updateCompanyForm("company_name", event.target.value)}
-                  placeholder="e.g. Hisbenew Lahore"
-                  required
-                  value={companyForm.company_name}
-                />
-              </label>
-              <label>
-                Slug
-                <input
-                  onChange={(event) => updateCompanyForm("slug", toSlug(event.target.value))}
-                  placeholder="hisbenew-lahore"
-                  value={companyForm.slug}
-                />
-              </label>
-              <label>
-                Email
-                <input
-                  onChange={(event) => updateCompanyForm("email", event.target.value)}
-                  type="email"
-                  value={companyForm.email}
-                />
-              </label>
-              <label>
-                Phone
-                <input
-                  onChange={(event) => updateCompanyForm("phone", event.target.value)}
-                  value={companyForm.phone}
-                />
-              </label>
-              <label>
-                Status
-                <select
-                  onChange={(event) => updateCompanyForm("status", event.target.value)}
-                  value={companyForm.status}
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </label>
-            </div>
+        <div className="cmp-filter-group">
+          <select
+            className="cmp-select"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All Statuses</option>
+            <option value="active">Active Only</option>
+            <option value="inactive">Inactive / Suspended</option>
+          </select>
 
-            <div className="companies-subsection">
-              <h3>First company admin</h3>
-              <div className="companies-form-grid">
-                <label>
-                  Admin name
-                  <input
-                    onChange={(event) => updateCompanyForm("admin_name", event.target.value)}
-                    placeholder="Optional"
-                    value={companyForm.admin_name}
-                  />
-                </label>
-                <label>
-                  Admin username
-                  <input
-                    onChange={(event) => updateCompanyForm("admin_username", event.target.value)}
-                    value={companyForm.admin_username}
-                  />
-                </label>
-                <label>
-                  Admin PIN
-                  <input
-                    inputMode="numeric"
-                    maxLength={4}
-                    onChange={(event) => updateCompanyForm("admin_pin", event.target.value.replace(/\D/g, ""))}
-                    type="password"
-                    value={companyForm.admin_pin}
-                  />
-                </label>
-                <label>
-                  Admin email
-                  <input
-                    onChange={(event) => updateCompanyForm("admin_email", event.target.value)}
-                    type="email"
-                    value={companyForm.admin_email}
-                  />
-                </label>
-                <label>
-                  Admin phone
-                  <input
-                    onChange={(event) => updateCompanyForm("admin_phone", event.target.value)}
-                    value={companyForm.admin_phone}
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="companies-subsection">
-              <h3>Enabled modules</h3>
-              <div className="companies-module-grid">
-                {modules.map((module) => (
-                  <label className={companyForm.module_slugs.includes(module.slug) ? "is-selected" : ""} key={module.slug}>
-                    <input
-                      checked={companyForm.module_slugs.includes(module.slug)}
-                      onChange={() => toggleCreateModule(module.slug)}
-                      type="checkbox"
-                    />
-                    <span>{moduleLabel(module)}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <button className="companies-primary-button" disabled={saving} type="submit">
-              {saving ? "Saving..." : "Create company"}
+          <div className="cmp-view-toggle">
+            <button
+              className={`cmp-toggle-btn ${viewMode === "grid" ? "active" : ""}`}
+              onClick={() => setViewMode("grid")}
+              title="Grid View"
+              type="button"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
             </button>
-          </form>
-        </section>
-
-        <section className="companies-panel companies-directory-panel">
-          <div className="companies-panel-heading">
-            <span className="companies-eyebrow">Directory</span>
-            <h2>Company tenants</h2>
+            <button
+              className={`cmp-toggle-btn ${viewMode === "table" ? "active" : ""}`}
+              onClick={() => setViewMode("table")}
+              title="Table View"
+              type="button"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            </button>
           </div>
+
+          <button
+            className="cmp-btn-primary"
+            onClick={() => setShowCreateModal(true)}
+            type="button"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Create Company
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="cmp-toast cmp-toast-error">{error}</div>}
+      {success && <div className="cmp-toast cmp-toast-success">{success}</div>}
+
+      {/* Main Split Interface */}
+      <div className="cmp-main-layout">
+        {/* Left Side Directory (Grid or Table) */}
+        <div className="cmp-directory-section">
           {loading ? (
-            <div className="companies-empty">Loading companies...</div>
-          ) : tenants.length === 0 ? (
-            <div className="companies-empty">No companies yet.</div>
+            <div className="cmp-loading-card">Loading tenant directory...</div>
+          ) : filteredTenants.length === 0 ? (
+            <div className="cmp-empty-card">
+              <div className="cmp-empty-icon">🏢</div>
+              <h3>No Companies Found</h3>
+              <p>No tenant records match your current filter settings.</p>
+              <button className="cmp-btn-secondary" onClick={() => { setSearchQuery(""); setStatusFilter("all"); }}>Reset Filters</button>
+            </div>
+          ) : viewMode === "grid" ? (
+            <div className="cmp-cards-grid">
+              {filteredTenants.map((tenant) => {
+                const isSelected = Number(selectedTenantId) === Number(tenant.id);
+                return (
+                  <article
+                    className={`cmp-tenant-card ${isSelected ? "is-selected" : ""}`}
+                    key={tenant.id}
+                    onClick={() => selectTenant(tenant.id)}
+                  >
+                    <div className="cmp-card-top">
+                      <div className="cmp-avatar">{getInitials(tenant.company_name)}</div>
+                      <div className="cmp-card-head">
+                        <h3>{tenant.company_name}</h3>
+                        <code>{tenant.slug}</code>
+                      </div>
+                      <span className={`cmp-status-tag is-${tenant.status}`}>
+                        <span className="cmp-dot" /> {tenant.status}
+                      </span>
+                    </div>
+
+                    <div className="cmp-card-details">
+                      {tenant.email && (
+                        <div className="cmp-detail-row">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                          <span>{tenant.email}</span>
+                        </div>
+                      )}
+                      {tenant.phone && (
+                        <div className="cmp-detail-row">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                          <span>{tenant.phone}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="cmp-card-footer">
+                      <button
+                        className="cmp-btn-enter-portal"
+                        onClick={(e) => { e.stopPropagation(); onSwitchToCompanyPortal?.(tenant); }}
+                        title={`Enter ${tenant.company_name} Portal`}
+                        type="button"
+                      >
+                        Enter Portal ↗
+                      </button>
+                      <button className="cmp-btn-manage" onClick={(e) => { e.stopPropagation(); selectTenant(tenant.id); }}>
+                        {isSelected ? "Managing" : "Select"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           ) : (
-            <div className="companies-tenant-list">
-              {tenants.map((tenant) => (
-                <button
-                  className={`companies-tenant-row ${Number(selectedTenantId) === Number(tenant.id) ? "is-active" : ""}`.trim()}
-                  key={tenant.id}
-                  onClick={() => selectTenant(tenant.id)}
-                  type="button"
-                >
-                  <span>
-                    <strong>{tenant.company_name}</strong>
-                    <small>{tenant.slug}</small>
-                  </span>
-                  <span className={`companies-status is-${tenant.status}`}>{tenant.status}</span>
-                  <span>{tenant.user_count || 0} users</span>
-                </button>
-              ))}
+            <div className="cmp-table-card">
+              <table className="cmp-table">
+                <thead>
+                  <tr>
+                    <th>Company Name</th>
+                    <th>Slug</th>
+                    <th>Status</th>
+                    <th>Contact Info</th>
+                    <th>Users</th>
+                    <th>Portal Access</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTenants.map((tenant) => {
+                    const isSelected = Number(selectedTenantId) === Number(tenant.id);
+                    return (
+                      <tr
+                        className={isSelected ? "is-selected" : ""}
+                        key={tenant.id}
+                        onClick={() => selectTenant(tenant.id)}
+                      >
+                        <td className="cmp-td-company">
+                          <div className="cmp-mini-avatar">{getInitials(tenant.company_name)}</div>
+                          <strong>{tenant.company_name}</strong>
+                        </td>
+                        <td><code>{tenant.slug}</code></td>
+                        <td>
+                          <span className={`cmp-status-tag is-${tenant.status}`}>
+                            <span className="cmp-dot" /> {tenant.status}
+                          </span>
+                        </td>
+                        <td className="cmp-td-contact">
+                          <div>{tenant.email || "No email"}</div>
+                          <small>{tenant.phone || ""}</small>
+                        </td>
+                        <td>{tenant.user_count || 0} users</td>
+                        <td>
+                          <div className="cmp-table-action-group">
+                            <button
+                              className="cmp-btn-enter-portal"
+                              onClick={(e) => { e.stopPropagation(); onSwitchToCompanyPortal?.(tenant); }}
+                              title={`Enter ${tenant.company_name} Portal`}
+                              type="button"
+                            >
+                              Enter Portal ↗
+                            </button>
+                            <button className="cmp-btn-sm" onClick={(e) => { e.stopPropagation(); selectTenant(tenant.id); }}>
+                              {isSelected ? "Managing" : "Manage"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
-        </section>
+        </div>
 
-        <section className="companies-panel companies-detail-panel">
-          <div className="companies-panel-heading">
-            <span className="companies-eyebrow">Selected company</span>
-            <h2>{selectedTenant?.company_name || "Choose a company"}</h2>
-          </div>
+        {/* Right Side Workstation Panel */}
+        <div className="cmp-workstation-section">
           {selectedTenant ? (
-            <>
-              <form className="companies-form" onSubmit={saveSelectedCompany}>
-                <div className="companies-form-grid">
-                  <label>
-                    Company name
-                    <input
-                      onChange={(event) => setEditForm((current) => ({ ...current, company_name: event.target.value }))}
-                      required
-                      value={editForm.company_name}
-                    />
-                  </label>
-                  <label>
-                    Slug
-                    <input
-                      onChange={(event) => setEditForm((current) => ({ ...current, slug: toSlug(event.target.value) }))}
-                      value={editForm.slug}
-                    />
-                  </label>
-                  <label>
-                    Email
-                    <input
-                      onChange={(event) => setEditForm((current) => ({ ...current, email: event.target.value }))}
-                      type="email"
-                      value={editForm.email}
-                    />
-                  </label>
-                  <label>
-                    Phone
-                    <input
-                      onChange={(event) => setEditForm((current) => ({ ...current, phone: event.target.value }))}
-                      value={editForm.phone}
-                    />
-                  </label>
-                  <label>
-                    Status
-                    <select
-                      onChange={(event) => setEditForm((current) => ({ ...current, status: event.target.value }))}
-                      value={editForm.status}
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  </label>
+            <div className="cmp-workstation-card">
+              {/* Workstation Header */}
+              <div className="cmp-ws-header">
+                <div className="cmp-ws-title-row">
+                  <div className="cmp-ws-avatar">{getInitials(selectedTenant.company_name)}</div>
+                  <div className="cmp-ws-title-box">
+                    <h2>{selectedTenant.company_name}</h2>
+                    <div className="cmp-ws-submeta">
+                      <code>slug: {selectedTenant.slug}</code>
+                      <span className={`cmp-status-tag is-${selectedTenant.status}`}>
+                        {selectedTenant.status}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    className="cmp-btn-enter-portal-lg"
+                    onClick={() => onSwitchToCompanyPortal?.(selectedTenant)}
+                    type="button"
+                  >
+                    Enter Portal ↗
+                  </button>
                 </div>
-                <button className="companies-secondary-button" disabled={saving} type="submit">
-                  {saving ? "Saving..." : "Save company"}
-                </button>
-              </form>
 
-              <div className="companies-subsection">
-                <div className="companies-module-heading">
-                  <h3>Company modules</h3>
-                  <span>{enabledModules} enabled</span>
+                {/* Tabs */}
+                <div className="cmp-ws-tabs">
+                  <button
+                    className={`cmp-ws-tab ${detailTab === "details" ? "active" : ""}`}
+                    onClick={() => setDetailTab("details")}
+                    type="button"
+                  >
+                    Details & Settings
+                  </button>
+                  <button
+                    className={`cmp-ws-tab ${detailTab === "modules" ? "active" : ""}`}
+                    onClick={() => setDetailTab("modules")}
+                    type="button"
+                  >
+                    Modules ({enabledModules})
+                  </button>
+                  <button
+                    className={`cmp-ws-tab ${detailTab === "users" ? "active" : ""}`}
+                    onClick={() => setDetailTab("users")}
+                    type="button"
+                  >
+                    Users & Passwords ({selectedCompanyUsers.length})
+                  </button>
+                  <button
+                    className={`cmp-ws-tab ${detailTab === "activity" ? "active" : ""}`}
+                    onClick={() => setDetailTab("activity")}
+                    type="button"
+                  >
+                    Audit Log
+                  </button>
                 </div>
-                <div className="companies-module-grid companies-module-grid-detail">
-                  {selectedModules.map((module) => (
-                    <label className={module.enabled ? "is-selected" : ""} key={module.slug}>
+              </div>
+
+              {/* Tab 1: Details */}
+              {detailTab === "details" && (
+                <form className="cmp-ws-body" onSubmit={saveSelectedCompany}>
+                  <div className="cmp-form-grid">
+                    <label className="cmp-input-group">
+                      <span>Company Name *</span>
                       <input
-                        checked={Boolean(module.enabled)}
-                        disabled={moduleSavingSlug === module.slug}
-                        onChange={() => toggleTenantModule(module)}
-                        type="checkbox"
+                        onChange={(e) => setEditForm((c) => ({ ...c, company_name: e.target.value }))}
+                        required
+                        value={editForm.company_name}
                       />
-                      <span>{moduleLabel(module)}</span>
                     </label>
-                  ))}
+                    <label className="cmp-input-group">
+                      <span>Tenant Slug</span>
+                      <input
+                        onChange={(e) => setEditForm((c) => ({ ...c, slug: toSlug(e.target.value) }))}
+                        value={editForm.slug}
+                      />
+                    </label>
+                    <label className="cmp-input-group">
+                      <span>Corporate Email</span>
+                      <input
+                        onChange={(e) => setEditForm((c) => ({ ...c, email: e.target.value }))}
+                        type="email"
+                        value={editForm.email}
+                      />
+                    </label>
+                    <label className="cmp-input-group">
+                      <span>Contact Phone</span>
+                      <input
+                        onChange={(e) => setEditForm((c) => ({ ...c, phone: e.target.value }))}
+                        value={editForm.phone}
+                      />
+                    </label>
+                    <label className="cmp-input-group">
+                      <span>Subscription Status</span>
+                      <select
+                        onChange={(e) => setEditForm((c) => ({ ...c, status: e.target.value }))}
+                        value={editForm.status}
+                      >
+                        <option value="active">Active Subscription</option>
+                        <option value="inactive">Inactive / Suspended</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="cmp-form-actions">
+                    <button className="cmp-btn-primary" disabled={saving} type="submit">
+                      {saving ? "Saving Changes..." : "Save Company Details"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Tab 2: Modules Grid */}
+              {detailTab === "modules" && (
+                <div className="cmp-ws-body">
+                  <div className="cmp-modules-topbar">
+                    <div className="cmp-modules-search">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      <input
+                        type="text"
+                        placeholder="Search ERP modules by name or slug..."
+                        value={moduleSearch}
+                        onChange={(e) => setModuleSearch(e.target.value)}
+                      />
+                      {moduleSearch && (
+                        <button className="cmp-clear-btn" onClick={() => setModuleSearch("")}>×</button>
+                      )}
+                    </div>
+
+                    <div className="cmp-modules-pills">
+                      <button
+                        className={`cmp-mod-pill ${moduleCategoryFilter === "all" ? "is-active" : ""}`}
+                        onClick={() => setModuleCategoryFilter("all")}
+                        type="button"
+                      >
+                        All ({selectedModules.length})
+                      </button>
+                      <button
+                        className={`cmp-mod-pill ${moduleCategoryFilter === "core" ? "is-active" : ""}`}
+                        onClick={() => setModuleCategoryFilter("core")}
+                        type="button"
+                      >
+                        Core ERP
+                      </button>
+                      <button
+                        className={`cmp-mod-pill ${moduleCategoryFilter === "integrations" ? "is-active" : ""}`}
+                        onClick={() => setModuleCategoryFilter("integrations")}
+                        type="button"
+                      >
+                        Integrations
+                      </button>
+                      <button
+                        className={`cmp-mod-pill ${moduleCategoryFilter === "school" ? "is-active" : ""}`}
+                        onClick={() => setModuleCategoryFilter("school")}
+                        type="button"
+                      >
+                        School
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="cmp-modules-grid">
+                    {filteredModules.length === 0 ? (
+                      <div className="cmp-empty-compact">No modules matching search.</div>
+                    ) : (
+                      filteredModules.map((module) => {
+                        const isSaving = moduleSavingSlug === module.slug;
+                        const isEnabled = Boolean(module.enabled);
+                        return (
+                          <div
+                            className={`cmp-module-card ${isEnabled ? "is-enabled" : ""}`}
+                            key={module.slug}
+                            onClick={() => toggleTenantModule(module)}
+                          >
+                            <div className="cmp-mod-card-top">
+                              <div className="cmp-mod-icon">
+                                {getModuleIconSvg(moduleLabel(module))}
+                              </div>
+                              <div className="cmp-toggle-switch">
+                                <input
+                                  checked={isEnabled}
+                                  disabled={isSaving}
+                                  onChange={() => {}}
+                                  type="checkbox"
+                                />
+                                <span className="cmp-toggle-slider" />
+                              </div>
+                            </div>
+
+                            <div className="cmp-mod-card-body">
+                              <strong className="cmp-mod-title">{moduleLabel(module)}</strong>
+                              <div className="cmp-mod-tags">
+                                <span className={`cmp-mod-status-badge ${isEnabled ? "is-active" : ""}`}>
+                                  {isEnabled ? "Enabled" : "Disabled"}
+                                </span>
+                                <code className="cmp-mod-slug">{module.slug}</code>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: Users & PINs */}
+              {detailTab === "users" && (
+                <div className="cmp-ws-body">
+                  <div className="cmp-subhead">
+                    <h3>Company Users & Security Credentials ({selectedCompanyUsers.length})</h3>
+                    <p>Inspect active login PINs and reset user credentials directly from Super Admin.</p>
+                  </div>
+
+                  <div className="cmp-user-cards-list">
+                    {selectedCompanyUsers.length === 0 ? (
+                      <div className="cmp-empty-compact">No users created for this tenant yet.</div>
+                    ) : (
+                      selectedCompanyUsers.map((user) => {
+                        const isRevealed = Boolean(revealedPins[user.id]);
+                        return (
+                          <div className="cmp-user-card-row" key={user.id}>
+                            <div className="cmp-user-avatar">{getInitials(user.name)}</div>
+                            <div className="cmp-user-main">
+                              <strong>{user.name}</strong>
+                              <small>@{user.username || user.name}</small>
+                            </div>
+                            <span className={`cmp-role-pill role-${user.role}`}>
+                              {roleLabel(user.role)}
+                            </span>
+                            
+                            {/* PIN View & Reveal */}
+                            <div className="cmp-pin-display-box">
+                              <span className="cmp-pin-label">PIN:</span>
+                              <code className="cmp-pin-code">
+                                {isRevealed ? (user.pin || "0000") : "••••"}
+                              </code>
+                              <button
+                                className="cmp-pin-eye-btn"
+                                onClick={() => toggleRevealPin(user.id)}
+                                title={isRevealed ? "Hide PIN" : "Reveal PIN"}
+                                type="button"
+                              >
+                                {isRevealed ? "🙈" : "👁️"}
+                              </button>
+                            </div>
+
+                            {/* Reset PIN Trigger */}
+                            <button
+                              className="cmp-btn-sm cmp-btn-reset-pin"
+                              onClick={() => handleOpenResetPinModal(user)}
+                              title={`Reset PIN for ${user.name}`}
+                              type="button"
+                            >
+                              Reset PIN
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Create New User Section */}
+                  <form className="cmp-create-user-section" onSubmit={createCompanyUser}>
+                    <h4>+ Add New User to {selectedTenant.company_name}</h4>
+                    <div className="cmp-form-grid">
+                      <label className="cmp-input-group">
+                        <span>Full Name *</span>
+                        <input
+                          onChange={(e) => updateUserForm("name", e.target.value)}
+                          placeholder="e.g. Sara Ahmed"
+                          required
+                          value={userForm.name}
+                        />
+                      </label>
+                      <label className="cmp-input-group">
+                        <span>Username</span>
+                        <input
+                          onChange={(e) => updateUserForm("username", e.target.value)}
+                          value={userForm.username}
+                        />
+                      </label>
+                      <label className="cmp-input-group">
+                        <span>4-digit PIN *</span>
+                        <input
+                          inputMode="numeric"
+                          maxLength={4}
+                          onChange={(e) => updateUserForm("pin", e.target.value.replace(/\D/g, ""))}
+                          type="password"
+                          value={userForm.pin}
+                        />
+                      </label>
+                      <label className="cmp-input-group">
+                        <span>User Role</span>
+                        <select onChange={(e) => updateUserForm("role", e.target.value)} value={userForm.role}>
+                          {ROLE_OPTIONS.map((r) => (
+                            <option key={r} value={r}>{roleLabel(r)}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="cmp-pages-header">
+                      <span>Allowed ERP Pages ({userForm.allowed_pages.length})</span>
+                      <div className="cmp-page-btns">
+                        <button onClick={() => updateUserForm("allowed_pages", pagesForRole(userForm.role))} type="button">Role Default</button>
+                        <button onClick={() => updateUserForm("allowed_pages", pageChoices)} type="button">Select All</button>
+                      </div>
+                    </div>
+
+                    <div className="cmp-pages-pills">
+                      {pageChoices.map((page) => {
+                        const isChecked = userForm.allowed_pages.includes(page);
+                        return (
+                          <label className={`cmp-page-pill ${isChecked ? "active" : ""}`} key={page}>
+                            <input
+                              checked={isChecked}
+                              disabled={page === "Dashboard"}
+                              onChange={() => toggleUserPage(page)}
+                              type="checkbox"
+                            />
+                            <span>{page}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    <button className="cmp-btn-primary" disabled={userSaving} type="submit">
+                      {userSaving ? "Creating Account..." : "Create User Account"}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Tab 4: Audit */}
+              {detailTab === "activity" && (
+                <div className="cmp-ws-body">
+                  <div className="cmp-subhead">
+                    <h3>Company Audit Feed</h3>
+                    <p>Log of actions performed in {selectedTenant.company_name}.</p>
+                  </div>
+
+                  <div className="cmp-activity-feed">
+                    {selectedCompanyActivity.length === 0 ? (
+                      <div className="cmp-empty-compact">No audit log records for this company.</div>
+                    ) : (
+                      selectedCompanyActivity.map((log) => (
+                        <div className="cmp-activity-card" key={log.id}>
+                          <div className="cmp-act-head">
+                            <strong>{log.summary || log.action}</strong>
+                            <small>{formatActivityTime(log.created_at)}</small>
+                          </div>
+                          <div className="cmp-act-meta">
+                            <span>Actor: {log.actor_user_name || "Unknown"}</span>
+                            <span>•</span>
+                            <span>Entity: {log.page || log.entity_type || "Company"}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="cmp-workstation-placeholder">
+              <div className="cmp-ph-icon">👈</div>
+              <h3>Select a Company</h3>
+              <p>Choose any tenant from the directory to configure modules, edit details, manage passwords, or enter tenant portal.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal: Reset User PIN */}
+      {pinModalUser && (
+        <div className="cmp-modal-backdrop" onClick={() => setPinModalUser(null)}>
+          <div className="cmp-modal-card cmp-modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="cmp-modal-header">
+              <div>
+                <h2>Update / Reset User PIN</h2>
+                <p>Set a new 4-digit security PIN for <strong>{pinModalUser.name}</strong> (@{pinModalUser.username || pinModalUser.name})</p>
+              </div>
+              <button className="cmp-close-btn" onClick={() => setPinModalUser(null)}>×</button>
+            </div>
+
+            <form className="cmp-modal-body" onSubmit={handleSaveUserPin}>
+              <label className="cmp-input-group">
+                <span>New 4-Digit Security PIN</span>
+                <input
+                  autoFocus
+                  inputMode="numeric"
+                  maxLength={4}
+                  onChange={(e) => setNewPinValue(e.target.value.replace(/\D/g, ""))}
+                  placeholder="e.g. 1234"
+                  required
+                  type="text"
+                  value={newPinValue}
+                />
+              </label>
+
+              <div className="cmp-modal-footer">
+                <button className="cmp-btn-secondary" onClick={() => setPinModalUser(null)} type="button">
+                  Cancel
+                </button>
+                <button className="cmp-btn-primary" disabled={updatingPin} type="submit">
+                  {updatingPin ? "Updating PIN..." : "Save New PIN"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Create Company */}
+      {showCreateModal && (
+        <div className="cmp-modal-backdrop" onClick={() => setShowCreateModal(false)}>
+          <div className="cmp-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="cmp-modal-header">
+              <div>
+                <h2>Create New Company Tenant</h2>
+                <p>Provision a new enterprise tenant with admin credentials & modules</p>
+              </div>
+              <button className="cmp-close-btn" onClick={() => setShowCreateModal(false)}>×</button>
+            </div>
+
+            <form className="cmp-modal-body" onSubmit={createCompany}>
+              <div className="cmp-modal-section">
+                <h3>Basic Information</h3>
+                <div className="cmp-form-grid">
+                  <label className="cmp-input-group">
+                    <span>Company Name *</span>
+                    <input
+                      onChange={(e) => updateCompanyForm("company_name", e.target.value)}
+                      placeholder="e.g. Hisbenew Apparel"
+                      required
+                      value={companyForm.company_name}
+                    />
+                  </label>
+                  <label className="cmp-input-group">
+                    <span>Tenant Slug</span>
+                    <input
+                      onChange={(e) => updateCompanyForm("slug", toSlug(e.target.value))}
+                      placeholder="hisbenew-apparel"
+                      value={companyForm.slug}
+                    />
+                  </label>
+                  <label className="cmp-input-group">
+                    <span>Corporate Email</span>
+                    <input
+                      onChange={(e) => updateCompanyForm("email", e.target.value)}
+                      type="email"
+                      value={companyForm.email}
+                    />
+                  </label>
+                  <label className="cmp-input-group">
+                    <span>Phone</span>
+                    <input
+                      onChange={(e) => updateCompanyForm("phone", e.target.value)}
+                      value={companyForm.phone}
+                    />
+                  </label>
                 </div>
               </div>
 
-              <div className="companies-user-section">
-                <div className="companies-module-heading">
-                  <h3>Company users</h3>
-                  <span>{selectedCompanyUsers.length} accounts</span>
-                </div>
-                <div className="companies-user-list">
-                  {selectedCompanyUsers.length === 0 ? (
-                    <div className="companies-empty companies-empty-compact">No users in this company yet.</div>
-                  ) : (
-                    selectedCompanyUsers.map((user) => (
-                      <article className="companies-user-row" key={user.id}>
-                        <span className="companies-user-avatar">
-                          {(user.name || user.username || "U").slice(0, 2).toUpperCase()}
-                        </span>
-                        <div>
-                          <strong>{user.name}</strong>
-                          <small>@{user.username || user.name}</small>
-                        </div>
-                        <span className={`companies-status is-${user.is_active ? "active" : "inactive"}`}>
-                          {user.is_active ? "active" : "inactive"}
-                        </span>
-                        <span>{roleLabel(user.role)}</span>
-                        <span>{user.allowed_pages?.length || 0} pages</span>
-                      </article>
-                    ))
-                  )}
-                </div>
-              </div>
-              <div className="companies-user-section companies-activity-section">
-                <div className="companies-module-heading">
-                  <h3>Recent activity</h3>
-                  <span>{selectedCompanyActivity.length} latest</span>
-                </div>
-                <div className="companies-activity-list">
-                  {selectedCompanyActivity.length === 0 ? (
-                    <div className="companies-empty companies-empty-compact">No recent activity for this company yet.</div>
-                  ) : (
-                    selectedCompanyActivity.map((activity) => (
-                      <article className="companies-activity-row" key={activity.id}>
-                        <div>
-                          <strong>{activity.summary || activity.action}</strong>
-                          <small>
-                            {activity.actor_user_name || "Unknown user"} - {formatActivityTime(activity.created_at)}
-                          </small>
-                        </div>
-                        <span>{activity.page || activity.entity_type || "Activity"}</span>
-                      </article>
-                    ))
-                  )}
-                </div>
-              </div>
-              <form className="companies-form companies-user-form" onSubmit={createCompanyUser}>
-                <div className="companies-panel-heading companies-user-form-heading">
-                  <span className="companies-eyebrow">New company user</span>
-                  <h2>Create user for {selectedTenant.company_name}</h2>
-                </div>
-                <div className="companies-form-grid">
-                  <label>
-                    Full name
+              <div className="cmp-modal-section">
+                <h3>First Company Admin Account</h3>
+                <div className="cmp-form-grid">
+                  <label className="cmp-input-group">
+                    <span>Admin Name</span>
                     <input
-                      onChange={(event) => updateUserForm("name", event.target.value)}
-                      placeholder="e.g. Sara Ahmed"
-                      required
-                      value={userForm.name}
+                      onChange={(e) => updateCompanyForm("admin_name", e.target.value)}
+                      placeholder="Admin full name"
+                      value={companyForm.admin_name}
                     />
                   </label>
-                  <label>
-                    Username
+                  <label className="cmp-input-group">
+                    <span>Admin Username</span>
                     <input
-                      onChange={(event) => updateUserForm("username", event.target.value)}
-                      value={userForm.username}
+                      onChange={(e) => updateCompanyForm("admin_username", e.target.value)}
+                      value={companyForm.admin_username}
                     />
                   </label>
-                  <label>
-                    4-digit PIN
+                  <label className="cmp-input-group">
+                    <span>Admin 4-digit PIN</span>
                     <input
                       inputMode="numeric"
                       maxLength={4}
-                      onChange={(event) => updateUserForm("pin", event.target.value.replace(/\D/g, ""))}
+                      onChange={(e) => updateCompanyForm("admin_pin", e.target.value.replace(/\D/g, ""))}
                       type="password"
-                      value={userForm.pin}
+                      value={companyForm.admin_pin}
                     />
                   </label>
-                  <label>
-                    Role
-                    <select onChange={(event) => updateUserForm("role", event.target.value)} value={userForm.role}>
-                      {ROLE_OPTIONS.map((role) => (
-                        <option key={role} value={role}>{roleLabel(role)}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Status
-                    <select
-                      onChange={(event) => updateUserForm("is_active", event.target.value === "active")}
-                      value={userForm.is_active ? "active" : "inactive"}
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  </label>
                 </div>
+              </div>
 
-                <div className="companies-user-access-header">
-                  <div>
-                    <h3>Allowed ERP pages</h3>
-                    <span>{userForm.allowed_pages.length} selected</span>
-                  </div>
-                  <div className="companies-user-access-actions">
-                    <button onClick={() => updateUserForm("allowed_pages", pagesForRole(userForm.role))} type="button">
-                      Role default
-                    </button>
-                    <button onClick={() => updateUserForm("allowed_pages", pageChoices)} type="button">
-                      Select all
-                    </button>
-                  </div>
+              <div className="cmp-modal-section">
+                <h3>Enabled ERP Modules</h3>
+                <div className="cmp-modules-pills-grid">
+                  {modules.map((m) => {
+                    const isSelected = companyForm.module_slugs.includes(m.slug);
+                    return (
+                      <label className={`cmp-mod-pill ${isSelected ? "selected" : ""}`} key={m.slug}>
+                        <input
+                          checked={isSelected}
+                          onChange={() => toggleCreateModule(m.slug)}
+                          type="checkbox"
+                        />
+                        <span>{moduleLabel(m)}</span>
+                      </label>
+                    );
+                  })}
                 </div>
+              </div>
 
-                <div className="companies-page-grid">
-                  {pageChoices.map((page) => (
-                    <label className={userForm.allowed_pages.includes(page) ? "is-selected" : ""} key={page}>
-                      <input
-                        checked={userForm.allowed_pages.includes(page)}
-                        disabled={page === "Dashboard"}
-                        onChange={() => toggleUserPage(page)}
-                        type="checkbox"
-                      />
-                      <span>{page}</span>
-                    </label>
-                  ))}
-                </div>
-
-                <button className="companies-primary-button" disabled={userSaving} type="submit">
-                  {userSaving ? "Creating..." : "Create company user"}
+              <div className="cmp-modal-footer">
+                <button className="cmp-btn-secondary" onClick={() => setShowCreateModal(false)} type="button">
+                  Cancel
                 </button>
-              </form>
-            </>
-          ) : (
-            <div className="companies-empty">Select a company to edit details, modules, and users.</div>
-          )}
-        </section>
-      </div>
+                <button className="cmp-btn-primary" disabled={saving} type="submit">
+                  {saving ? "Creating Tenant..." : "Create Tenant"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

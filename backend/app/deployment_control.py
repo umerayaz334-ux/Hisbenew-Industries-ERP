@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from .database import SessionLocal
-from .models import User
+from .models import Module, TenantModule, User
 
 
 router = APIRouter(prefix="/admin/deployment", tags=["deployment"])
@@ -44,17 +44,40 @@ def _truthy(value: str | None) -> bool:
 
 def _require_admin_user(request: Request) -> User:
     user_id = getattr(request.state, "user_id", None)
+    request_tenant_id = getattr(request.state, "tenant_id", None)
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+        user = (
+            db.query(User)
+            .execution_options(skip_tenant_scope=True)
+            .filter(User.id == user_id, User.is_active == True)
+            .first()
+        )
+        if not user:
+            raise HTTPException(status_code=401, detail="Authentication required.")
+        if user.role not in {"admin", "super_admin"}:
+            raise HTTPException(status_code=403, detail="Only administrators can manage deployment.")
+
+        tenant_id = request_tenant_id or user.tenant_id
+        if user.role != "super_admin" and tenant_id is not None:
+            row = (
+                db.query(TenantModule, Module)
+                .execution_options(skip_tenant_scope=True)
+                .join(Module, Module.id == TenantModule.module_id)
+                .filter(
+                    TenantModule.tenant_id == tenant_id,
+                    Module.page_name == "Deployment",
+                )
+                .first()
+            )
+            if row and not row[0].enabled:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Deployment access is disabled for this company.",
+                )
+        return user
     finally:
         db.close()
-
-    if not user:
-        raise HTTPException(status_code=401, detail="Authentication required.")
-    if user.role not in {"admin", "super_admin"}:
-        raise HTTPException(status_code=403, detail="Only administrators can manage deployment.")
-    return user
 
 
 def _run_command(command: list[str], cwd: Path = REPO_ROOT, timeout: int = 30) -> dict:

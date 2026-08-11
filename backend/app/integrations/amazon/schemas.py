@@ -76,6 +76,7 @@ class AmazonSettingsUpdate(BaseModel):
 
 class AmazonSettingsResponse(BaseModel):
     id: int | None = None
+    tenant_id: int | None = None
     account_name: str = DEFAULT_ACCOUNT_NAME
     marketplace_id: str = DEFAULT_MARKETPLACE_ID
     region: str = DEFAULT_REGION

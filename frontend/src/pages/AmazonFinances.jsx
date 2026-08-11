@@ -232,37 +232,30 @@ function AmazonFinances({ authenticatedUser }) {
 
   return (
     <div className="amazon-finances-page">
-      <header className="amazon-finances-hero">
-        <div>
-          <p className="amazon-finances-eyebrow">Amazon Seller Central · Phase 6</p>
-          <h1>Finances & profitability</h1>
-          <p>
-            Reconcile Amazon revenue, fees, refunds, reimbursements, settlement
-            payouts, and estimated product margin.
-          </p>
+      <header className="amazon-finances-top-bar">
+        <div className="amazon-finances-top-title">
+          <h1>📈 Amazon Finances</h1>
+          <span className={`amazon-finances-badge ${tone(connection?.connection_status)}`}>
+            ● {connection?.connection_status || "Not configured"}
+          </span>
+        </div>
+        <div className="amazon-finances-top-meta">
+          {jobs[0] && (
+            <small>
+              Synced {dateTime(jobs[0].completed_at || jobs[0].created_at)}
+            </small>
+          )}
         </div>
       </header>
-
-      <div className="amazon-finances-connection">
-        <span className={`amazon-finances-badge ${tone(connection?.connection_status)}`}>
-          {connection?.connection_status || "Not configured"}
-        </span>
-        <span>
-          {jobs[0]
-            ? `Last finance job: ${jobs[0].status} · ${dateTime(
-                jobs[0].completed_at || jobs[0].created_at
-              )}`
-            : "Use Sync all Amazon data in Settings."}
-        </span>
-      </div>
 
       {message && <div className="amazon-finances-notice is-success">{message}</div>}
       {error && <div className="amazon-finances-notice is-error">{error}</div>}
 
-      <section className="amazon-finances-summary">
-        <article className="amazon-finances-card is-balance">
-          <span>Total Amazon balance</span>
-          <strong>
+      {/* Single Sleek Executive Summary Strip — No Card Noise */}
+      <section className="amazon-finances-exec-bar">
+        <div className="amazon-finances-exec-block is-primary">
+          <span className="amazon-finances-exec-label">Total Balance</span>
+          <strong className="amazon-finances-exec-value">
             {(balance.total_amount ?? balance.amount) == null
               ? "Not synced"
               : money(
@@ -270,57 +263,45 @@ function AmazonFinances({ authenticatedUser }) {
                   balance.currency || currency
                 )}
           </strong>
-          <div className="amazon-finances-card-meta">
-            <small>
-              {balance.error
-                ? balance.error
-                : `Amazon Payments · ${
-                    balance.updated_at
-                      ? `Updated ${dateTime(balance.updated_at)}`
-                      : "Use Sync all in Settings"
-                  }`}
-            </small>
+          <div className="amazon-finances-exec-sub">
+            <span>Avail: <strong>{money(balance.available_amount || 0, currency)}</strong></span>
+            <span className="dot">•</span>
+            <span>Deferred: <strong>{money(balance.deferred_amount || 0, currency)}</strong></span>
           </div>
-        </article>
-        <article className="amazon-finances-card is-available">
-          <span>Available balance</span>
-          <strong>
-            {balance.available_amount == null
-              ? "Not synced"
-              : money(balance.available_amount, balance.currency || currency)}
+        </div>
+
+        <div className="amazon-finances-exec-divider" />
+
+        <div className="amazon-finances-exec-strip">
+          <div className="amazon-finances-exec-item">
+            <span>Product Revenue</span>
+            <strong className="is-blue">{money(summary.product_revenue, currency)}</strong>
+          </div>
+          <div className="amazon-finances-exec-item">
+            <span>Amazon Fees</span>
+            <strong className="is-red">-{money(summary.amazon_fees, currency)}</strong>
+          </div>
+          <div className="amazon-finances-exec-item">
+            <span>Refunds</span>
+            <strong className="is-red">-{money(summary.refunds, currency)}</strong>
+          </div>
+          <div className="amazon-finances-exec-item">
+            <span>Net Proceeds</span>
+            <strong className="is-green">{money(summary.net_proceeds, currency)}</strong>
+          </div>
+        </div>
+
+        <div className="amazon-finances-exec-divider" />
+
+        <div className="amazon-finances-exec-block is-highlight">
+          <span className="amazon-finances-exec-label">Est. Profit Margin</span>
+          <strong className="amazon-finances-exec-value is-indigo">
+            {money(summary.estimated_profit, currency)}
           </strong>
-          <small>Open Amazon Payments balance available now</small>
-        </article>
-        <article className="amazon-finances-card is-deferred">
-          <span>Deferred balance</span>
-          <strong>
-            {balance.deferred_amount == null
-              ? "Not synced"
-              : money(balance.deferred_amount, balance.currency || currency)}
-          </strong>
-          <small>
-            Held for later release ·{" "}
-            {Number(balance.deferred_transaction_count || 0).toLocaleString()}{" "}
-            transaction(s)
+          <small className="amazon-finances-exec-badge">
+            {issues.length > 0 ? `⚠️ ${issues.length} audit issues` : "✓ Reconciled"}
           </small>
-        </article>
-        {[
-          ["Product revenue", summary.product_revenue, "revenue"],
-          ["Amazon fees", summary.amazon_fees, "fees"],
-          ["Refunds", summary.refunds, "refunds"],
-          ["Reimbursements", summary.reimbursements, "reimbursements"],
-          ["Net proceeds", summary.net_proceeds, "net"],
-          ["Estimated profit", summary.estimated_profit, "profit"],
-          ["Expected settlement", settlementSummary.expected_amount, "settlement"],
-          ["Reconciliation issues", issues.length, "issues", true],
-        ].map(([label, value, cardTone, isCount]) => (
-          <article key={label} className={`amazon-finances-card is-${cardTone}`}>
-            <span>{label}</span>
-            <strong>
-              {isCount ? Number(value || 0).toLocaleString() : money(value, currency)}
-            </strong>
-          </article>
-        ))}
+        </div>
       </section>
 
       <section className="amazon-finances-workspace">

@@ -162,8 +162,11 @@ from .security import CredentialCipher, encryption_is_configured, sanitize_exter
 router = APIRouter(prefix="/amazon", tags=["Amazon Seller Central"])
 
 
-def get_db():
+def get_db(request: Request):
     db = SessionLocal()
+    tenant_id = getattr(getattr(request, "state", None), "tenant_id", None) if request else None
+    if tenant_id is not None:
+        db.info["tenant_id"] = tenant_id
     try:
         yield db
     finally:

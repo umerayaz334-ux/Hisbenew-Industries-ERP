@@ -59,6 +59,7 @@ function Messages() {
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [conversation, setConversation] = useState([]);
   const [draft, setDraft] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [sending, setSending] = useState(false);
@@ -76,6 +77,17 @@ function Messages() {
     () => people.find((person) => person.id === selectedUserId) || null,
     [people, selectedUserId]
   );
+
+  const filteredPeople = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return people;
+    return people.filter(
+      (person) =>
+        (person.name || "").toLowerCase().includes(query) ||
+        (person.role || "").toLowerCase().includes(query) ||
+        (person.username || "").toLowerCase().includes(query)
+    );
+  }, [people, searchQuery]);
 
   const mobileVoiceSetup = useMemo(() => {
     if (typeof window === "undefined" || window.isSecureContext) return null;
@@ -118,6 +130,11 @@ function Messages() {
           params: { user_id: selectedUserId },
         });
         setConversation(Array.isArray(response.data) ? response.data : []);
+        setPeople((prevPeople) =>
+          prevPeople.map((person) =>
+            person.id === selectedUserId ? { ...person, unread_count: 0 } : person
+          )
+        );
         setError("");
       } catch (loadError) {
         console.error("Conversation loading error:", loadError);
@@ -219,14 +236,23 @@ function Messages() {
         mobileChatOpen ? "is-mobile-chat-open" : ""
       }`.trim()}
     >
-      <header className="erp-messages-header">
-        <div>
-          <span>Team communication</span>
-          <h1>Messages</h1>
-          <p>Send ERP messages to workers, managers, warehouse users, and admins.</p>
+      <div className="erp-messages-topbar">
+        <div className="erp-messages-topbar-left">
+          <h1 className="erp-messages-topbar-title">💬 Live Chat & Support Hub</h1>
+          <span className="erp-messages-topbar-status">
+            <span className="erp-messages-status-dot" />
+            Realtime Connected
+          </span>
         </div>
-      </header>
-
+        <div className="erp-messages-topbar-stats">
+          <div className="erp-messages-stat-pill">
+            Contacts: <strong>{people.length}</strong>
+          </div>
+          <div className="erp-messages-stat-pill">
+            Visitors: <strong>{people.filter((p) => p.role === "visitor").length}</strong>
+          </div>
+        </div>
+      </div>
       {error && <div className="erp-messages-alert">{error}</div>}
 
       {mobileVoiceSetup && (
@@ -247,21 +273,33 @@ function Messages() {
       >
         <aside className="erp-messages-people">
           <div className="erp-messages-people-head">
-            <h2>People</h2>
-            <span>{people.length}</span>
+            <h2>💬 Messages</h2>
+            <span>{filteredPeople.length}</span>
+          </div>
+
+          <div className="erp-messages-search-wrap">
+            <input
+              className="erp-messages-search-input"
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search people or visitors..."
+              type="text"
+              value={searchQuery}
+            />
           </div>
 
           {loadingPeople ? (
             <div className="erp-messages-empty">Loading people...</div>
-          ) : people.length === 0 ? (
-            <div className="erp-messages-empty">No other active users found.</div>
+          ) : filteredPeople.length === 0 ? (
+            <div className="erp-messages-empty">
+              {searchQuery ? "No matching people found." : "No active users found."}
+            </div>
           ) : (
             <div className="erp-messages-person-list">
-              {people.map((person) => (
+              {filteredPeople.map((person) => (
                 <button
                   className={`erp-messages-person ${
                     person.id === selectedUserId ? "is-active" : ""
-                  }`.trim()}
+                  } ${person.role === "visitor" ? "is-visitor" : ""}`.trim()}
                   key={person.id}
                   onClick={() => {
                     setSelectedUserId(person.id);
@@ -270,17 +308,19 @@ function Messages() {
                   type="button"
                 >
                   <span className="erp-messages-avatar">
-                    {String(person.name || "U")
-                      .split(/\s+/)
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((part) => part[0])
-                      .join("")
-                      .toUpperCase()}
+                    {person.role === "visitor"
+                      ? "💬"
+                      : String(person.name || "U")
+                          .split(/\s+/)
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((part) => part[0])
+                          .join("")
+                          .toUpperCase()}
                   </span>
                   <span className="erp-messages-person-copy">
                     <strong>{person.name}</strong>
-                    <small>{person.role || "User"}</small>
+                    <small>{person.role === "visitor" ? "💬 Visitor" : person.role || "User"}</small>
                   </span>
                   {person.unread_count > 0 && (
                     <em>{person.unread_count}</em>
@@ -306,32 +346,40 @@ function Messages() {
                 <div>
                   <span>Conversation</span>
                   <h2>{selectedUser.name}</h2>
-                  <p>{selectedUser.username || selectedUser.role || "ERP user"}</p>
+                  <p>
+                    {selectedUser.role === "visitor"
+                      ? "💬 Live Website Visitor"
+                      : selectedUser.username || selectedUser.role || "ERP user"}
+                  </p>
                 </div>
                 <div className="erp-messages-call-actions">
-                  <button
-                    aria-label={`Start voice call with ${selectedUser.name}`}
-                    className="erp-messages-call-button"
-                    disabled={isCallBusy}
-                    onClick={() => startCall(selectedUser)}
-                    title={isCallBusy ? "Finish the current call first" : `Call ${selectedUser.name}`}
-                    type="button"
-                  >
-                    <PhoneIcon />
-                    <span>Call</span>
-                  </button>
-                  {isVideoCallingEnabled && (
-                    <button
-                      aria-label={`Start video call with ${selectedUser.name}`}
-                      className="erp-messages-call-button is-video"
-                      disabled={isCallBusy}
-                      onClick={() => startVideoCall(selectedUser)}
-                      title={isCallBusy ? "Finish the current call first" : `Video call ${selectedUser.name}`}
-                      type="button"
-                    >
-                      <VideoIcon />
-                      <span>Video</span>
-                    </button>
+                  {selectedUser.role !== "visitor" && (
+                    <>
+                      <button
+                        aria-label={`Start voice call with ${selectedUser.name}`}
+                        className="erp-messages-call-button"
+                        disabled={isCallBusy}
+                        onClick={() => startCall(selectedUser)}
+                        title={isCallBusy ? "Finish the current call first" : `Call ${selectedUser.name}`}
+                        type="button"
+                      >
+                        <PhoneIcon />
+                        <span>Call</span>
+                      </button>
+                      {isVideoCallingEnabled && (
+                        <button
+                          aria-label={`Start video call with ${selectedUser.name}`}
+                          className="erp-messages-call-button is-video"
+                          disabled={isCallBusy}
+                          onClick={() => startVideoCall(selectedUser)}
+                          title={isCallBusy ? "Finish the current call first" : `Video call ${selectedUser.name}`}
+                          type="button"
+                        >
+                          <VideoIcon />
+                          <span>Video</span>
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </>
@@ -383,13 +431,17 @@ function Messages() {
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={handleComposerKeyDown}
               placeholder={
-                selectedUser ? `Message ${selectedUser.name}` : "Select a person first"
+                selectedUser
+                  ? selectedUser.role === "visitor"
+                    ? `Reply to ${selectedUser.name}...`
+                    : `Message ${selectedUser.name}...`
+                  : "Select a person first"
               }
               rows={1}
               value={draft}
             />
             <button disabled={!selectedUser || !draft.trim() || sending} type="submit">
-              {sending ? "Sending..." : "Send"}
+              {sending ? "Sending..." : "Send ➔"}
             </button>
           </form>
         </main>

@@ -38,7 +38,7 @@ SessionLocal = sessionmaker(
 
 Base = declarative_base()
 
-DEFAULT_TENANT_SLUG = "hisbenew-industries"
+DEFAULT_TENANT_SLUG = "hisbenew"
 DEFAULT_TENANT_NAME = "Hisbenew"
 TENANT_SCOPED_TABLES = (
     "users",
@@ -82,8 +82,130 @@ TENANT_SCOPED_TABLES = (
     "workspace_data",
     "order_workflow_tasks",
     "order_follow_ups",
+    "service_takers",
+    "service_taker_products",
+    "service_taker_inbounds",
+    "service_taker_inbound_items",
+    "service_taker_orders",
+    "service_taker_order_items",
+    "service_taker_inventory_transactions",
+    "amazon_accounts",
 )
 
+
+def backfill_tenant_relationships(connection, default_tenant_id: int) -> None:
+    statements = (
+        """
+        UPDATE service_takers
+        SET tenant_id = COALESCE(
+            (SELECT users.tenant_id FROM users WHERE users.id = service_takers.user_id),
+            :tenant_id
+        )
+        WHERE tenant_id IS NULL OR tenant_id != COALESCE(
+            (SELECT users.tenant_id FROM users WHERE users.id = service_takers.user_id),
+            :tenant_id
+        )
+        """,
+        """
+        UPDATE service_taker_products
+        SET tenant_id = COALESCE(
+            (SELECT service_takers.tenant_id FROM service_takers WHERE service_takers.id = service_taker_products.service_taker_id),
+            :tenant_id
+        )
+        WHERE tenant_id IS NULL OR tenant_id != COALESCE(
+            (SELECT service_takers.tenant_id FROM service_takers WHERE service_takers.id = service_taker_products.service_taker_id),
+            :tenant_id
+        )
+        """,
+        """
+        UPDATE service_taker_inbounds
+        SET tenant_id = COALESCE(
+            (SELECT service_takers.tenant_id FROM service_takers WHERE service_takers.id = service_taker_inbounds.service_taker_id),
+            :tenant_id
+        )
+        WHERE tenant_id IS NULL OR tenant_id != COALESCE(
+            (SELECT service_takers.tenant_id FROM service_takers WHERE service_takers.id = service_taker_inbounds.service_taker_id),
+            :tenant_id
+        )
+        """,
+        """
+        UPDATE service_taker_inbound_items
+        SET tenant_id = COALESCE(
+            (SELECT service_taker_inbounds.tenant_id FROM service_taker_inbounds WHERE service_taker_inbounds.id = service_taker_inbound_items.inbound_id),
+            :tenant_id
+        )
+        WHERE tenant_id IS NULL OR tenant_id != COALESCE(
+            (SELECT service_taker_inbounds.tenant_id FROM service_taker_inbounds WHERE service_taker_inbounds.id = service_taker_inbound_items.inbound_id),
+            :tenant_id
+        )
+        """,
+        """
+        UPDATE service_taker_orders
+        SET tenant_id = COALESCE(
+            (SELECT service_takers.tenant_id FROM service_takers WHERE service_takers.id = service_taker_orders.service_taker_id),
+            :tenant_id
+        )
+        WHERE tenant_id IS NULL OR tenant_id != COALESCE(
+            (SELECT service_takers.tenant_id FROM service_takers WHERE service_takers.id = service_taker_orders.service_taker_id),
+            :tenant_id
+        )
+        """,
+        """
+        UPDATE service_taker_order_items
+        SET tenant_id = COALESCE(
+            (SELECT service_taker_orders.tenant_id FROM service_taker_orders WHERE service_taker_orders.id = service_taker_order_items.order_id),
+            :tenant_id
+        )
+        WHERE tenant_id IS NULL OR tenant_id != COALESCE(
+            (SELECT service_taker_orders.tenant_id FROM service_taker_orders WHERE service_taker_orders.id = service_taker_order_items.order_id),
+            :tenant_id
+        )
+        """,
+        """
+        UPDATE service_taker_inventory_transactions
+        SET tenant_id = COALESCE(
+            (SELECT service_takers.tenant_id FROM service_takers WHERE service_takers.id = service_taker_inventory_transactions.service_taker_id),
+            :tenant_id
+        )
+        WHERE tenant_id IS NULL OR tenant_id != COALESCE(
+            (SELECT service_takers.tenant_id FROM service_takers WHERE service_takers.id = service_taker_inventory_transactions.service_taker_id),
+            :tenant_id
+        )
+        """,
+        """
+        UPDATE amazon_accounts
+        SET tenant_id = COALESCE(
+            (SELECT users.tenant_id FROM users WHERE users.id = amazon_accounts.created_by_user_id AND users.role != 'super_admin'),
+            (SELECT users.tenant_id FROM users WHERE users.id = amazon_accounts.updated_by_user_id AND users.role != 'super_admin'),
+            (SELECT tenants.id FROM tenants WHERE lower(tenants.slug) = 'hisbenew' LIMIT 1),
+            (SELECT tenants.id FROM tenants WHERE lower(tenants.slug) = 'hisbenew-industries' LIMIT 1),
+            :tenant_id
+        )
+        WHERE tenant_id IS NULL
+        """,
+    )
+    for statement in statements:
+        try:
+            connection.execute(text(statement), {"tenant_id": default_tenant_id})
+        except Exception as exc:
+            print(f"Tenant ownership backfill skipped: {exc}")
+
+
+def ensure_amazon_account_tenant_unique_index(connection) -> None:
+    statements = [
+        "DROP INDEX IF EXISTS uq_amazon_accounts_name_marketplace",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_amazon_accounts_tenant_name_marketplace ON amazon_accounts (tenant_id, account_name, marketplace_id)",
+    ]
+    if connection.dialect.name != "sqlite":
+        statements.insert(
+            0,
+            "ALTER TABLE amazon_accounts DROP CONSTRAINT IF EXISTS uq_amazon_accounts_name_marketplace",
+        )
+    for statement in statements:
+        try:
+            connection.execute(text(statement))
+        except Exception as exc:
+            print(f"Amazon account tenant index migration skipped: {exc}")
 
 def sqlite_table_columns(connection, table_name: str) -> list[str]:
     return [row[1] for row in connection.execute(text(f"PRAGMA table_info({table_name})"))]
@@ -159,14 +281,25 @@ def ensure_tenant_schema_sqlite(connection) -> int:
             continue
         if "tenant_id" not in columns:
             connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN tenant_id INTEGER"))
-        connection.execute(
-            text(f"UPDATE {table_name} SET tenant_id = :tenant_id WHERE tenant_id IS NULL"),
-            {"tenant_id": default_tenant_id},
-        )
+        if table_name == "users":
+            connection.execute(
+                text(
+                    f"UPDATE {table_name} SET tenant_id = :tenant_id "
+                    "WHERE tenant_id IS NULL AND role != 'super_admin'"
+                ),
+                {"tenant_id": default_tenant_id},
+            )
+        else:
+            connection.execute(
+                text(f"UPDATE {table_name} SET tenant_id = :tenant_id WHERE tenant_id IS NULL"),
+                {"tenant_id": default_tenant_id},
+            )
         connection.execute(text(
             f"CREATE INDEX IF NOT EXISTS ix_{table_name}_tenant_id ON {table_name}(tenant_id)"
         ))
 
+    backfill_tenant_relationships(connection, int(default_tenant_id))
+    ensure_amazon_account_tenant_unique_index(connection)
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tenants_slug ON tenants(slug)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tenant_modules_tenant_id ON tenant_modules(tenant_id)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_custom_pages_tenant_id ON custom_pages(tenant_id)"))
@@ -237,14 +370,25 @@ def ensure_tenant_schema_postgres(connection) -> int:
         connection.execute(text(
             f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)"
         ))
-        connection.execute(
-            text(f"UPDATE {table_name} SET tenant_id = :tenant_id WHERE tenant_id IS NULL"),
-            {"tenant_id": default_tenant_id},
-        )
+        if table_name == "users":
+            connection.execute(
+                text(
+                    f"UPDATE {table_name} SET tenant_id = :tenant_id "
+                    "WHERE tenant_id IS NULL AND role != 'super_admin'"
+                ),
+                {"tenant_id": default_tenant_id},
+            )
+        else:
+            connection.execute(
+                text(f"UPDATE {table_name} SET tenant_id = :tenant_id WHERE tenant_id IS NULL"),
+                {"tenant_id": default_tenant_id},
+            )
         connection.execute(text(
             f"CREATE INDEX IF NOT EXISTS ix_{table_name}_tenant_id ON {table_name}(tenant_id)"
         ))
 
+    backfill_tenant_relationships(connection, int(default_tenant_id))
+    ensure_amazon_account_tenant_unique_index(connection)
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tenants_slug ON tenants(slug)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_tenant_modules_tenant_id ON tenant_modules(tenant_id)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_custom_pages_tenant_id ON custom_pages(tenant_id)"))
@@ -272,8 +416,8 @@ SCALING_INDEXES = (
     "ON production_tasks (worker_id, status)",
     "CREATE INDEX IF NOT EXISTS ix_order_workflow_tasks_worker_status "
     "ON order_workflow_tasks (assigned_worker_id, status)",
-    "CREATE UNIQUE INDEX IF NOT EXISTS uq_amazon_accounts_name_marketplace "
-    "ON amazon_accounts (account_name, marketplace_id)",
+    "CREATE INDEX IF NOT EXISTS ix_amazon_accounts_tenant_status "
+    "ON amazon_accounts (tenant_id, is_active, connection_status)",
 )
 
 
