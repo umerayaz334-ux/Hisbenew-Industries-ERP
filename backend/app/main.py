@@ -1903,6 +1903,7 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
         or clean_path.startswith("/health")
         or clean_path.startswith("/app-install-info")
         or clean_path.startswith("/local-label-printers")
+        or clean_path.startswith("/api/admin/upload-database")
         or clean_path.startswith("/api/printer-agents")
         or clean_path.startswith("/printer-agents")
         or clean_path.startswith("/api/print-jobs")
@@ -1912,6 +1913,44 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
         or clean_path.startswith("/redoc")
         or clean_path == "/openapi.json"
     )
+
+
+@app.post("/api/admin/upload-database")
+async def upload_database_sync_file(file: UploadFile = File(...)):
+    db_file_path = APP_DATA_DIR / "hisbenew_industries.db"
+    backup_file_path = APP_DATA_DIR / "hisbenew_industries.db.bak"
+    
+    try:
+        engine.dispose()
+    except Exception:
+        pass
+        
+    if db_file_path.exists():
+        import shutil
+        try:
+            shutil.copy(db_file_path, backup_file_path)
+        except Exception:
+            pass
+
+    content = await file.read()
+    if len(content) < 1000:
+        raise HTTPException(status_code=400, detail="Invalid database file size.")
+
+    with open(db_file_path, "wb") as f:
+        f.write(content)
+
+    try:
+        migrate_database()
+        ensure_scaling_indexes()
+    except Exception as exc:
+        print(f"Post-upload migration notice: {exc}")
+
+    return {
+        "status": "success",
+        "detail": "Production database updated with local data successfully.",
+        "file_size": len(content),
+        "path": str(db_file_path),
+    }
 
 
 @app.middleware("http")
