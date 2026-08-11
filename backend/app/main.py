@@ -1903,6 +1903,9 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
         or clean_path.startswith("/health")
         or clean_path.startswith("/app-install-info")
         or clean_path.startswith("/local-label-printers")
+        or clean_path.startswith("/api/printer-agents")
+        or clean_path.startswith("/api/print-jobs")
+        or clean_path.startswith("/print-agent")
         or clean_path.startswith("/docs")
         or clean_path.startswith("/redoc")
         or clean_path == "/openapi.json"
