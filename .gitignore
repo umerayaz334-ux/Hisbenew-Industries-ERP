@@ -1,69 +1,101 @@
-# Environment and secrets
+# ==========================================
+# Environment files / Secrets
+# ==========================================
+
 backend/.secret_key
 backend/.env
 backend/.env.*
 .env
 .env.*
+
 data/.secret_key
+
 backend/static/hisbenew-erp-mobile.cer
 
-backend/.venv/
-.venv/
-__pycache__/
-*.pyc
 
-# Python
-backend/.venv/
-.venv/
-__pycache__/
-*.pyc
+# ==========================================
+# Python Virtual Environments
+# ==========================================
 
-# Node
-frontend/node_modules/
-frontend/dist/
-
-# Python virtual environments and caches
 backend/.venv/
 backend/venv/
-backend/.pytest_cache/
-backend/__pycache__/
+.venv/
+
+# Python cache files
+__pycache__/
 **/__pycache__/
-**/*.py[cod]
+*.py[cod]
 *.pyo
 *.pyd
 
-# Node / frontend artifacts
+# Python testing/cache
+.pytest_cache/
+
+
+# ==========================================
+# Node / Frontend
+# ==========================================
+
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 
-# Local runtime and generated files
-*.log
-*.out
-*.err
+
+# ==========================================
+# Database / Runtime Files
+# ==========================================
+
 *.sqlite3
 *.db
 *.db-journal
-hisbenew_industries.db
+*hisbenew_industries.db*
+
 backend/uploads/
 backend/static/uploads/
 static/uploads/
-output/
-tmp/
-.tmp/
-.tmp*/
 
-# OS / editor noise
+output/
+
+*.log
+*.out
+*.err
+
+
+# ==========================================
+# Temporary Files
+# ==========================================
+
+tmp/
+**/tmp/
+
+*.tmp
+*.tmp/
+**/*.tmp
+
+
+# ==========================================
+# Print Agent
+# ==========================================
+
+print-agent/venv/
+
+
+# ==========================================
+# OS / IDE Files
+# ==========================================
+
 .DS_Store
 Thumbs.db
+
 .vscode/
 .idea/
 
-# Portable / local tool caches
+
+# ==========================================
+# Tool Caches
+# ==========================================
+
 tmp/portable/
+
 **/node-compile-cache/
 **/python-cache/
-**/.pytest_cache/
-
-
-print-agent/venv/
