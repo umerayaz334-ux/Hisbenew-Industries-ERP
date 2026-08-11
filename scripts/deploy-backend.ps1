@@ -223,10 +223,13 @@ Invoke-Step `
     -Message "Sync backend code from runner workspace" `
     -Action {
 
-        # The GitHub Actions runner already has a clean, up-to-date checkout
-        # of the repository in GITHUB_WORKSPACE. We use robocopy to mirror
-        # the backend directory to the production path, which avoids all git
-        # permission issues (ORIG_HEAD, ref locks, etc.) on C:\HisbenewERP.
+        # Ensure destination directory exists and permissions allow access
+        if (-not (Test-Path $backendPath)) {
+            New-Item -ItemType Directory -Force -Path $backendPath | Out-Null
+        }
+
+        # Grant access to destination if needed
+        icacls $repoRoot /grant "Users:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
 
         $runnerBackend = Join-Path $env:GITHUB_WORKSPACE "backend"
 
@@ -234,13 +237,14 @@ Invoke-Step `
         Write-Host "Production backend: $backendPath"
 
         # Robocopy exit codes: 0-7 are success variants, 8+ are errors.
+        # Use /E instead of /MIR to avoid deletion locks on destination root
         robocopy `
             $runnerBackend `
             $backendPath `
-            /MIR `
+            /E `
             /XD ".venv" "venv" "__pycache__" ".git" `
             /XF "*.pyc" "*.db" "*.sqlite" `
-            /R:3 /W:5 /NFL /NDL /NJH /NJS
+            /R:1 /W:2 /NFL /NDL /NJH /NJS
 
         if ($LASTEXITCODE -ge 8) {
             throw "robocopy failed with exit code $LASTEXITCODE"
@@ -248,6 +252,8 @@ Invoke-Step `
 
         Write-Host "Backend code synced successfully."
     }
+
+
 Invoke-Step `
     -Message "Ensure backend virtual environment exists" `
     -Action {
@@ -256,54 +262,67 @@ Invoke-Step `
 
             $venvParent = Split-Path -Parent $venvPath
 
-
             if (-not (Test-Path $venvParent)) {
-
                 New-Item `
                     -ItemType Directory `
                     -Force `
                     -Path $venvParent | Out-Null
             }
 
-
-            $pyLauncher = Get-Command `
-                "py" `
-                -ErrorAction SilentlyContinue
-
-
-            if ($pyLauncher) {
-
-                # Try Python 3.12 specifically first, then fall back to
-                # whatever version the py launcher has available.
-                & py -3.12 --version 2>&1 | Out-Null
-
+            # Detect a working Python executable
+            $systemPy = $null
+            
+            # Check python directly first
+            $pythonCmd = Get-Command "python" -ErrorAction SilentlyContinue
+            if ($pythonCmd) {
+                & python -c "import sys" 2>&1 | Out-Null
                 if ($LASTEXITCODE -eq 0) {
-
-                    Invoke-CheckedCommand `
-                        -FilePath "py" `
-                        -Arguments @("-3.12", "-m", "venv", $venvPath)
-
+                    $systemPy = "python"
                 }
-                else {
+            }
 
-                    Write-Host "Python 3.12 not found via py launcher, using default py version."
-
-                    Invoke-CheckedCommand `
-                        -FilePath "py" `
-                        -Arguments @("-m", "venv", $venvPath)
+            # Check py launcher
+            if (-not $systemPy) {
+                $pyCmd = Get-Command "py" -ErrorAction SilentlyContinue
+                if ($pyCmd) {
+                    & py -c "import sys" 2>&1 | Out-Null
+                    if ($LASTEXITCODE -eq 0) {
+                        $systemPy = "py"
+                    }
                 }
-
             }
-            else {
 
-                Invoke-CheckedCommand `
-                    -FilePath "python" `
-                    -Arguments @(
-                        "-m",
-                        "venv",
-                        $venvPath
-                    )
+            # Check standard Python install locations on Windows
+            if (-not $systemPy) {
+                $candidatePaths = @(
+                    "C:\Python312\python.exe",
+                    "C:\Python311\python.exe",
+                    "C:\Program Files\Python312\python.exe",
+                    "C:\Program Files\Python311\python.exe",
+                    "$env:LocalAppData\Programs\Python\Python312\python.exe",
+                    "$env:LocalAppData\Programs\Python\Python311\python.exe"
+                )
+                foreach ($candidate in $candidatePaths) {
+                    if (Test-Path $candidate) {
+                        $systemPy = $candidate
+                        break
+                    }
+                }
             }
+
+            if (-not $systemPy) {
+                throw "No working Python executable found on the system to create virtual environment."
+            }
+
+            Write-Host "Using Python executable: $systemPy"
+
+            Invoke-CheckedCommand `
+                -FilePath $systemPy `
+                -Arguments @(
+                    "-m",
+                    "venv",
+                    $venvPath
+                )
         }
     }
 
