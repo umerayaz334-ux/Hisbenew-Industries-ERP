@@ -220,75 +220,33 @@ Write-Host "Public health URL: $publicHealthUrl"
 
 
 Invoke-Step `
-    -Message "Pull latest main branch" `
+    -Message "Sync backend code from runner workspace" `
     -Action {
 
-        Push-Location $repoRoot
+        # The GitHub Actions runner already has a clean, up-to-date checkout
+        # of the repository in GITHUB_WORKSPACE. We use robocopy to mirror
+        # the backend directory to the production path, which avoids all git
+        # permission issues (ORIG_HEAD, ref locks, etc.) on C:\HisbenewERP.
 
-        try {
+        $runnerBackend = Join-Path $env:GITHUB_WORKSPACE "backend"
 
-            $dirtyTrackedFiles = git `
-                -c safe.directory=C:/HisbenewERP `
-                status `
-                --porcelain `
-                --untracked-files=no
+        Write-Host "Runner workspace: $runnerBackend"
+        Write-Host "Production backend: $backendPath"
 
+        # Robocopy exit codes: 0-7 are success variants, 8+ are errors.
+        robocopy `
+            $runnerBackend `
+            $backendPath `
+            /MIR `
+            /XD ".venv" "venv" "__pycache__" ".git" `
+            /XF "*.pyc" "*.db" "*.sqlite" `
+            /R:3 /W:5 /NFL /NDL /NJH /NJS
 
-            if ($dirtyTrackedFiles) {
-
-                Write-Host $dirtyTrackedFiles
-
-                throw "Production checkout has tracked local changes."
-            }
-
-
-            Invoke-CheckedCommand `
-                -FilePath "git" `
-                -Arguments @(
-                    "-c",
-                    "safe.directory=C:/HisbenewERP",
-                    "fetch",
-                    "origin",
-                    "main",
-                    "--prune"
-                )
-
-
-            $branch = git `
-                -c safe.directory=C:/HisbenewERP `
-                branch `
-                --show-current
-
-
-            if ($branch -ne "main") {
-
-                Invoke-CheckedCommand `
-                    -FilePath "git" `
-                    -Arguments @(
-                        "-c",
-                        "safe.directory=C:/HisbenewERP",
-                        "checkout",
-                        "main"
-                    )
-            }
-
-
-            Invoke-CheckedCommand `
-                -FilePath "git" `
-                -Arguments @(
-                    "-c",
-                    "safe.directory=C:/HisbenewERP",
-                    "pull",
-                    "--ff-only",
-                    "origin",
-                    "main"
-                )
-
+        if ($LASTEXITCODE -ge 8) {
+            throw "robocopy failed with exit code $LASTEXITCODE"
         }
-        finally {
 
-            Pop-Location
-        }
+        Write-Host "Backend code synced successfully."
     }
 Invoke-Step `
     -Message "Ensure backend virtual environment exists" `
