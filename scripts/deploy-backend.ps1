@@ -315,14 +315,25 @@ Invoke-Step `
 
             if ($pyLauncher) {
 
-                Invoke-CheckedCommand `
-                    -FilePath "py" `
-                    -Arguments @(
-                        "-3.12",
-                        "-m",
-                        "venv",
-                        $venvPath
-                    )
+                # Try Python 3.12 specifically first, then fall back to
+                # whatever version the py launcher has available.
+                & py -3.12 --version 2>&1 | Out-Null
+
+                if ($LASTEXITCODE -eq 0) {
+
+                    Invoke-CheckedCommand `
+                        -FilePath "py" `
+                        -Arguments @("-3.12", "-m", "venv", $venvPath)
+
+                }
+                else {
+
+                    Write-Host "Python 3.12 not found via py launcher, using default py version."
+
+                    Invoke-CheckedCommand `
+                        -FilePath "py" `
+                        -Arguments @("-m", "venv", $venvPath)
+                }
 
             }
             else {
