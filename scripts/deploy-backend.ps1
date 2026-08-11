@@ -220,39 +220,6 @@ Write-Host "Public health URL: $publicHealthUrl"
 
 
 Invoke-Step `
-    -Message "Remove virtual environment from git index (one-time cleanup)" `
-    -Action {
-
-        Push-Location $repoRoot
-
-        try {
-
-            # Remove backend/.venv from the index if it is still tracked.
-            # This is safe to run even if .venv is already untracked — git rm
-            # --cached returns exit code 128 in that case, which we ignore.
-            $result = git `
-                -c safe.directory=C:/HisbenewERP `
-                rm -r --cached backend/.venv 2>&1
-
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "Removed backend/.venv from git index."
-                git `
-                    -c safe.directory=C:/HisbenewERP `
-                    commit -m "Remove backend virtual environment from repository" `
-                    --allow-empty | Out-Null
-            } else {
-                Write-Host "backend/.venv is not tracked — nothing to remove."
-            }
-
-        }
-        finally {
-
-            Pop-Location
-        }
-    }
-
-
-Invoke-Step `
     -Message "Pull latest main branch" `
     -Action {
 
