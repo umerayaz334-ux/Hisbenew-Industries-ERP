@@ -5780,6 +5780,57 @@ def ensure_default_admin():
             cuterex_user.is_active = True
         db.add(cuterex_user)
         db.commit()
+
+        # Seed Cuterex products if workspace is empty
+        try:
+            cuterex_p_count = db.query(Product).execution_options(skip_tenant_scope=True).filter(Product.tenant_id == scratch_tenant.id).count()
+            if cuterex_p_count == 0:
+                sample_products = [
+                    {"article_no": "CTX-01", "name": "Cuterex Professional Chef Knife Set", "category": "Chef Knife Sets", "wholesale_price": 45.0, "retail_price": 89.99, "stock_quantity": 50},
+                    {"article_no": "CTX-02", "name": "Cuterex Damascus Folding Pocket Knife", "category": "Folding Knifes", "wholesale_price": 25.0, "retail_price": 49.99, "stock_quantity": 100},
+                    {"article_no": "CTX-03", "name": "Cuterex Heavy Duty Meat Cleaver", "category": "Cleaver Knifes", "wholesale_price": 35.0, "retail_price": 69.99, "stock_quantity": 40},
+                    {"article_no": "CTX-04", "name": "Cuterex Handmade Hunting Knife with Leather Sheath", "category": "Hunting & Skinner Knifes", "wholesale_price": 30.0, "retail_price": 59.99, "stock_quantity": 60},
+                    {"article_no": "CTX-05", "name": "Cuterex Premium ULU Pizza Cutter", "category": "ULU & Pizza Cutters", "wholesale_price": 18.0, "retail_price": 34.99, "stock_quantity": 85},
+                ]
+                for item in sample_products:
+                    db.add(Product(
+                        tenant_id=scratch_tenant.id,
+                        article_no=item["article_no"],
+                        name=item["name"],
+                        category=item["category"],
+                        wholesale_price=item["wholesale_price"],
+                        retail_price=item["retail_price"],
+                        stock_quantity=item["stock_quantity"],
+                        unit="pcs",
+                        status="Active",
+                    ))
+                db.commit()
+
+            cuterex_o_count = db.query(Order).execution_options(skip_tenant_scope=True).filter(Order.tenant_id == scratch_tenant.id).count()
+            if cuterex_o_count == 0:
+                sample_orders = [
+                    {"order_no": "CTX-ORD-101", "platform": "Faire", "total_amount": 279.97, "status": "New", "days_ago": 1},
+                    {"order_no": "CTX-ORD-102", "platform": "Wholesale Direct", "total_amount": 149.98, "status": "New", "days_ago": 3},
+                    {"order_no": "CTX-ORD-103", "platform": "Faire", "total_amount": 420.00, "status": "Fulfilled", "days_ago": 5},
+                    {"order_no": "CTX-ORD-104", "platform": "Direct", "total_amount": 510.50, "status": "New", "days_ago": 7},
+                ]
+                for item in sample_orders:
+                    o_date = datetime.utcnow() - timedelta(days=item["days_ago"])
+                    db.add(Order(
+                        tenant_id=scratch_tenant.id,
+                        order_no=item["order_no"],
+                        platform=item["platform"],
+                        total_amount=item["total_amount"],
+                        order_total_usd=item["total_amount"],
+                        status=item["status"],
+                        order_date=o_date,
+                        created_at=o_date,
+                    ))
+                db.commit()
+        except Exception as seed_exc:
+            print(f"Cuterex initial data seed notice: {seed_exc}")
+            db.rollback()
+
     finally:
         db.close()
 
