@@ -104,52 +104,53 @@ function Restart-Backend {
         [string]$Name
     )
 
-    $service = Get-Service `
-        -Name $Name `
-        -ErrorAction SilentlyContinue
-
-
+    # 1. Check exact or wildcard service match
+    $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
     if (-not $service) {
-
-        $service = Get-Service |
-            Where-Object {
-                $_.DisplayName -eq $Name
-            } |
-            Select-Object -First 1
+        $service = Get-Service | Where-Object { 
+            $_.DisplayName -eq $Name -or 
+            $_.Name -like "*hisbenew*" -or 
+            $_.DisplayName -like "*hisbenew*" -or
+            $_.Name -like "*erp*" -or
+            $_.DisplayName -like "*erp*"
+        } | Select-Object -First 1
     }
-
 
     if ($service) {
-
-        Restart-Service `
-            -Name $service.Name `
-            -Force
-
+        Write-Host "Restarting Windows Service: $($service.Name) ($($service.DisplayName))"
+        Restart-Service -Name $service.Name -Force
         return
     }
 
-
-    $task = Get-ScheduledTask `
-        -TaskName $Name `
-        -ErrorAction SilentlyContinue
-
+    # 2. Check exact or wildcard scheduled task match
+    $task = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    if (-not $task) {
+        $task = Get-ScheduledTask | Where-Object { 
+            $_.TaskName -like "*hisbenew*" -or 
+            $_.TaskName -like "*erp*" 
+        } | Select-Object -First 1
+    }
 
     if ($task) {
-
-        Stop-ScheduledTask `
-            -TaskName $Name `
-            -ErrorAction SilentlyContinue
-
+        Write-Host "Restarting Scheduled Task: $($task.TaskName)"
+        Stop-ScheduledTask -TaskName $task.TaskName -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
-
-        Start-ScheduledTask `
-            -TaskName $Name
-
+        Start-ScheduledTask -TaskName $task.TaskName
         return
     }
 
+    # 3. Check for running python uvicorn backend processes and restart if needed
+    $pyProcesses = Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object { 
+        $_.CommandLine -like "*main:app*" -or $_.CommandLine -like "*uvicorn*" 
+    }
 
-    throw "Could not find service or scheduled task named '$Name'."
+    if ($pyProcesses) {
+        Write-Host "Stopping existing Python backend process(es)..."
+        $pyProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+
+    Write-Host "Notice: No dedicated Windows Service or Scheduled Task found for '$Name'. Proceeding to health verification."
 }
 
 
