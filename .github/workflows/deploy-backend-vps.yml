@@ -1,7 +1,6 @@
 name: Deploy backend to Windows VPS
 
 on:
-  # Localhost mode: do not deploy automatically on push.
   workflow_dispatch:
 
 concurrency:
@@ -36,13 +35,11 @@ jobs:
       - name: Compile backend
         run: python -m py_compile app/main.py app/schemas.py app/database.py
 
+
   deploy:
     name: Pull and restart backend on VPS
     needs: validate
-    runs-on:
-      - self-hosted
-      - Windows
-      - hisbenew-vps
+    runs-on: self-hosted
     timeout-minutes: 20
 
     defaults:
