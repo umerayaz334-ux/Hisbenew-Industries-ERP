@@ -433,6 +433,7 @@ def build_tspl_job(
     height_mm = max(10.0, _number(size.get("height_mm"), 25.0))
     gap_mm = max(0.0, _number(size.get("gap_mm"), 2.0))
     dots_per_mm = _normalize_printer_dpi(printer_dpi) / 25.4
+    width_dots = round(width_mm * dots_per_mm)
     payload = bytearray()
 
     _append_command(payload, f"SIZE {width_mm:g} mm,{height_mm:g} mm")
@@ -452,22 +453,32 @@ def build_tspl_job(
 
         _append_command(payload, "CLS")
 
-        # Native TSPL Text & Barcode positioning (DPI proportional)
-        x_pos = max(30, round(3 * dots_per_mm))
-        y_title = max(20, round(2 * dots_per_mm))
-        y_barcode = max(70, round(7 * dots_per_mm))
-        y_sku = max(175, round(17 * dots_per_mm))
-        barcode_h = max(60, round(6 * dots_per_mm))
+        # Horizontal Centering & Vertical Spacing Math (matching Studio Preview 1-to-1)
+        title_char_w = round(16 * (dots_per_mm / 11.8))
+        title_w = len(title[:35]) * title_char_w
+        x_title = max(15, (width_dots - title_w) // 2)
 
-        # Title at top
-        _append_command(payload, f'TEXT {x_pos},{y_title},"3",0,1,1,"{title[:35]}"')
+        barcode_w = round((len(barcode_val[:25]) + 3) * 22 * (dots_per_mm / 11.8))
+        x_barcode = max(15, (width_dots - barcode_w) // 2)
 
-        # Code 128 Barcode in middle
+        sku_char_w = round(24 * (dots_per_mm / 11.8))
+        sku_w = len(sku[:20]) * sku_char_w
+        x_sku = max(15, (width_dots - sku_w) // 2)
+
+        y_title = round(3 * dots_per_mm)
+        y_barcode = round(8.5 * dots_per_mm)
+        y_sku = round(17.5 * dots_per_mm)
+        barcode_h = round(6.5 * dots_per_mm)
+
+        # Title at top (Centered)
+        _append_command(payload, f'TEXT {x_title},{y_title},"3",0,1,1,"{title[:35]}"')
+
+        # Code 128 Barcode in middle (Centered)
         if barcode_val:
-            _append_command(payload, f'BARCODE {x_pos},{y_barcode},"128",{barcode_h},1,0,2,4,"{barcode_val[:25]}"')
+            _append_command(payload, f'BARCODE {x_barcode},{y_barcode},"128",{barcode_h},0,0,2,4,"{barcode_val[:25]}"')
 
-        # Large SKU at bottom (Matching Studio Preview)
-        _append_command(payload, f'TEXT {x_pos},{y_sku},"4",0,1,1,"{sku[:25]}"')
+        # Large SKU at bottom (Centered, Bold matching Studio Preview)
+        _append_command(payload, f'TEXT {x_sku},{y_sku},"4",0,1,1,"{sku[:20]}"')
 
         _append_command(payload, f"PRINT 1,{quantity}")
         label_count += 1
