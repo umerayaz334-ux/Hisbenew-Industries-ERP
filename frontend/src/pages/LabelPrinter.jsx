@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import JsBarcode from "jsbarcode";
 import api, { getStaticUrl } from "../api/api";
 import "./LabelPrinter.css";
@@ -932,61 +933,10 @@ function LabelPrinter() {
           <p>Build product labels, set the exact media size, and print straight to your label printer.</p>
         </div>
         <div className="label-printer-header-actions">
-          <div className="label-printer-printer-panel">
-            <div className="label-printer-connection-mode" aria-label="Printer connection source" role="group">
-              <button
-                className={useLocalPrinterBridge ? "is-active" : ""}
-                onClick={() => setPrinterConnectionMode("local")}
-                type="button"
-              >
-                This laptop
-              </button>
-              <button
-                className={!useLocalPrinterBridge ? "is-active" : ""}
-                onClick={() => setPrinterConnectionMode("server")}
-                type="button"
-              >
-                ERP server
-              </button>
-            </div>
-            {useLocalPrinterBridge ? (
-              <label className="label-printer-bridge-url">
-                <span>Local bridge URL</span>
-                <input
-                  onChange={(event) => setLocalPrintBridgeUrl(event.target.value)}
-                  value={localPrintBridgeUrl}
-                />
-              </label>
-            ) : null}
-            <label className="label-printer-printer-select">
-              <span>Printer</span>
-              <select
-                aria-label="Connected printer"
-                disabled={printerStatus.loading || printerOptions.length === 0}
-                onChange={(event) => setDirectPrinter(event.target.value)}
-                value={directPrinter}
-              >
-                <option value="">Select printer</option>
-                {printerOptions.map((printer) => (
-                  <option key={printer.name} value={printer.name}>
-                    {`${printer.name}${printer.is_default ? " (default)" : ""}${printer.is_connected ? "" : " - offline"}${printer.supports_direct_labels ? "" : " - dialog only"}`}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="label-printer-printer-meta">
-              <span className={`label-printer-printer-status ${printerStatusClass}`} title={selectedPrinter?.status_detail || printerStatus.error || ""}>
-                <span aria-hidden="true" />
-                {printerConnectionText}
-              </span>
-              <span className="label-printer-printer-scope">{printerConnectionModeLabel}</span>
-              <span>{connectedPrinterCount}/{printerOptions.length || 0} connected</span>
-              <button className="label-printer-secondary" disabled={printerStatus.loading} onClick={() => loadLabelPrinters({ showNotice: true })} type="button">
-                {printerStatus.loading ? "Checking" : "Refresh"}
-              </button>
-            </div>
-          </div>
           <div className="label-printer-print-actions">
+            <Link className="label-printer-secondary" to="/portal/printer-settings" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }} title="Configure direct print agent source and default printer">
+              ⚙️ Printer Settings
+            </Link>
             <span className="label-printer-count">{totalLabels} labels queued</span>
             <button className="label-printer-secondary" disabled={!queue.length} onClick={() => printLabels()} type="button">
               Print with dialog

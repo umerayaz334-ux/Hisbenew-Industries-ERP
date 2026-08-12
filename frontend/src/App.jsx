@@ -27,6 +27,7 @@ const ShippingBalance = lazy(() => import("./pages/ShippingBalance"));
 const Fulfillment = lazy(() => import("./pages/Fulfillment"));
 const LabelPrinter = lazy(() => import("./pages/LabelPrinter"));
 const LabelPrinter2 = lazy(() => import("./pages/LabelPrinter2"));
+const PrinterSettings = lazy(() => import("./pages/PrinterSettings"));
 const ServiceTakers = lazy(() => import("./pages/ServiceTakers"));
 const ServiceTakerPortal = lazy(() => import("./pages/ServiceTakerPortal"));
 const FollowUps = lazy(() => import("./pages/FollowUps"));
@@ -96,6 +97,7 @@ const pagePaths = {
   "Warehouse Stock": "/portal/warehouse/stock",
   "Label Printer": "/portal/label-printer",
   "Label Printer 2": "/portal/label-printer-2",
+  "Printer Settings": "/portal/printer-settings",
   "Service Takers": "/portal/service-takers",
   "Service Dashboard": "/portal/service-taker/dashboard",
   "Service Products": "/portal/service-taker/products",
@@ -899,6 +901,7 @@ function App() {
     if (activePage === "Inventory") return <Inventory />;
     if (activePage === "Label Printer") return <LabelPrinter />;
     if (activePage === "Label Printer 2") return <LabelPrinter2 />;
+    if (activePage === "Printer Settings") return <PrinterSettings />;
     if (activePage === "Inspiration") return <Inspiration />;
     if (activePage === "Quotes") return <Quotes />;
     if (activePage === "TempData") return <TempData />;
