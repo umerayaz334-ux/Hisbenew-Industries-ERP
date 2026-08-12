@@ -64,6 +64,11 @@ def _bool(value: object) -> bool:
     return value is True or str(value).strip().lower() in {"1", "true", "yes"}
 
 
+def _append_command(payload: bytearray, command: str) -> None:
+    payload.extend(command.encode("ascii", "ignore"))
+    payload.extend(b"\r\n")
+
+
 def _is_tspl_printer(name: str) -> bool:
     return any(marker in name.casefold() for marker in TSPL_PRINTER_MARKERS)
 
@@ -108,10 +113,6 @@ def _printer_dpi(printer_name: str) -> int:
     except Exception:
         pass
     return hinted_dpi
-
-
-def _dots_per_mm(printer_dpi: object | None = None) -> float:
-    return _normalize_printer_dpi(printer_dpi) / MM_PER_INCH
 
 
 def _status_matches(win32print: object, status: int, flags: tuple[tuple[str, int, str], ...]) -> list[str]:
