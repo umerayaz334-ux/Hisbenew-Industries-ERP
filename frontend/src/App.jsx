@@ -157,6 +157,7 @@ const rolePages = {
     "Inventory",
     "Label Printer",
     "Label Printer 2",
+    "Printer Settings",
     "Suppliers",
     "Manufacturing",
     "Production",
@@ -195,6 +196,7 @@ const rolePages = {
     "Inventory",
     "Label Printer",
     "Label Printer 2",
+    "Printer Settings",
     "Suppliers",
     "Manufacturing",
     "Production",
@@ -297,6 +299,10 @@ const normalizeClientAllowedPages = (pages = [], role = "", impersonatedBySuperA
   if (role === "admin" && !normalized.includes("Deployment")) normalized.push("Deployment");
   if ((role === "admin" || role === "manager" || role === "worker")) {
     if (!normalized.includes("Worker Accounts")) normalized.push("Worker Accounts");
+  }
+  // Always allow Printer Settings if Label Printer or Settings is accessible
+  if (normalized.includes("Label Printer") || normalized.includes("Settings")) {
+    if (!normalized.includes("Printer Settings")) normalized.push("Printer Settings");
   }
   if (!normalized.includes("Dashboard")) normalized.unshift("Dashboard");
   return normalized;
