@@ -35,6 +35,7 @@ const Payments = lazy(() => import("./pages/Payments"));
 const WorkerPayouts = lazy(() => import("./pages/WorkerPayouts"));
 const WorkerAccounts2 = lazy(() => import("./pages/WorkerAccounts2"));
 const Accounting = lazy(() => import("./pages/Accounting"));
+const AccountingQuicks = lazy(() => import("./pages/AccountingQuicks"));
 const Production = lazy(() => import("./pages/Production"));
 const MyTasks = lazy(() => import("./pages/MyTasks"));
 const Reports = lazy(() => import("./pages/Reports"));
@@ -107,6 +108,7 @@ const pagePaths = {
   "Worker Accounts": "/portal/worker-accounts",
   "Worker Payouts": "/portal/worker-payouts",
   Accounting: "/portal/accounting",
+  "Accounting Quicks": "/portal/accounting-quicks",
   Manufacturing: "/portal/manufacturing",
   Production: "/portal/production",
   "My Tasks": "/portal/my-tasks",
@@ -143,6 +145,7 @@ const rolePages = {
     "Payouts",
     "Billings",
     "Accounting",
+    "Accounting Quicks",
     "Shipping",
     "Shipping Balance",
     "Warehouse / Fulfillment",
@@ -278,10 +281,16 @@ const normalizeClientAllowedPages = (pages = [], role = "", impersonatedBySuperA
   const normalized = [];
 
   pages.forEach((page) => {
+    if (page === "Accounting") page = "Accounting Quicks";
     if (page === "Payments") page = "Billings";
     if (page === "Amazon FBA Inventory") page = "Products";
     if (!normalized.includes(page)) normalized.push(page);
   });
+
+  if ((role === "admin" || role === "manager")) {
+    if (!normalized.includes("Accounting Quicks")) normalized.push("Accounting Quicks");
+    if (!normalized.includes("Accounting")) normalized.push("Accounting");
+  }
 
   if (role === "admin" && !normalized.includes("Deployment")) normalized.push("Deployment");
   if ((role === "admin" || role === "manager" || role === "worker")) {
@@ -984,6 +993,7 @@ function App() {
       );
     }
     if (activePage === "Accounting") return <Accounting />;
+    if (activePage === "Accounting Quicks") return <AccountingQuicks />;
     if (activePage === "Manufacturing") return <Manufacturing />;
     if (activePage === "Production") return <Production />;
     if (activePage === "My Tasks") return <MyTasks workerId={authenticatedUser.worker_id} />;

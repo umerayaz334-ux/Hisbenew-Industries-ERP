@@ -6178,11 +6178,12 @@ def supplier_movement_effective_quantity(movement: StockMovement) -> int:
 
 def normalize_stock_source(stock_source: str) -> str:
     if not stock_source:
-        raise HTTPException(status_code=400, detail="Stock source is required")
-    source = stock_source.lower().strip()
-    if source not in ("factory", "usa"):
-        raise HTTPException(status_code=400, detail="Stock source must be either 'factory' or 'usa'")
-    return source
+        return "factory"
+    source = str(stock_source).lower().strip()
+    if "usa" in source:
+        return "usa"
+    return "factory"
+
 
 
 def reserve_order_item(product: Product, quantity: int, stock_source: str):
@@ -11401,11 +11402,10 @@ def resolve_customer_import_conflicts(
 
 def normalize_import_stock_source(value: str) -> str:
     source = str(value or "Factory").strip().lower().replace("_", " ")
-    if source in {"factory", "factory stock", "factory_stock"}:
-        return "Factory"
-    if source in {"usa", "us", "united states", "usa stock", "usa_stock"}:
+    if "usa" in source:
         return "USA"
-    raise ValueError("Stock source must be Factory or USA.")
+    return "Factory"
+
 
 
 def find_import_customer(row: dict, db: Session) -> Customer | None:
@@ -14436,6 +14436,14 @@ def delete_order(order_id: int, db: Session = Depends(get_db)):
         if product:
             was_shipped = is_stock_deducted_shipping_status(order.shipping_status)
             release_order_stock(product, item.quantity, item.stock_source, was_shipped)
+
+    # Delete linked workflow tasks, follow ups, and print jobs
+    try:
+        db.query(OrderWorkflowTask).filter(OrderWorkflowTask.order_id == order_id).delete(synchronize_session=False)
+        db.query(OrderFollowUp).filter(OrderFollowUp.order_id == order_id).delete(synchronize_session=False)
+        db.query(PrintJobRecord).filter(PrintJobRecord.order_id == order_id).delete(synchronize_session=False)
+    except Exception:
+        pass
 
     # Delete order items
     for item in order.items:

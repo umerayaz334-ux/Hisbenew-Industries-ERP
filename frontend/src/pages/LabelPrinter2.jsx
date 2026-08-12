@@ -383,11 +383,47 @@ export default function LabelPrinter2() {
     localStorage.setItem("lp2_templates", JSON.stringify(nextTpls));
   };
 
-  const handlePrint = () => {
-    // 50ms delay guarantees pre-rendered off-screen SVGs are 100% ready before opening browser print modal
-    setTimeout(() => {
+  const [printingStatus, setPrintingStatus] = useState("");
+
+  const handlePrint = async () => {
+    try {
+      setPrintingStatus("Sending to thermal printer...");
+      const printPayload = {
+        label_type: "product_label",
+        printer_name: "Gainscha GA-3406T (Copy 1)",
+        payload: {
+          title: labelDesign.title || labelDesign.sku || "Product Label",
+          sku: labelDesign.sku || "SKU-001",
+          barcode: labelDesign.sku || "SKU-001",
+          category: labelDesign.category || "",
+          copies: printQuantity,
+          brand_name: labelDesign.brandName || "Hisbenew",
+          width_mm: selectedSize.width,
+          height_mm: selectedSize.height,
+          labels: Array.from({ length: printQuantity }).map(() => ({
+            title: labelDesign.title || labelDesign.sku || "Product Label",
+            sku: labelDesign.sku || "SKU-001",
+            barcode: labelDesign.sku || "SKU-001",
+            category: labelDesign.category || "",
+            brand_name: labelDesign.brandName || "Hisbenew",
+            copies: 1,
+          })),
+        },
+      };
+
+      const response = await api.post("/api/print-jobs", printPayload);
+      if (response.data?.status === "pending" || response.data?.job_id) {
+        setPrintingStatus(`Sent ${printQuantity} label(s) directly to Gainscha printer!`);
+        setTimeout(() => setPrintingStatus(""), 4000);
+      } else {
+        window.print();
+        setPrintingStatus("");
+      }
+    } catch (err) {
+      console.error("Direct silent thermal print notice:", err);
       window.print();
-    }, 50);
+      setPrintingStatus("");
+    }
   };
 
   const activeFontFamilyObj = FONT_FAMILIES.find((f) => f.id === labelDesign.fontFamily) || FONT_FAMILIES[0];
@@ -474,6 +510,11 @@ export default function LabelPrinter2() {
               onChange={(e) => setPrintQuantity(Math.max(1, parseInt(e.target.value) || 1))}
             />
           </div>
+          {printingStatus && (
+            <span style={{ color: "#10b981", fontWeight: "600", fontSize: "0.85rem", padding: "0 8px" }}>
+              {printingStatus}
+            </span>
+          )}
           <button className="lp2-btn-print" onClick={handlePrint} type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             Print Thermal Labels ({printQuantity})

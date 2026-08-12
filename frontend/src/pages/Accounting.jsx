@@ -91,6 +91,7 @@ const transactionCategoriesFor = (direction) =>
 
 function Accounting() {
   const confirmDialog = useConfirmDialog();
+  const [activeTab, setActiveTab] = useState("overview");
   const [overview, setOverview] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -330,8 +331,11 @@ function Accounting() {
     <div className="accounting-page">
       <header className="accounting-header">
         <div>
-          <h1>Accounting</h1>
-          <p>Accounts, payout totals, expenses, and money movement.</p>
+          <h1>
+            Accounting Quicks
+            <span className="accounting-quicks-badge">QuickBooks Suite</span>
+          </h1>
+          <p>Enterprise Double-Entry Financial Studio, P&L Statements & QuickBooks Ledger Engine.</p>
         </div>
         <div className="accounting-header-actions">
           <button
@@ -340,24 +344,55 @@ function Accounting() {
             onClick={syncPayouts}
             type="button"
           >
-            Sync payouts
+            ⚡ Sync Platform Payouts
           </button>
           <button
             className="accounting-light-btn"
             onClick={() => openTransactionModal("Money Out")}
             type="button"
           >
-            Money out
+            - Money Out (Expense / Bill)
           </button>
           <button
             className="accounting-primary-btn"
             onClick={() => openTransactionModal("Money In")}
             type="button"
           >
-            Money in
+            + Money In (Income / Sale)
           </button>
         </div>
       </header>
+
+      <nav className="accounting-tabs-bar">
+        <button
+          className={`accounting-tab-btn ${activeTab === "overview" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("overview")}
+          type="button"
+        >
+          📊 Financial Overview & P&L
+        </button>
+        <button
+          className={`accounting-tab-btn ${activeTab === "ledger" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("ledger")}
+          type="button"
+        >
+          ⚖️ General Ledger
+        </button>
+        <button
+          className={`accounting-tab-btn ${activeTab === "accounts" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("accounts")}
+          type="button"
+        >
+          💳 Chart of Accounts & Banks
+        </button>
+        <button
+          className={`accounting-tab-btn ${activeTab === "reports" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("reports")}
+          type="button"
+        >
+          📈 Financial Reports Studio
+        </button>
+      </nav>
 
       <main className="accounting-body">
         {(notice || error) && (

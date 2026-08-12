@@ -507,6 +507,93 @@
   margin-top: 20px;
 }
 
+.accounting-quicks-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #10b981;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: 12px;
+  vertical-align: middle;
+}
+
+.accounting-tabs-bar {
+  display: flex;
+  gap: 8px;
+  padding: 0 40px;
+  background: #ffffff;
+  border-bottom: 1px solid #d9dde2;
+  overflow-x: auto;
+}
+
+.accounting-tab-btn {
+  padding: 14px 20px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #64748b;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.accounting-tab-btn:hover {
+  color: #0f172a;
+}
+
+.accounting-tab-btn.is-active {
+  color: #10b981;
+  border-bottom-color: #10b981;
+  font-weight: 700;
+}
+
+.accounting-reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.accounting-report-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.accounting-report-card h3 {
+  margin: 0 0 16px 0;
+  font-size: 1.1rem;
+  color: #0f172a;
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 8px;
+}
+
+.accounting-report-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px dashed #e2e8f0;
+  font-size: 0.95rem;
+}
+
+.accounting-report-row.is-bold {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #0f172a;
+  border-bottom: 2px solid #0f172a;
+  padding-top: 14px;
+}
+
 @media (max-width: 1180px) {
   .accounting-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -527,6 +614,10 @@
     flex-direction: column;
     min-height: auto;
     padding: 26px 20px;
+  }
+
+  .accounting-tabs-bar {
+    padding: 0 16px;
   }
 
   .accounting-body {

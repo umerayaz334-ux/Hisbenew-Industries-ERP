@@ -314,6 +314,13 @@ def _text_position(width_dots: int, inset: int, text_width: int, alignment: obje
     if direction == "right":
         return max(inset, width_dots - inset - text_width)
     return inset
+def _text_position(width_dots: int, inset: int, text_width: int, alignment: object) -> int:
+    direction = _text(alignment).casefold()
+    if direction == "center":
+        return max(inset, (width_dots - text_width) // 2)
+    if direction == "right":
+        return max(inset, width_dots - inset - text_width)
+    return inset
 
 
 def _label_text_bitmap(item: Mapping[str, object], width_mm: float, height_mm: float, dots_per_mm: float) -> tuple[bytes, int]:
@@ -321,100 +328,28 @@ def _label_text_bitmap(item: Mapping[str, object], width_mm: float, height_mm: f
 
     width_dots = round(width_mm * dots_per_mm)
     height_dots = round(height_mm * dots_per_mm)
-    display_scale = _preview_scale(width_mm, height_mm)
-    compact = height_mm <= 30
-    inset = round((9 if compact else 12) * dots_per_mm / display_scale)
-    gap = max(2, round(3 * dots_per_mm / display_scale))
+    inset = round(1.5 * dots_per_mm)
     content_width = max(1, width_dots - (inset * 2))
-    text_base_css = max(9, min(18, height_mm * 0.42))
-    independent_text_base_css = max(9, min(18, text_base_css * 1.3))
-    title_css = max(9, min(18, text_base_css * _scale(item, "titleScale", 0.7, 1.7)))
-    sku_value = _text(item.get("sku") or item.get("articleNo") or item.get("barcode") or "LABEL")
-    text_layers = {
-        "brand": (max(7, independent_text_base_css * 0.48 * _scale(item, "brandScale", 0.7, 1.7)), 1.0, 0.08, _text(item.get("brand")), item.get("brandAlign")),
-        "title": (title_css, 1.08, 0.0, _text(item.get("title") or "UNTITLED LABEL"), item.get("titleAlign")),
-        "price": (max(7, independent_text_base_css * 0.62 * _scale(item, "priceScale", 0.7, 1.7)), 1.0, 0.0, _text(item.get("price")), item.get("priceAlign")),
-        "sku": (max(9, independent_text_base_css * 0.78 * _scale(item, "skuScale", 0.7, 1.8)), 1.0, 0.05, sku_value, item.get("skuAlign")),
-    }
-    barcode_css_height = max(20, min(54, height_mm * display_scale * (0.21 if compact else 0.19)))
-    barcode_height_scale = _scale(item, "barcodeHeightScale", 0.55, 2.0)
-    barcode_height = max(24, round(barcode_css_height * _scale(item, "barcodeScale", 0.55, 1.6) * barcode_height_scale * dots_per_mm / display_scale))
+    
+    # Calculate exact font sizes and heights matching Studio Preview
+    design = item.get("design") if isinstance(item.get("design"), Mapping) else {}
+    
+    # 1. Title font size (top element)
+    title_val = _text(item.get("title") or item.get("product_name") or "UNTITLED LABEL")
+    title_font_pt = round(_number(design.get("titleFontSize"), 16))
+    title_font_dots = max(20, round(title_font_pt * dots_per_mm * 0.38))
+    
+    # 2. SKU font size (bottom element)
+    sku_val = _text(item.get("sku") or item.get("articleNo") or item.get("barcode") or "LABEL")
+    sku_font_pt = round(_number(design.get("skuFontSize"), 24))
+    sku_font_dots = max(24, round(sku_font_pt * dots_per_mm * 0.45))
+
+    # 3. Barcode height (middle element)
+    barcode_height_px = round(_number(design.get("barcodeHeight"), 60))
+    barcode_height_dots = max(40, round(barcode_height_px * dots_per_mm * 0.42))
+
     bitmap = Image.new("1", (width_dots, height_dots), 1)
     draw = ImageDraw.Draw(bitmap)
-    elements: list[dict[str, object]] = []
-
-    for layer_id in _layer_order(item):
-        if layer_id == "brand" and _bool(item.get("showBrand")) and text_layers["brand"][3]:
-            css_size, line_height, tracking_em, value, alignment = text_layers["brand"]
-        elif layer_id == "title":
-            css_size, line_height, tracking_em, value, alignment = text_layers["title"]
-        elif layer_id == "price" and _bool(item.get("showPrice")) and text_layers["price"][3]:
-            css_size, line_height, tracking_em, value, alignment = text_layers["price"]
-        elif layer_id == "barcode" and _bool(item.get("showBarcode", True)):
-            elements.append({"id": layer_id, "height": barcode_height, "offset": _offset(item, layer_id, dots_per_mm)})
-            continue
-        elif layer_id == "sku" and _bool(item.get("showBarcode", True)):
-            css_size, line_height, tracking_em, value, alignment = text_layers["sku"]
-        else:
-            continue
-
-        font = _font(round(css_size * dots_per_mm / display_scale))
-        tracking = round(max(0.0, tracking_em) * css_size * dots_per_mm / display_scale)
-        lines = _text_lines(draw, value, font, content_width, tracking)
-        line_height_dots = max(1, round(css_size * line_height * dots_per_mm / display_scale))
-        elements.append(
-            {
-                "id": layer_id,
-                "font": font,
-                "lines": lines,
-                "line_height": line_height_dots,
-                "alignment": alignment,
-                "tracking": tracking,
-                "height": line_height_dots * max(1, len(lines)),
-                "offset": _offset(item, layer_id, dots_per_mm),
-            }
-        )
-
-    total_height = sum(int(element["height"]) + int(element["offset"]) for element in elements)
-    total_height += gap * max(0, len(elements) - 1)
-    y = max(inset, (height_dots - total_height) // 2)
-    for index, element in enumerate(elements):
-        if index:
-            y += gap
-        y += int(element["offset"])
-        if element["id"] == "barcode":
-            barcode_scale = _scale(item, "barcodeScale", 0.55, 1.6)
-            barcode_width = min(content_width, round(content_width * 0.78 * barcode_scale))
-            barcode_width = max(1, barcode_width)
-            barcode_x = max(inset, (width_dots - barcode_width) // 2)
-            barcode_y = min(max(0, y), max(0, height_dots - int(element["height"])))
-            barcode_value = _text(item.get("barcode") or sku_value or "LABEL") or "LABEL"
-            _draw_code128_bitmap(draw, barcode_value, barcode_x, barcode_y, barcode_width, int(element["height"]))
-        else:
-            font = element["font"]
-            tracking = int(element.get("tracking") or 0)
-            for line_index, line in enumerate(element["lines"]):
-                box = draw.textbbox((0, 0), line, font=font)
-                text_width = round(_text_width(draw, line, font, tracking))
-                x = _text_position(width_dots, inset, text_width, element["alignment"])
-                _draw_tracked_text(draw, x - box[0], y + (line_index * int(element["line_height"])) - box[1], line, font, tracking)
-        y += int(element["height"])
-
-    return bitmap.tobytes(), math.ceil(width_dots / 8)
-
-
-def _append_command(payload: bytearray, command: str) -> None:
-    payload.extend(command.encode("ascii", "replace"))
-    payload.extend(b"\r\n")
-
-
-def build_tspl_job(labels: Sequence[Mapping[str, object]], size: Mapping[str, object], printer_dpi: object | None = None) -> bytes:
-    width_mm = max(15, min(200, _number(size.get("width"), 50)))
-    height_mm = max(10, min(300, _number(size.get("height"), 25)))
-    gap_mm = max(0, min(20, _number(size.get("gap"), 2)))
-    dots_per_mm = _dots_per_mm(printer_dpi)
-    height_dots = round(height_mm * dots_per_mm)
-    payload = bytearray()
     _append_command(payload, f"SIZE {width_mm:g} mm,{height_mm:g} mm")
     _append_command(payload, f"GAP {gap_mm:g} mm,0 mm")
     _append_command(payload, "DIRECTION 1,0")

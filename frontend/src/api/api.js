@@ -71,6 +71,11 @@ const resolveApiBaseUrl = () => {
   const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
   const isPublicDomain = currentHost && !isPrivateNetworkHost(currentHost);
 
+  // Isolate local development (localhost:5173): strictly connect to local backend on PC
+  if (isLoopbackHost(currentHost)) {
+    return configuredApiBase || "http://127.0.0.1:8000";
+  }
+
   if (storedApiBase) {
     const storedHost = getUrlHostname(storedApiBase);
     const storedIsLoopback = isLoopbackHost(storedHost);

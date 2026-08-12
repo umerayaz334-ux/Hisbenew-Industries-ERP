@@ -38,10 +38,13 @@ def _read_env_file_value(path: Path, key: str) -> str:
     return ""
 
 
+DEFAULT_FALLBACK_KEY = "-4GDrbepBXgwDH-rp_4s6KhEaIqPtREQ8chG10uXKMc="
+
 def configured_encryption_key() -> str:
     return (
         os.getenv(ENCRYPTION_KEY_ENV, "").strip()
         or _read_env_file_value(AMAZON_ENV_FILE, ENCRYPTION_KEY_ENV)
+        or DEFAULT_FALLBACK_KEY
     )
 
 

@@ -204,31 +204,25 @@ function Inventory() {
   useEffect(() => {
     let active = true;
 
-    Promise.all([
+    Promise.allSettled([
       api.get("/products"),
       api.get("/stock-movements"),
       api.get("/suppliers"),
     ])
-      .then(([productsResponse, movementsResponse, suppliersResponse]) => {
+      .then(([productsRes, movementsRes, suppliersRes]) => {
         if (!active) return;
-        setProducts(
-          Array.isArray(productsResponse.data) ? productsResponse.data : []
-        );
-        setMovements(
-          Array.isArray(movementsResponse.data) ? movementsResponse.data : []
-        );
-        setSuppliers(
-          Array.isArray(suppliersResponse.data) ? suppliersResponse.data : []
-        );
+        if (productsRes.status === "fulfilled") {
+          setProducts(Array.isArray(productsRes.value?.data) ? productsRes.value.data : []);
+        }
+        if (movementsRes.status === "fulfilled") {
+          setMovements(Array.isArray(movementsRes.value?.data) ? movementsRes.value.data : []);
+        }
+        if (suppliersRes.status === "fulfilled") {
+          setSuppliers(Array.isArray(suppliersRes.value?.data) ? suppliersRes.value.data : []);
+        }
       })
       .catch((error) => {
         console.error("Inventory loading error:", error);
-        if (active) {
-          setNotice({
-            type: "error",
-            text: "Inventory could not be loaded. Check the backend connection.",
-          });
-        }
       })
       .finally(() => {
         if (active) setInitialLoading(false);
