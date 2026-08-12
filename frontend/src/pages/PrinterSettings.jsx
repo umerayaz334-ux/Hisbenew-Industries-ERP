@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import api, { getStaticUrl } from "../api/api";
 import "./PrinterSettings.css";
 
@@ -7,6 +6,13 @@ const PRINTER_CONNECTION_MODE_STORAGE_KEY = "erpLabelPrinterConnectionMode";
 const LOCAL_PRINT_BRIDGE_URL_STORAGE_KEY = "erpLabelPrinterLocalBridgeUrl";
 const DIRECT_PRINTER_STORAGE_KEY = "erpLabelPrinterDirectPrinter";
 const DEFAULT_LOCAL_PRINT_BRIDGE_URL = "http://127.0.0.1:8000";
+
+const navigateTo = (href, pageName) => {
+  if (typeof window !== "undefined") {
+    window.history.pushState({}, "", href);
+    window.dispatchEvent(new CustomEvent("erp:navigation", { detail: { page: pageName } }));
+  }
+};
 
 const normalizeApiBaseUrl = (value) => String(value || "").trim().replace(/\/+$/, "");
 
@@ -177,15 +183,15 @@ export default function PrinterSettings() {
       <header className="printer-settings-header">
         <div>
           <div className="printer-settings-breadcrumbs">
-            <Link to="/portal">Portal</Link> / <Link to="/portal/label-printer">Label Printer</Link> / <span>Printer Settings</span>
+            <a href="/portal" onClick={(e) => { e.preventDefault(); navigateTo("/portal", "Dashboard"); }}>Portal</a> / <a href="/portal/label-printer" onClick={(e) => { e.preventDefault(); navigateTo("/portal/label-printer", "Label Printer"); }}>Label Printer</a> / <span>Printer Settings</span>
           </div>
           <h1>Printer Settings</h1>
           <p>Manage direct thermal print agents, select default hardware printers, and calibrate media options.</p>
         </div>
         <div className="printer-settings-header-actions">
-          <Link className="printer-settings-btn secondary" to="/portal/label-printer">
+          <a className="printer-settings-btn secondary" href="/portal/label-printer" onClick={(e) => { e.preventDefault(); navigateTo("/portal/label-printer", "Label Printer"); }}>
             Back to Label Studio
-          </Link>
+          </a>
         </div>
       </header>
 

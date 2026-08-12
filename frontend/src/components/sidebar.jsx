@@ -195,6 +195,7 @@ const secondaryMenuOrder = [
   "Amazon Finances",
   "Amazon Pricing",
   "Amazon Settings",
+  "Printer Settings",
   "Settings",
   "TempData",
 ];

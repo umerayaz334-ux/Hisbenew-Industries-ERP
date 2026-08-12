@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import JsBarcode from "jsbarcode";
 import api, { getStaticUrl } from "../api/api";
 import "./LabelPrinter.css";
@@ -934,9 +933,19 @@ function LabelPrinter() {
         </div>
         <div className="label-printer-header-actions">
           <div className="label-printer-print-actions">
-            <Link className="label-printer-secondary" to="/portal/printer-settings" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }} title="Configure direct print agent source and default printer">
+            <a
+              className="label-printer-secondary"
+              href="/portal/printer-settings"
+              onClick={(e) => {
+                e.preventDefault();
+                window.history.pushState({}, "", "/portal/printer-settings");
+                window.dispatchEvent(new CustomEvent("erp:navigation", { detail: { page: "Printer Settings" } }));
+              }}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+              title="Configure direct print agent source and default printer"
+            >
               ⚙️ Printer Settings
-            </Link>
+            </a>
             <span className="label-printer-count">{totalLabels} labels queued</span>
             <button className="label-printer-secondary" disabled={!queue.length} onClick={() => printLabels()} type="button">
               Print with dialog
