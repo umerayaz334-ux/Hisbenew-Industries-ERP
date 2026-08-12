@@ -61,10 +61,14 @@ def _select_agent(printer_name: object | None = None) -> dict[str, Any] | None:
     requested = str(printer_name or "").strip()
     if requested:
         for agent in connected_agents.values():
-            printers = _agent_status(agent).get("printers")
-            if isinstance(printers, list) and any(printer.get("name") == requested for printer in printers):
-                return agent
-    return next(iter(connected_agents.values()), None)
+            if agent.get("websocket") is not None:
+                printers = _agent_status(agent).get("printers")
+                if isinstance(printers, list) and any(printer.get("name") == requested for printer in printers):
+                    return agent
+    for agent in connected_agents.values():
+        if agent.get("websocket") is not None:
+            return agent
+    return None
 
 
 async def _send_agent_json(agent: dict[str, Any], message: dict[str, Any]) -> None:
@@ -458,31 +462,28 @@ async def get_print_agent_printers(db: Session = Depends(get_db)):
 @router.post("/print-agent/print")
 async def print_labels_via_agent(payload: dict[str, Any], db: Session = Depends(get_db)):
     agent = _select_agent(payload.get("printer_name"))
-    if agent:
+    if agent and agent.get("websocket") is not None:
         job_id = f"print-{uuid4().hex}"
         loop = asyncio.get_running_loop()
         future = loop.create_future()
         pending_print_jobs[job_id] = future
 
-        await _send_agent_json(
-            agent,
-            {
-                "type": "print_labels",
-                "job_id": job_id,
-                "payload": payload,
-            },
-        )
-
         try:
+            await _send_agent_json(
+                agent,
+                {
+                    "type": "print_labels",
+                    "job_id": job_id,
+                    "payload": payload,
+                },
+            )
             response = await asyncio.wait_for(future, timeout=45)
-        except asyncio.TimeoutError as exc:
+            if not response.get("ok"):
+                raise HTTPException(status_code=400, detail=response.get("detail") or "Printing failed on agent.")
+            return response.get("result") or {"status": "printed", "job_id": job_id}
+        except Exception as exc:
             pending_print_jobs.pop(job_id, None)
-            raise HTTPException(status_code=504, detail="The Print Agent did not finish the label job in time.") from exc
-
-        if not response.get("ok"):
-            raise HTTPException(status_code=400, detail=response.get("detail") or "Printing failed on agent.")
-
-        return response.get("result") or {"status": "printed", "job_id": job_id}
+            print("WebSocket print failed, falling back to REST queue:", exc)
 
     # REST Job Fallback when agent is on REST polling loop
     db_agent = db.query(PrintAgentRecord).order_by(desc(PrintAgentRecord.last_heartbeat)).first()
