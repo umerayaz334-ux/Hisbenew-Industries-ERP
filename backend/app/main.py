@@ -9651,13 +9651,12 @@ def require_local_printer_bridge(request: Request) -> None:
 
 
 @app.get("/label-printers")
-async def get_label_printers():
-    from .print_agent import connected_agents, get_print_agent_printers
-    if connected_agents:
-        try:
-            return await get_print_agent_printers()
-        except Exception:
-            pass
+async def get_label_printers(db: Session = Depends(get_db)):
+    from .print_agent import get_print_agent_printers
+    try:
+        return await get_print_agent_printers(db)
+    except Exception:
+        pass
     try:
         return list_label_printers()
     except LabelPrintError as exc:
@@ -9665,13 +9664,12 @@ async def get_label_printers():
 
 
 @app.post("/label-printers/print")
-async def print_labels_directly(payload: dict):
-    from .print_agent import connected_agents, print_labels_via_agent
-    if connected_agents:
-        try:
-            return await print_labels_via_agent(payload)
-        except Exception as exc:
-            print("Print agent error fallback:", exc)
+async def print_labels_directly(payload: dict, db: Session = Depends(get_db)):
+    from .print_agent import print_labels_via_agent
+    try:
+        return await print_labels_via_agent(payload, db)
+    except Exception as exc:
+        print("Print agent error fallback:", exc)
     try:
         return print_tspl_labels(
             labels=payload.get("labels") or [],
