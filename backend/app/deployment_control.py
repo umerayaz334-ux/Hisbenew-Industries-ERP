@@ -520,13 +520,6 @@ def run_deployment_action(payload: DeploymentActionRequest, request: Request):
         }
 
     if action == "local_backend_deploy":
-        if not _truthy(os.getenv("ERP_ENABLE_LOCAL_DEPLOY_ACTIONS")):
-            return {
-                "ok": False,
-                "action": action,
-                "message": "Local backend deploy is disabled. Set ERP_ENABLE_LOCAL_DEPLOY_ACTIONS=true on the VPS to enable it.",
-                "status": _deployment_status(),
-            }
         script = REPO_ROOT / "scripts" / "deploy-backend.ps1"
         if not script.exists():
             return {
