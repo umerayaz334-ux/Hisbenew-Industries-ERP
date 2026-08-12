@@ -418,61 +418,89 @@ async def get_print_agent_status():
 
 
 @router.get("/print-agent/printers")
-async def get_print_agent_printers():
+async def get_print_agent_printers(db: Session = Depends(get_db)):
     agent = _select_agent()
-    if not agent:
-        raise HTTPException(
-            status_code=503,
-            detail="No local Print Agent is connected.",
-        )
+    if agent:
+        status = _agent_status(agent)
+        printers = status.get("printers") if isinstance(status.get("printers"), list) else []
+        return {
+            "connection_scope": "print_agent",
+            "agent": agent.get("name"),
+            "agent_count": max(1, len(connected_agents)),
+            "default_printer": status.get("default_printer") or "",
+            "default_printer_dpi": status.get("default_printer_dpi") or 300,
+            "printers": printers,
+        }
 
-    status = _agent_status(agent)
-    printers = status.get("printers") if isinstance(status.get("printers"), list) else []
-    return {
-        "connection_scope": "print_agent",
-        "agent": agent.get("name"),
-        "agent_count": len(connected_agents),
-        "default_printer": status.get("default_printer") or "",
-        "default_printer_dpi": status.get("default_printer_dpi"),
-        "printers": printers,
-    }
+    # DB Fallback for multi-process worker architecture
+    now = datetime.utcnow()
+    db_agent = db.query(PrintAgentRecord).order_by(desc(PrintAgentRecord.last_heartbeat)).first()
+    if db_agent and db_agent.last_heartbeat and (now - db_agent.last_heartbeat).total_seconds() < 300:
+        try:
+            printers = json.loads(db_agent.printers_json or "[]")
+        except Exception:
+            printers = []
+        return {
+            "connection_scope": "print_agent",
+            "agent": db_agent.machine_name or db_agent.agent_id,
+            "agent_count": 1,
+            "default_printer": db_agent.printer_name or (printers[0].get("name") if printers else ""),
+            "default_printer_dpi": 300,
+            "printers": printers,
+        }
+
+    raise HTTPException(
+        status_code=503,
+        detail="No local Print Agent is connected.",
+    )
 
 
 @router.post("/print-agent/print")
-async def print_labels_via_agent(payload: dict[str, Any]):
+async def print_labels_via_agent(payload: dict[str, Any], db: Session = Depends(get_db)):
     agent = _select_agent(payload.get("printer_name"))
-    if not agent:
-        raise HTTPException(
-            status_code=503,
-            detail="No local Print Agent is connected.",
+    if agent:
+        job_id = f"print-{uuid4().hex}"
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        pending_print_jobs[job_id] = future
+
+        await _send_agent_json(
+            agent,
+            {
+                "type": "print_labels",
+                "job_id": job_id,
+                "payload": payload,
+            },
         )
 
-    job_id = f"print-{uuid4().hex}"
-    loop = asyncio.get_running_loop()
-    future = loop.create_future()
-    pending_print_jobs[job_id] = future
+        try:
+            response = await asyncio.wait_for(future, timeout=45)
+        except asyncio.TimeoutError as exc:
+            pending_print_jobs.pop(job_id, None)
+            raise HTTPException(status_code=504, detail="The Print Agent did not finish the label job in time.") from exc
 
-    await _send_agent_json(
-        agent,
-        {
-            "type": "print_labels",
-            "job_id": job_id,
-            "payload": payload,
-        },
+        if not response.get("ok"):
+            raise HTTPException(status_code=400, detail=response.get("detail") or "Printing failed on agent.")
+
+        return response.get("result") or {"status": "printed", "job_id": job_id}
+
+    # REST Job Fallback when agent is on REST polling loop
+    db_agent = db.query(PrintAgentRecord).order_by(desc(PrintAgentRecord.last_heartbeat)).first()
+    if db_agent:
+        job_id = f"print-{uuid4().hex}"
+        job_rec = PrintJobRecord(
+            job_id=job_id,
+            agent_id=db_agent.agent_id,
+            label_type="product_label",
+            printer_name=payload.get("printer_name") or db_agent.printer_name,
+            payload_json=json.dumps(payload),
+            status="pending",
+        )
+        db.add(job_rec)
+        db.commit()
+        return {"status": "enqueued", "job_id": job_id, "message": "Job sent to Print Agent queue."}
+
+    raise HTTPException(
+        status_code=503,
+        detail="No local Print Agent is connected.",
     )
-
-    try:
-        response = await asyncio.wait_for(future, timeout=45)
-    except asyncio.TimeoutError as exc:
-        pending_print_jobs.pop(job_id, None)
-        raise HTTPException(status_code=504, detail="The Print Agent did not finish the label job in time.") from exc
-
-    if not response.get("ok"):
-        raise HTTPException(status_code=400, detail=response.get("detail") or "The Print Agent could not print the labels.")
-
-    result = response.get("result") if isinstance(response.get("result"), dict) else {}
-    return {
-        **result,
-        "agent": agent.get("name"),
-        "connection_scope": "print_agent",
-    }
