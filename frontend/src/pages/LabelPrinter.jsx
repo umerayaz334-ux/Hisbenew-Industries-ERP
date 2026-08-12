@@ -489,17 +489,31 @@ function LabelPrinter() {
     return { data };
   };
 
-  const getPrinterStatus = () =>
-    useLocalPrinterBridge ? fetchLocalPrinterBridge("/local-label-printers") : api.get("/label-printers");
+  const getPrinterStatus = async () => {
+    if (useLocalPrinterBridge) {
+      return fetchLocalPrinterBridge("/local-label-printers");
+    }
+    try {
+      return await api.get("/print-agent/printers");
+    } catch {
+      return await api.get("/label-printers");
+    }
+  };
 
-  const postPrinterLabels = (payload) =>
-    useLocalPrinterBridge
-      ? fetchLocalPrinterBridge("/local-label-printers/print", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-      : api.post("/label-printers/print", payload);
+  const postPrinterLabels = async (payload) => {
+    if (useLocalPrinterBridge) {
+      return fetchLocalPrinterBridge("/local-label-printers/print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+    try {
+      return await api.post("/print-agent/print", payload);
+    } catch {
+      return await api.post("/label-printers/print", payload);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -522,7 +536,17 @@ function LabelPrinter() {
   const loadLabelPrinters = async ({ showNotice = false } = {}) => {
     setPrinterStatus({ loading: true, error: "" });
     try {
-      const response = await getPrinterStatus();
+      let response;
+      if (useLocalPrinterBridge) {
+        try {
+          response = await fetchLocalPrinterBridge("/local-label-printers");
+        } catch {
+          setPrinterConnectionMode("server");
+          response = await api.get("/label-printers");
+        }
+      } else {
+        response = await api.get("/label-printers");
+      }
       const printers = Array.isArray(response.data?.printers) ? response.data.printers : [];
       setPrinterOptions(printers);
       setDirectPrinter((current) => {
@@ -534,8 +558,8 @@ function LabelPrinter() {
         const connectedCount = printers.filter((printer) => printer.is_connected).length;
         setNotice(
           printers.length
-            ? `${connectedCount} of ${printers.length} printer${printers.length === 1 ? "" : "s"} connected on ${printerConnectionModeLabel}.`
-            : `No printers were found on ${printerConnectionModeLabel}.`
+            ? `${connectedCount} of ${printers.length} printer${printers.length === 1 ? "" : "s"} connected.`
+            : `No printers were found.`
         );
       }
     } catch (error) {
@@ -543,7 +567,7 @@ function LabelPrinter() {
       setPrinterOptions([]);
       setDirectPrinter("");
       setPrinterStatus({ loading: false, error: detail });
-      if (showNotice || useLocalPrinterBridge) setNotice(detail);
+      if (showNotice) setNotice(detail);
     }
   };
 

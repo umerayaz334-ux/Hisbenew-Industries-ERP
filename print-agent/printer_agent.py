@@ -16,27 +16,35 @@ from config import AGENT_NAME, ERP_API, PRINTER_NAME
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_FILE = BASE_DIR / "agent_config.json"
-BACKEND_DIR = BASE_DIR.parent / "backend"
+BACKEND_DIR = (BASE_DIR.parent / "backend").resolve()
 
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 try:
     from app.label_printing import LabelPrintError, list_label_printers, print_tspl_labels
-except ImportError:
+except Exception as err:
+    print(f"Warning: app.label_printing import fallback: {err}")
     # Standalone print agent fallback if backend module is not in path
     def list_label_printers():
         import win32print
         printers = []
-        default_p = win32print.GetDefaultPrinter()
+        try:
+            default_p = win32print.GetDefaultPrinter()
+        except Exception:
+            default_p = ""
         for p in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS):
             p_name = p[2]
             printers.append({
                 "name": p_name,
                 "is_default": (p_name == default_p),
+                "supports_direct_labels": True,
                 "is_connected": True,
+                "status": "Ready",
+                "status_detail": "",
+                "jobs": 0,
             })
-        return {"printers": printers, "default_printer": default_p}
+        return {"printers": printers, "default_printer": default_p, "default_printer_dpi": 300}
 
     def print_tspl_labels(labels, size=None, printer_name=None):
         import win32print
