@@ -84,13 +84,13 @@ export const isLoopbackHostname = (hostname) =>
 
 export const shouldUseLocalPrinterBridgeByDefault = () => {
   if (typeof window === "undefined") return false;
-  return Boolean(window.location.hostname && !isLoopbackHostname(window.location.hostname));
+  return isLoopbackHostname(window.location.hostname);
 };
 
 export const getInitialPrinterConnectionMode = () => {
   const savedMode = readStoredText(PRINTER_CONNECTION_MODE_STORAGE_KEY);
   if (["local", "server"].includes(savedMode)) return savedMode;
-  return shouldUseLocalPrinterBridgeByDefault() ? "local" : "server";
+  return "server";
 };
 
 export const getInitialLocalPrintBridgeUrl = () =>
