@@ -44,6 +44,9 @@ const readStoredText = (key, fallback = "") => {
 };
 
 const getInitialPrinterConnectionMode = () => {
+  if (typeof window !== "undefined" && !isLoopbackHostname(window.location.hostname)) {
+    return "server";
+  }
   const savedMode = readStoredText(PRINTER_CONNECTION_MODE_STORAGE_KEY);
   if (["local", "server"].includes(savedMode)) return savedMode;
   return "server";
@@ -447,7 +450,8 @@ function LabelPrinter() {
   const [printerConnectionMode, setPrinterConnectionMode] = useState(getInitialPrinterConnectionMode);
   const [localPrintBridgeUrl, setLocalPrintBridgeUrl] = useState(getInitialLocalPrintBridgeUrl);
 
-  const useLocalPrinterBridge = printerConnectionMode === "local";
+  const isPublicDomain = typeof window !== "undefined" && !isLoopbackHostname(window.location.hostname);
+  const useLocalPrinterBridge = !isPublicDomain && printerConnectionMode === "local";
   const resolvedLocalPrintBridgeUrl = normalizeApiBaseUrl(localPrintBridgeUrl) || DEFAULT_LOCAL_PRINT_BRIDGE_URL;
   const printerConnectionModeLabel = useLocalPrinterBridge ? "This laptop" : "ERP server";
   const localPrintBridgeUnavailable = `Local printer bridge is not reachable at ${resolvedLocalPrintBridgeUrl}. Start the local printer bridge on this laptop, then refresh printers.`;
