@@ -433,7 +433,7 @@ def build_tspl_job(
     height_mm = max(10.0, _number(size.get("height_mm"), 25.0))
     gap_mm = max(0.0, _number(size.get("gap_mm"), 2.0))
     dots_per_mm = _normalize_printer_dpi(printer_dpi) / 25.4
-    width_dots = round(width_mm * dots_per_mm)
+    height_dots = round(height_mm * dots_per_mm)
     payload = bytearray()
 
     _append_command(payload, f"SIZE {width_mm:g} mm,{height_mm:g} mm")
@@ -447,38 +447,12 @@ def build_tspl_job(
         if not isinstance(item, Mapping):
             continue
         quantity = max(1, min(1000, round(_number(item.get("quantity"), 1))))
-        title = _text(item.get("product_name") or item.get("title") or "PRODUCT LABEL")
-        sku = _text(item.get("sku") or item.get("articleNo") or item.get("barcode") or "LABEL-001")
-        barcode_val = _text(item.get("barcode") or sku)
+        text_bitmap, row_bytes = _label_text_bitmap(item, width_mm, height_mm, dots_per_mm)
 
         _append_command(payload, "CLS")
-
-        # Horizontal Centering Math (Pure Center - Matching 5th Last Test)
-        title_char_w = round(16 * (dots_per_mm / 11.8))
-        title_w = len(title[:35]) * title_char_w
-        x_title = max(15, (width_dots - title_w) // 2)
-
-        barcode_w = round((len(barcode_val[:25]) + 3) * 22 * (dots_per_mm / 11.8))
-        x_barcode = max(15, (width_dots - barcode_w) // 2)
-
-        sku_char_w = round(24 * (dots_per_mm / 11.8))
-        sku_w = len(sku[:20]) * sku_char_w
-        x_sku = max(15, (width_dots - sku_w) // 2)
-
-        y_title = round(3 * dots_per_mm)
-        y_barcode = round(8.5 * dots_per_mm)
-        y_sku = round(17.5 * dots_per_mm)
-        barcode_h = round(6.5 * dots_per_mm)
-
-        # Title at top (Centered)
-        _append_command(payload, f'TEXT {x_title},{y_title},"3",0,1,1,"{title[:35]}"')
-
-        # Code 128 Barcode in middle (Centered)
-        if barcode_val:
-            _append_command(payload, f'BARCODE {x_barcode},{y_barcode},"128",{barcode_h},0,0,2,4,"{barcode_val[:25]}"')
-
-        # Large SKU at bottom (Centered, Bold matching Studio Preview)
-        _append_command(payload, f'TEXT {x_sku},{y_sku},"4",0,1,1,"{sku[:20]}"')
+        payload.extend(f"BITMAP 0,0,{row_bytes},{height_dots},0,".encode("ascii"))
+        payload.extend(text_bitmap)
+        payload.extend(b"\r\n")
 
         _append_command(payload, f"PRINT 1,{quantity}")
         label_count += 1
