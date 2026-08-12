@@ -453,17 +453,18 @@ def build_tspl_job(
 
         _append_command(payload, "CLS")
 
-        # Horizontal Centering & Vertical Spacing Math (matching Studio Preview 1-to-1)
+        # Horizontal Centering & Right-Shift Margin Offset (+2mm)
+        offset_r = round(2.0 * dots_per_mm)
         title_char_w = round(16 * (dots_per_mm / 11.8))
         title_w = len(title[:35]) * title_char_w
-        x_title = max(15, (width_dots - title_w) // 2)
+        x_title = max(15, (width_dots - title_w) // 2 + offset_r)
 
         barcode_w = round((len(barcode_val[:25]) + 3) * 22 * (dots_per_mm / 11.8))
-        x_barcode = max(15, (width_dots - barcode_w) // 2)
+        x_barcode = max(15, (width_dots - barcode_w) // 2 + offset_r)
 
         sku_char_w = round(24 * (dots_per_mm / 11.8))
         sku_w = len(sku[:20]) * sku_char_w
-        x_sku = max(15, (width_dots - sku_w) // 2)
+        x_sku = max(15, (width_dots - sku_w) // 2 + offset_r)
 
         y_title = round(3 * dots_per_mm)
         y_barcode = round(8.5 * dots_per_mm)
