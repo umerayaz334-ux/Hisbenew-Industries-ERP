@@ -366,11 +366,30 @@ def build_tspl_job(
         if not isinstance(item, Mapping):
             continue
         quantity = max(1, min(1000, round(_number(item.get("quantity"), 1))))
-        text_bitmap, row_bytes = _label_text_bitmap(item, width_mm, height_mm, dots_per_mm)
+        title = _text(item.get("product_name") or item.get("title") or "PRODUCT LABEL")
+        sku = _text(item.get("sku") or item.get("articleNo") or item.get("barcode") or "LABEL-001")
+        barcode_val = _text(item.get("barcode") or sku)
+        price = _text(item.get("price") or "")
+
         _append_command(payload, "CLS")
-        payload.extend(f"BITMAP 0,0,{row_bytes},{height_dots},0,".encode("ascii"))
-        payload.extend(text_bitmap)
-        payload.extend(b"\r\n")
+
+        # Native TSPL Text & Barcode positioning (scalable by DPI)
+        x_start = max(15, round(2 * dots_per_mm))
+        y_title = max(15, round(2 * dots_per_mm))
+        y_barcode = max(55, round(7 * dots_per_mm))
+        y_footer = max(135, round(16 * dots_per_mm))
+        barcode_h = max(40, round(6 * dots_per_mm))
+
+        # Title
+        _append_command(payload, f'TEXT {x_start},{y_title},"3",0,1,1,"{title[:40]}"')
+
+        # Barcode
+        if barcode_val:
+            _append_command(payload, f'BARCODE {x_start},{y_barcode},"128",{barcode_h},1,0,2,4,"{barcode_val[:30]}"')
+
+        # Footer (SKU & Price)
+        footer_str = f"SKU: {sku}" if not price else f"SKU: {sku}  PRICE: {price}"
+        _append_command(payload, f'TEXT {x_start},{y_footer},"2",0,1,1,"{footer_str[:45]}"')
 
         _append_command(payload, f"PRINT 1,{quantity}")
         label_count += 1
