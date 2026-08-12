@@ -328,28 +328,32 @@ def _label_text_bitmap(item: Mapping[str, object], width_mm: float, height_mm: f
 
     width_dots = round(width_mm * dots_per_mm)
     height_dots = round(height_mm * dots_per_mm)
-    inset = round(1.5 * dots_per_mm)
-    content_width = max(1, width_dots - (inset * 2))
-    
-    # Calculate exact font sizes and heights matching Studio Preview
-    design = item.get("design") if isinstance(item.get("design"), Mapping) else {}
-    
-    # 1. Title font size (top element)
-    title_val = _text(item.get("title") or item.get("product_name") or "UNTITLED LABEL")
-    title_font_pt = round(_number(design.get("titleFontSize"), 16))
-    title_font_dots = max(20, round(title_font_pt * dots_per_mm * 0.38))
-    
-    # 2. SKU font size (bottom element)
-    sku_val = _text(item.get("sku") or item.get("articleNo") or item.get("barcode") or "LABEL")
-    sku_font_pt = round(_number(design.get("skuFontSize"), 24))
-    sku_font_dots = max(24, round(sku_font_pt * dots_per_mm * 0.45))
-
-    # 3. Barcode height (middle element)
-    barcode_height_px = round(_number(design.get("barcodeHeight"), 60))
-    barcode_height_dots = max(40, round(barcode_height_px * dots_per_mm * 0.42))
-
     bitmap = Image.new("1", (width_dots, height_dots), 1)
     draw = ImageDraw.Draw(bitmap)
+
+    row_bytes = (width_dots + 7) // 8
+    raw_data = bitmap.tobytes()
+    return raw_data, row_bytes
+
+
+def build_tspl_job(
+    labels: Sequence[Mapping[str, object]],
+    size: Mapping[str, object],
+    printer_dpi: int = 203,
+) -> bytes:
+    if not isinstance(labels, Sequence) or isinstance(labels, (str, bytes)):
+        raise LabelPrintError("The direct print job did not include any labels.")
+    if not isinstance(size, Mapping):
+        raise LabelPrintError("Choose a label size before printing.")
+
+    width_mm = max(10.0, _number(size.get("width_mm"), 50.0))
+    height_mm = max(10.0, _number(size.get("height_mm"), 25.0))
+    gap_mm = max(0.0, _number(size.get("gap_mm"), 2.0))
+    dots_per_mm = _normalize_printer_dpi(printer_dpi) / 25.4
+    width_dots = round(width_mm * dots_per_mm)
+    height_dots = round(height_mm * dots_per_mm)
+    payload = bytearray()
+
     _append_command(payload, f"SIZE {width_mm:g} mm,{height_mm:g} mm")
     _append_command(payload, f"GAP {gap_mm:g} mm,0 mm")
     _append_command(payload, "DIRECTION 1,0")
