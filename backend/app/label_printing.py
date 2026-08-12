@@ -324,17 +324,98 @@ def _text_position(width_dots: int, inset: int, text_width: int, alignment: obje
     return inset
 
 
+CODE128_PATTERNS = {
+    ' ': '11011001100', '!': '11001101100', '"': '11001100110', '#': '10010011000', '$': '10010001100',
+    '%': '10001001100', '&': '10011001000', "'": '10011000100', '(': '10001100100', ')': '11001001000',
+    '*': '11001000100', '+': '11000100100', ',': '10110011100', '-': '10011011100', '.': '10011001110',
+    '/': '10111001100', '0': '10011101100', '1': '10011100110', '2': '11001110100', '3': '11001110010',
+    '4': '11011100100', '5': '11011001110', '6': '11011000110', '7': '11011101100', '8': '11011100110',
+    '9': '11011011100', ':': '11011001110', ';': '11011000110', '<': '11000111010', '=': '11010111000',
+    '>': '11000101110', '?': '11011101000', '@': '11011100100', 'A': '10100011000', 'B': '10001011000',
+    'C': '10001000110', 'D': '10110001000', 'E': '10001101000', 'F': '10001100100', 'G': '10110000100',
+    'H': '10001100010', 'I': '10000110010', 'J': '10100001100', 'K': '10001000110', 'L': '10000100110',
+    'M': '10110001000', 'N': '10110000100', 'O': '10001101000', 'P': '10001100100', 'Q': '10110111000',
+    'R': '10110001110', 'S': '10001101110', 'T': '10111011000', 'U': '10111001110', 'V': '10001110110',
+    'W': '11101101000', 'X': '11101001100', 'Y': '11101000110', 'Z': '11100101100', '[': '11100100110',
+    '\\': '11101100100', ']': '11100110100', '^': '11100110010', '_': '11011011000',
+}
+
+def _encode_code128(text: str) -> str:
+    text = str(text or "").upper().strip()
+    if not text:
+        text = "LABEL"
+    checksum = 104
+    pattern_str = '11010010000'
+    for idx, char in enumerate(text, 1):
+        val = ord(char) - 32
+        if 0 <= val <= 94:
+            checksum += val * idx
+            pattern_str += CODE128_PATTERNS.get(char, CODE128_PATTERNS[' '])
+    check_val = checksum % 103
+    char_keys = list(CODE128_PATTERNS.keys())
+    if check_val < len(char_keys):
+        pattern_str += CODE128_PATTERNS[char_keys[check_val]]
+    else:
+        pattern_str += CODE128_PATTERNS[' ']
+    pattern_str += '1100011101011'
+    return pattern_str
+
+
 def _label_text_bitmap(item: Mapping[str, object], width_mm: float, height_mm: float, dots_per_mm: float) -> tuple[bytes, int]:
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
 
     width_dots = round(width_mm * dots_per_mm)
     height_dots = round(height_mm * dots_per_mm)
-    bitmap = Image.new("1", (width_dots, height_dots), 1)
-    draw = ImageDraw.Draw(bitmap)
-
     row_bytes = (width_dots + 7) // 8
-    raw_data = bitmap.tobytes()
-    return raw_data, row_bytes
+
+    img = Image.new("1", (width_dots, height_dots), 1)
+    draw = ImageDraw.Draw(img)
+
+    title = _text(item.get("product_name") or item.get("title") or "PRODUCT LABEL")
+    sku = _text(item.get("sku") or item.get("articleNo") or item.get("barcode") or "LABEL-001")
+    barcode_val = _text(item.get("barcode") or sku)
+
+    design = item.get("design") if isinstance(item.get("design"), Mapping) else {}
+    title_font_pt = _number(design.get("titleFontSize"), 15)
+    sku_font_pt = _number(design.get("skuFontSize"), 24)
+
+    try:
+        font_title = ImageFont.truetype(r"C:\Windows\Fonts\arialbd.ttf", round(title_font_pt * dots_per_mm * 0.45))
+        font_sku = ImageFont.truetype(r"C:\Windows\Fonts\arialbd.ttf", round(sku_font_pt * dots_per_mm * 0.45))
+    except Exception:
+        font_title = ImageFont.load_default()
+        font_sku = ImageFont.load_default()
+
+    # 1. Title (Centered Top)
+    title_bbox = draw.textbbox((0, 0), title, font=font_title)
+    title_w = title_bbox[2] - title_bbox[0]
+    title_x = max(10, (width_dots - title_w) // 2)
+    title_y = round(3.5 * dots_per_mm)
+    draw.text((title_x, title_y), title, font=font_title, fill=0)
+
+    # 2. Code 128 Barcode (Centered Middle)
+    bits = _encode_code128(barcode_val)
+    module_w = max(2, round(width_dots * 0.72 / len(bits)))
+    barcode_w = len(bits) * module_w
+    bc_x = (width_dots - barcode_w) // 2
+    bc_y = round(10.5 * dots_per_mm)
+    bc_h = round(8.5 * dots_per_mm)
+
+    for i, bit in enumerate(bits):
+        if bit == '1':
+            x0 = bc_x + (i * module_w)
+            draw.rectangle([x0, bc_y, x0 + module_w - 1, bc_y + bc_h], fill=0)
+
+    # 3. SKU (Centered Bottom, Bold & Large matching Studio Preview)
+    sku_bbox = draw.textbbox((0, 0), sku, font=font_sku)
+    sku_w = sku_bbox[2] - sku_bbox[0]
+    sku_x = max(10, (width_dots - sku_w) // 2)
+    sku_y = round(19.5 * dots_per_mm)
+    draw.text((sku_x, sku_y), sku, font=font_sku, fill=0)
+
+    # Invert for TSPL BITMAP Mode 0 (1=black dot, 0=white background)
+    inverted = ImageOps.invert(img.convert("L")).convert("1")
+    return inverted.tobytes(), row_bytes
 
 
 def build_tspl_job(
@@ -351,7 +432,6 @@ def build_tspl_job(
     height_mm = max(10.0, _number(size.get("height_mm"), 25.0))
     gap_mm = max(0.0, _number(size.get("gap_mm"), 2.0))
     dots_per_mm = _normalize_printer_dpi(printer_dpi) / 25.4
-    width_dots = round(width_mm * dots_per_mm)
     height_dots = round(height_mm * dots_per_mm)
     payload = bytearray()
 
@@ -366,30 +446,11 @@ def build_tspl_job(
         if not isinstance(item, Mapping):
             continue
         quantity = max(1, min(1000, round(_number(item.get("quantity"), 1))))
-        title = _text(item.get("product_name") or item.get("title") or "PRODUCT LABEL")
-        sku = _text(item.get("sku") or item.get("articleNo") or item.get("barcode") or "LABEL-001")
-        barcode_val = _text(item.get("barcode") or sku)
-        price = _text(item.get("price") or "")
-
+        text_bitmap, row_bytes = _label_text_bitmap(item, width_mm, height_mm, dots_per_mm)
         _append_command(payload, "CLS")
-
-        # Native TSPL Text & Barcode positioning (scalable by DPI)
-        x_start = max(15, round(2 * dots_per_mm))
-        y_title = max(15, round(2 * dots_per_mm))
-        y_barcode = max(55, round(7 * dots_per_mm))
-        y_footer = max(135, round(16 * dots_per_mm))
-        barcode_h = max(40, round(6 * dots_per_mm))
-
-        # Title
-        _append_command(payload, f'TEXT {x_start},{y_title},"3",0,1,1,"{title[:40]}"')
-
-        # Barcode
-        if barcode_val:
-            _append_command(payload, f'BARCODE {x_start},{y_barcode},"128",{barcode_h},1,0,2,4,"{barcode_val[:30]}"')
-
-        # Footer (SKU & Price)
-        footer_str = f"SKU: {sku}" if not price else f"SKU: {sku}  PRICE: {price}"
-        _append_command(payload, f'TEXT {x_start},{y_footer},"2",0,1,1,"{footer_str[:45]}"')
+        payload.extend(f"BITMAP 0,0,{row_bytes},{height_dots},0,".encode("ascii"))
+        payload.extend(text_bitmap)
+        payload.extend(b"\r\n")
 
         _append_command(payload, f"PRINT 1,{quantity}")
         label_count += 1
