@@ -450,11 +450,10 @@ function LabelPrinter() {
   const [printerConnectionMode, setPrinterConnectionMode] = useState(getInitialPrinterConnectionMode);
   const [localPrintBridgeUrl, setLocalPrintBridgeUrl] = useState(getInitialLocalPrintBridgeUrl);
 
-  const isPublicDomain = typeof window !== "undefined" && !isLoopbackHostname(window.location.hostname);
-  const useLocalPrinterBridge = !isPublicDomain && printerConnectionMode === "local";
+  const useLocalPrinterBridge = printerConnectionMode === "local";
   const resolvedLocalPrintBridgeUrl = normalizeApiBaseUrl(localPrintBridgeUrl) || DEFAULT_LOCAL_PRINT_BRIDGE_URL;
   const printerConnectionModeLabel = useLocalPrinterBridge ? "This laptop" : "ERP server";
-  const localPrintBridgeUnavailable = `Local printer bridge is not reachable at ${resolvedLocalPrintBridgeUrl}. Start the local printer bridge on this laptop, then refresh printers.`;
+  const localPrintBridgeUnavailable = `Local printer bridge is not reachable at ${resolvedLocalPrintBridgeUrl}. Start the local printer bridge on this laptop, or click "ERP server" to print via Print Agent.`;
 
   const fetchLocalPrinterBridge = async (path, options = {}) => {
     let response;
@@ -493,31 +492,17 @@ function LabelPrinter() {
     return { data };
   };
 
-  const getPrinterStatus = async () => {
-    if (useLocalPrinterBridge) {
-      return fetchLocalPrinterBridge("/local-label-printers");
-    }
-    try {
-      return await api.get("/print-agent/printers");
-    } catch {
-      return await api.get("/label-printers");
-    }
-  };
+  const getPrinterStatus = () =>
+    useLocalPrinterBridge ? fetchLocalPrinterBridge("/local-label-printers") : api.get("/print-agent/printers");
 
-  const postPrinterLabels = async (payload) => {
-    if (useLocalPrinterBridge) {
-      return fetchLocalPrinterBridge("/local-label-printers/print", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    }
-    try {
-      return await api.post("/print-agent/print", payload);
-    } catch {
-      return await api.post("/label-printers/print", payload);
-    }
-  };
+  const postPrinterLabels = (payload) =>
+    useLocalPrinterBridge
+      ? fetchLocalPrinterBridge("/local-label-printers/print", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      : api.post("/print-agent/print", payload);
 
   useEffect(() => {
     let active = true;
@@ -540,17 +525,7 @@ function LabelPrinter() {
   const loadLabelPrinters = async ({ showNotice = false } = {}) => {
     setPrinterStatus({ loading: true, error: "" });
     try {
-      let response;
-      if (useLocalPrinterBridge) {
-        try {
-          response = await fetchLocalPrinterBridge("/local-label-printers");
-        } catch {
-          setPrinterConnectionMode("server");
-          response = await api.get("/label-printers");
-        }
-      } else {
-        response = await api.get("/label-printers");
-      }
+      const response = await getPrinterStatus();
       const printers = Array.isArray(response.data?.printers) ? response.data.printers : [];
       setPrinterOptions(printers);
       setDirectPrinter((current) => {
@@ -562,8 +537,8 @@ function LabelPrinter() {
         const connectedCount = printers.filter((printer) => printer.is_connected).length;
         setNotice(
           printers.length
-            ? `${connectedCount} of ${printers.length} printer${printers.length === 1 ? "" : "s"} connected.`
-            : `No printers were found.`
+            ? `${connectedCount} of ${printers.length} printer${printers.length === 1 ? "" : "s"} connected on ${printerConnectionModeLabel}.`
+            : `No printers were found on ${printerConnectionModeLabel}.`
         );
       }
     } catch (error) {
