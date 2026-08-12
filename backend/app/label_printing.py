@@ -368,8 +368,8 @@ def _label_text_bitmap(item: Mapping[str, object], width_mm: float, height_mm: f
     height_dots = round(height_mm * dots_per_mm)
     row_bytes = (width_dots + 7) // 8
 
-    # Canvas: 0 = white paper background, 1 = black ink for TSPL BITMAP mode 0
-    img = Image.new("1", (width_dots, height_dots), 0)
+    # Canvas: 1 = white paper background, 0 = black text/barcode
+    img = Image.new("1", (width_dots, height_dots), 1)
     draw = ImageDraw.Draw(img)
 
     title = _text(item.get("product_name") or item.get("title") or "PRODUCT LABEL")
@@ -392,7 +392,7 @@ def _label_text_bitmap(item: Mapping[str, object], width_mm: float, height_mm: f
     title_w = title_bbox[2] - title_bbox[0]
     title_x = max(10, (width_dots - title_w) // 2)
     title_y = round(3.5 * dots_per_mm)
-    draw.text((title_x, title_y), title, font=font_title, fill=1)
+    draw.text((title_x, title_y), title, font=font_title, fill=0)
 
     # 2. Code 128 Barcode (Centered Middle)
     bits = _encode_code128(barcode_val)
@@ -405,16 +405,18 @@ def _label_text_bitmap(item: Mapping[str, object], width_mm: float, height_mm: f
     for i, bit in enumerate(bits):
         if bit == '1':
             x0 = bc_x + (i * module_w)
-            draw.rectangle([x0, bc_y, x0 + module_w - 1, bc_y + bc_h], fill=1)
+            draw.rectangle([x0, bc_y, x0 + module_w - 1, bc_y + bc_h], fill=0)
 
     # 3. SKU (Centered Bottom, Bold & Large matching Studio Preview)
     sku_bbox = draw.textbbox((0, 0), sku, font=font_sku)
     sku_w = sku_bbox[2] - sku_bbox[0]
     sku_x = max(10, (width_dots - sku_w) // 2)
     sku_y = round(19.5 * dots_per_mm)
-    draw.text((sku_x, sku_y), sku, font=font_sku, fill=1)
+    draw.text((sku_x, sku_y), sku, font=font_sku, fill=0)
 
-    return img.tobytes(), row_bytes
+    # Convert PIL 1=white, 0=black to TSPL Mode 0 (1=black dot, 0=white paper)
+    tspl_bytes = bytes(~b & 0xFF for b in img.tobytes())
+    return tspl_bytes, row_bytes
 
 
 def build_tspl_job(
