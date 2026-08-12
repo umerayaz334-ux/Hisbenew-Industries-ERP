@@ -519,6 +519,15 @@ def run_deployment_action(payload: DeploymentActionRequest, request: Request):
             "status": _deployment_status(),
         }
 
+    if action == "restart_backend":
+        import threading
+        def _deferred_restart():
+            import time
+            time.sleep(1)
+            os._exit(0)
+        threading.Thread(target=_deferred_restart, daemon=True).start()
+        return {"ok": True, "action": action, "message": "Backend process restart initiated."}
+
     if action == "local_backend_deploy":
         script = REPO_ROOT / "scripts" / "deploy-backend.ps1"
         if not script.exists():
