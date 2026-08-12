@@ -433,7 +433,6 @@ def build_tspl_job(
     height_mm = max(10.0, _number(size.get("height_mm"), 25.0))
     gap_mm = max(0.0, _number(size.get("gap_mm"), 2.0))
     dots_per_mm = _normalize_printer_dpi(printer_dpi) / 25.4
-    height_dots = round(height_mm * dots_per_mm)
     payload = bytearray()
 
     _append_command(payload, f"SIZE {width_mm:g} mm,{height_mm:g} mm")
@@ -447,11 +446,28 @@ def build_tspl_job(
         if not isinstance(item, Mapping):
             continue
         quantity = max(1, min(1000, round(_number(item.get("quantity"), 1))))
-        text_bitmap, row_bytes = _label_text_bitmap(item, width_mm, height_mm, dots_per_mm)
+        title = _text(item.get("product_name") or item.get("title") or "PRODUCT LABEL")
+        sku = _text(item.get("sku") or item.get("articleNo") or item.get("barcode") or "LABEL-001")
+        barcode_val = _text(item.get("barcode") or sku)
+
         _append_command(payload, "CLS")
-        payload.extend(f"BITMAP 0,0,{row_bytes},{height_dots},0,".encode("ascii"))
-        payload.extend(text_bitmap)
-        payload.extend(b"\r\n")
+
+        # Native TSPL Text & Barcode positioning (DPI proportional)
+        x_pos = max(30, round(3 * dots_per_mm))
+        y_title = max(20, round(2 * dots_per_mm))
+        y_barcode = max(70, round(7 * dots_per_mm))
+        y_sku = max(175, round(17 * dots_per_mm))
+        barcode_h = max(60, round(6 * dots_per_mm))
+
+        # Title at top
+        _append_command(payload, f'TEXT {x_pos},{y_title},"3",0,1,1,"{title[:35]}"')
+
+        # Code 128 Barcode in middle
+        if barcode_val:
+            _append_command(payload, f'BARCODE {x_pos},{y_barcode},"128",{barcode_h},1,0,2,4,"{barcode_val[:25]}"')
+
+        # Large SKU at bottom (Matching Studio Preview)
+        _append_command(payload, f'TEXT {x_pos},{y_sku},"4",0,1,1,"{sku[:25]}"')
 
         _append_command(payload, f"PRINT 1,{quantity}")
         label_count += 1
