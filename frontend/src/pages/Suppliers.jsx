@@ -1,3 +1,4 @@
+import Pagination, { usePagination } from "../components/Pagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { formatUtcLocal, parseUtcLocal } from "../utils/dateUtils";
@@ -255,6 +256,7 @@ function Suppliers() {
       return matchesSearch && matchesStatus;
     });
   }, [supplierSearch, supplierStatus, suppliers]);
+  const suppliersPagination = usePagination(filteredSuppliers);
 
   const selectedSupplierStockProduct = useMemo(
     () =>
@@ -1642,7 +1644,7 @@ function Suppliers() {
                   </td>
                 </tr>
               ) : (
-                filteredSuppliers.map((supplier) => (
+                suppliersPagination.items.map((supplier) => (
                   <tr
                     aria-label={`Open account for ${supplier.name}`}
                     className="supplier-clickable-row"
@@ -1731,6 +1733,7 @@ function Suppliers() {
             </tbody>
           </table>
         </div>
+          <Pagination pagination={suppliersPagination} label="Suppliers" />
       </main>
         </>
       )}

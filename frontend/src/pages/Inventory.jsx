@@ -1,3 +1,4 @@
+import Pagination, { usePagination } from "../components/Pagination";
 import { useEffect, useMemo, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { formatUtcLocal } from "../utils/dateUtils";
@@ -426,6 +427,7 @@ function Inventory() {
       );
     });
   }, [products, stockFilter, stockSearch, stockSort]);
+  const productsPagination = usePagination(filteredProducts);
 
   const filteredSupplies = useMemo(() => {
     const query = stockSearch.trim().toLowerCase();
@@ -454,6 +456,7 @@ function Inventory() {
       );
     });
   }, [factorySupplies, stockSearch, stockSort]);
+  const suppliesPagination = usePagination(filteredSupplies);
 
   const filteredAddProducts = useMemo(() => {
     const query = addProductSearch.trim().toLowerCase();
@@ -488,6 +491,7 @@ function Inventory() {
       return matchesSearch && matchesFilter;
     });
   }, [movementFilter, movementSearch, movements]);
+  const movementsPagination = usePagination(filteredMovements);
 
   const projectedStock = useMemo(() => {
     if (addStockForm.item_mode === "custom") {
@@ -1341,7 +1345,7 @@ function Inventory() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSupplies.map((item) => (
+                  {suppliesPagination.items.map((item) => (
                     <tr key={`${item.supplier_id}-${item.id}`}>
                       <td className="inventory-supply-name-cell" data-label="Supply">
                         <strong>{item.item_name || "Unnamed supply"}</strong>
@@ -1368,6 +1372,7 @@ function Inventory() {
                   ))}
                 </tbody>
               </table>
+              <Pagination pagination={suppliesPagination} label="Supplies" />
             </div>
           )
         ) : filteredProducts.length === 0 ? (
@@ -1397,7 +1402,7 @@ function Inventory() {
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map((product) => {
+                {productsPagination.items.map((product) => {
                   const draftAvailable = getDraftAvailableStock(product);
                   const stockStatus = getStockStatus(product, draftAvailable);
                   const rowEdited = Boolean(stockDrafts[product.id]);
@@ -1519,6 +1524,7 @@ function Inventory() {
             </table>
           </div>
         )}
+          <Pagination pagination={productsPagination} label="Products" />
       </section>
 
       <section
@@ -1603,7 +1609,7 @@ function Inventory() {
                 </tr>
               </thead>
               <tbody>
-                {filteredMovements.map((movement) => {
+                {movementsPagination.items.map((movement) => {
                   const product =
                     productsById.get(movement.product_id) || null;
                   const imageUrl =
@@ -1672,6 +1678,7 @@ function Inventory() {
             </table>
           </div>
             )}
+          <Pagination pagination={movementsPagination} label="Movements" />
           </div>
         )}
       </section>

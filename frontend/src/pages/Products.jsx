@@ -1,3 +1,4 @@
+import Pagination, { usePagination } from "../components/Pagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
@@ -461,6 +462,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
       return matchesSearch && matchesCategory && matchesStock;
     });
   }, [categoryFilter, products, searchQuery, stockFilter]);
+  const productsPagination = usePagination(filteredProducts);
 
   const filteredSupplies = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -480,6 +482,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
       return matchesSearch && matchesCategory;
     });
   }, [categoryFilter, factorySupplies, searchQuery]);
+  const suppliesPagination = usePagination(filteredSupplies);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -498,7 +501,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
     selectedProductIds.has(product.id)
   );
   const allVisibleProductsSelected =
-    filteredProducts.length > 0 && selectedProductIds.size === filteredProducts.length;
+    productsPagination.items.length > 0 && productsPagination.items.every((item) => selectedProductIds.has(item.id));
 
   const editingProduct = useMemo(
     () => products.find((product) => product.id === editingId) || null,
@@ -694,10 +697,10 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
 
   const toggleAllVisibleProducts = () => {
     setSelectedProductIds((current) => {
-      if (filteredProducts.length > 0 && current.size === filteredProducts.length) {
-        return new Set();
-      }
-      return new Set(filteredProducts.map((product) => product.id));
+      const next = new Set(current);
+      const allSelected = productsPagination.items.every((item) => current.has(item.id));
+      productsPagination.items.forEach((item) => allSelected ? next.delete(item.id) : next.add(item.id));
+      return next;
     });
   };
 
@@ -1536,7 +1539,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSupplies.map((item) => (
+                  {suppliesPagination.items.map((item) => (
                     <tr key={`${item.supplier_id}-${item.id}`}>
                       <td className="products-supply-name-cell" data-label="Supply">
                         <strong>{item.item_name || "Unnamed supply"}</strong>
@@ -1592,6 +1595,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                   ))}
                 </tbody>
               </table>
+              <Pagination pagination={suppliesPagination} label="Supplies" />
             </div>
           )
         ) : filteredProducts.length === 0 ? (
@@ -1620,7 +1624,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
           </div>
         ) : isWorkerView ? (
           <div className="products-worker-grid">
-            {filteredProducts.map((product) => {
+            {productsPagination.items.map((product) => {
               const stockStatus = getStockStatus(product);
               const imageUrl = getStaticUrl(product.image_url);
 
@@ -1710,7 +1714,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map((product) => {
+                {productsPagination.items.map((product) => {
                   const stockStatus = getStockStatus(product);
 
                   return (
@@ -1832,6 +1836,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
             </table>
           </div>
         )}
+          <Pagination pagination={productsPagination} label="Products" />
       </section>
 
       {showCatalogSelector && (

@@ -1,3 +1,4 @@
+import Pagination, { usePagination } from "../components/Pagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
@@ -406,6 +407,7 @@ function Customers({ onCreateOrder = null }) {
     platformFilter,
     searchQuery,
   ]);
+  const customersPagination = usePagination(filteredCustomers);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -424,7 +426,7 @@ function Customers({ onCreateOrder = null }) {
     selectedCustomerIds.has(customer.id)
   );
   const allVisibleCustomersSelected =
-    filteredCustomers.length > 0 && selectedCustomerIds.size === filteredCustomers.length;
+    customersPagination.items.length > 0 && customersPagination.items.every((item) => selectedCustomerIds.has(item.id));
 
   const customerSummary = useMemo(() => {
     const withOrders = customers.filter(
@@ -627,10 +629,10 @@ function Customers({ onCreateOrder = null }) {
 
   const toggleAllVisibleCustomers = () => {
     setSelectedCustomerIds((current) => {
-      if (filteredCustomers.length > 0 && current.size === filteredCustomers.length) {
-        return new Set();
-      }
-      return new Set(filteredCustomers.map((customer) => customer.id));
+      const next = new Set(current);
+      const allSelected = customersPagination.items.every((item) => current.has(item.id));
+      customersPagination.items.forEach((item) => allSelected ? next.delete(item.id) : next.add(item.id));
+      return next;
     });
   };
 
@@ -1429,7 +1431,7 @@ function Customers({ onCreateOrder = null }) {
                 </tr>
               </thead>
               <tbody>
-                {filteredCustomers.map((customer) => {
+                {customersPagination.items.map((customer) => {
                   const orderCount = orderCountByCustomer.get(customer.id) || 0;
 
                   return (
@@ -1526,6 +1528,7 @@ function Customers({ onCreateOrder = null }) {
             </table>
           </div>
         )}
+          <Pagination pagination={customersPagination} label="Customers" />
       </section>
 
       {detailCustomer && (

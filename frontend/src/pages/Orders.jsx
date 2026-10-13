@@ -1,3 +1,4 @@
+import Pagination, { usePagination } from "../components/Pagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
@@ -1168,10 +1169,10 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
 
   const toggleAllVisibleOrders = () => {
     setSelectedOrderIds((current) => {
-      if (filteredOrders.length > 0 && current.size === filteredOrders.length) {
-        return new Set();
-      }
-      return new Set(filteredOrders.map((order) => order.id));
+      const next = new Set(current);
+      const allSelected = ordersPagination.items.every((item) => current.has(item.id));
+      ordersPagination.items.forEach((item) => allSelected ? next.delete(item.id) : next.add(item.id));
+      return next;
     });
   };
 
@@ -1415,6 +1416,7 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
       })
       .sort((a, b) => orderSortTime(b) - orderSortTime(a) || Number(b.id || 0) - Number(a.id || 0));
   }, [orders, searchQuery, shippingByOrderId, statusFilter]);
+  const ordersPagination = usePagination(filteredOrders);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -1433,7 +1435,7 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
     selectedOrderIds.has(order.id)
   );
   const allVisibleOrdersSelected =
-    filteredOrders.length > 0 && selectedOrderIds.size === filteredOrders.length;
+    ordersPagination.items.length > 0 && ordersPagination.items.every((item) => selectedOrderIds.has(item.id));
 
   const orderSummary = useMemo(() => {
     const groupCounts = orders.reduce(
@@ -1702,6 +1704,7 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
     ? excelViewData.columns
     : [];
   const excelRows = Array.isArray(excelViewData?.rows) ? excelViewData.rows : [];
+  const excelPagination = usePagination(excelRows);
   const excelFrozenColumns = Number(excelViewData?.frozen_columns || 0);
   const excelColumnWidth = (column) =>
     Math.max(64, Math.min(280, Number(column?.width || 12) * 8));
@@ -1800,7 +1803,7 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
               </tr>
             </thead>
             <tbody>
-              {excelRows.map((row) => (
+              {excelPagination.items.map((row) => (
                 <tr
                   className={`orders-excel-row is-${row.kind || "body"}`}
                   key={row.index}
@@ -1834,6 +1837,7 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
               ))}
             </tbody>
           </table>
+          <Pagination pagination={excelPagination} label="Orders spreadsheet" />
         </div>
       </div>
     );
@@ -3109,7 +3113,7 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((order) => {
+                  ordersPagination.items.map((order) => {
                     const needsCustomerAssignment = orderNeedsCustomerAssignment(order);
                     const customerDisplay = orderCustomerDisplay(order);
                     const payoutBreakdown = getOrderPayoutBreakdown(order);
@@ -3203,6 +3207,7 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
             </table>
           </div>
           )}
+          <Pagination pagination={ordersPagination} label="Orders" />
         </section>
       )}
     </div>
