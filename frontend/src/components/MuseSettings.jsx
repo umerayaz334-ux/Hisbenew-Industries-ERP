@@ -31,7 +31,7 @@ Omit fulfillment fields to leave the order unfulfilled in Shipping. To mark fulf
 courier must be FedEx or DHL. tracking_number is required when fulfilled is true. Optional shipped_at uses ISO time.
 
 3. Confirm processing
-Orders and payouts return HTTP 202 (queued). Processing starts promptly; backup checks run every 5 seconds. Poll GET /submissions every 2 seconds until Applied or Failed. Fix and resend failures. Identical retries are safe; do not change accepted submissions.
+Orders and payouts return HTTP 202 (queued). Processing starts promptly; backup checks run every 5 seconds. Poll GET /submissions every 2 seconds until Applied or Failed. Fix and resend failures. Identical retries are safe; do not change accepted submissions. If an order was deleted in the ERP, Muse may resend the same order_no with new details (including fulfilled/tracking) and it will be accepted again.
 
 4. Final payouts
 Daily at 08:00 Asia/Karachi, GET /pending-payouts and verify payment at the sales source. Once settled, POST /payouts:

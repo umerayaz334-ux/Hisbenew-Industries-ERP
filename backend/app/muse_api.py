@@ -270,6 +270,19 @@ def enqueue(payload, kind, db):
     tenant_id = db.info["tenant_id"]
     row = db.query(MuseSubmission).filter_by(tenant_id=tenant_id, submission_key=key).first()
     if row:
+        # If the ERP order was deleted, the Applied submission must not block a
+        # fresh Muse post (including fulfilled/tracking updates).
+        order_missing = (
+            kind == "order"
+            and db.query(Order.id).filter_by(order_no=payload.order_no).first() is None
+        )
+        if order_missing:
+            row.payload = data
+            row.status = "Pending"
+            row.error = None
+            row.processed_at = None
+            db.commit()
+            return submission_result(row)
         if row.payload != data and row.status != "Failed":
             raise HTTPException(409, "This order submission already exists with different details")
         if row.status == "Failed":

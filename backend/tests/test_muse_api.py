@@ -71,6 +71,36 @@ class MuseTests(unittest.TestCase):
         self.process()
         self.assertEqual(self.db.query(AccountingTransaction).count(), 1)
 
+    def test_repost_after_order_deleted_allows_new_details(self):
+        enqueue(self.order(order_no="M-DEL"), "order", self.db)
+        self.process()
+        order = self.db.query(Order).filter_by(order_no="M-DEL").one()
+        self.db.query(OrderItem).filter_by(order_id=order.id).delete()
+        self.db.query(StockMovement).filter_by(reference="M-DEL").delete()
+        self.db.delete(order)
+        self.db.commit()
+        self.assertEqual(self.db.query(Order).filter_by(order_no="M-DEL").count(), 0)
+        submission = self.db.query(MuseSubmission).filter_by(submission_key="order:M-DEL").one()
+        self.assertEqual(submission.status, "Applied")
+        # Same order_no with fulfilled/tracking must re-queue after ERP delete.
+        result = enqueue(
+            self.order(
+                order_no="M-DEL",
+                fulfilled=True,
+                courier="DHL",
+                tracking_number="1234567890",
+            ),
+            "order",
+            self.db,
+        )
+        self.assertEqual(result["status"], "Pending")
+        self.process()
+        order = self.db.query(Order).filter_by(order_no="M-DEL").one()
+        shipping = self.db.query(Shipping).filter_by(order_id=order.id).one()
+        self.assertEqual(order.shipping_status, "Shipped")
+        self.assertEqual(shipping.courier_name, "DHL")
+        self.assertEqual(shipping.tracking_number, "1234567890")
+
     def test_fulfilled_order_with_fedex_tracking(self):
         with self.assertRaises(ValidationError):
             self.order(fulfilled=True)
