@@ -5,6 +5,31 @@ import "./Dashboard.css";
 
 const AMAZON_SALE_JOBS_STORAGE_KEY = "erpAmazonSaleNotificationJobsV1";
 const AMAZON_ORDER_SYNC_INTERVAL_MS = 2 * 60 * 1000;
+const dashboardNetworkErrorMessage = `Backend not connected. Please make sure FastAPI is running at ${API_BASE_URL}.`;
+
+const dashboardResponseErrorMessage = async (response) => {
+  let detail = "";
+  try {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const data = await response.json();
+      detail = Array.isArray(data?.detail)
+        ? data.detail.map((item) => item.msg || item.detail || String(item)).join(", ")
+        : data?.detail || data?.message || "";
+    } else {
+      detail = (await response.text()).trim();
+    }
+  } catch {
+    detail = "";
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return detail || "This login cannot access dashboard data for this company. Sign in to the correct company workspace.";
+  }
+
+  const suffix = detail ? ` ${detail}` : "";
+  return `Dashboard data could not be loaded for this company (HTTP ${response.status}).${suffix}`;
+};
 
 let amazonSaleAudioContext = null;
 const amazonSaleActiveOscillators = new Set();
@@ -179,9 +204,9 @@ const normalizeSalesSeries = (entries) => {
 
 function SevenDaySalesChart({ data }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
-  const width = 760;
-  const height = 260;
-  const padding = { top: 24, right: 20, bottom: 42, left: 70 };
+  const width = 640;
+  const height = 215;
+  const padding = { top: 20, right: 20, bottom: 32, left: 52 };
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
   const maxValue = Math.max(...data.map((item) => item.salesAmount), 1);
@@ -227,8 +252,8 @@ function SevenDaySalesChart({ data }) {
       >
         <defs>
           <linearGradient id="dashboardSalesArea" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#5b5bd6" stopOpacity="0.24" />
-            <stop offset="100%" stopColor="#5b5bd6" stopOpacity="0.015" />
+            <stop offset="0%" stopColor="#5b5bd6" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#5b5bd6" stopOpacity="0.02" />
           </linearGradient>
         </defs>
 
@@ -297,7 +322,7 @@ function SevenDaySalesChart({ data }) {
             <text
               className="dashboard-focus-chart-x-label"
               x={point.x}
-              y={height - 13}
+              y={padding.top + plotHeight + 19}
             >
               {new Date(`${point.date}T00:00:00`).toLocaleDateString("en-PK", {
                 weekday: "short",
@@ -592,10 +617,75 @@ function UnassignedDashboard({ userName, userEmail, userPhone }) {
   );
 }
 
+const formatCompactDateOnly = (dateVal) => {
+  if (!dateVal) return "";
+  const raw = String(dateVal).trim();
+  try {
+    const dateObj = new Date(raw);
+    if (!isNaN(dateObj.getTime())) {
+      return dateObj.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    }
+  } catch {}
+  return raw.split("T")[0].split(" ")[0];
+};
+
+const resolveDashboardTrackingStatus = (trackInfo, trackingNumber) => {
+  const trk = String(trackingNumber || "").trim();
+  if (!trk || !trackInfo) {
+    return { label: "Waiting", stage: "waiting", badgeClass: "is-waiting" };
+  }
+  const stage = String(trackInfo.status_stage || "").toLowerCase();
+  const status = String(trackInfo.status || "").toLowerCase();
+  const desc = String(trackInfo.status_description || "").toLowerCase();
+
+  if (trackInfo.is_delivered || stage === "delivered" || status.includes("delivered") || desc.includes("delivered")) {
+    return { label: "Delivered", stage: "delivered", badgeClass: "is-delivered" };
+  }
+  if (
+    stage === "label_created" ||
+    stage === "waiting" ||
+    stage === "waiting_for_shipment" ||
+    status.includes("label created") ||
+    status.includes("shipment information sent") ||
+    status.includes("waiting") ||
+    desc.includes("label created") ||
+    desc.includes("shipment information sent") ||
+    desc.includes("not yet picked up") ||
+    desc.includes("waiting for carrier") ||
+    desc.includes("awaiting dispatch")
+  ) {
+    return { label: "Waiting", stage: "waiting", badgeClass: "is-waiting" };
+  }
+  if (
+    stage === "in_transit" ||
+    stage === "out_for_delivery" ||
+    stage === "picked_up" ||
+    status.includes("transit") ||
+    status.includes("vehicle") ||
+    status.includes("out for delivery") ||
+    status.includes("picked up") ||
+    status.includes("tendered") ||
+    status.includes("departed") ||
+    status.includes("arrived") ||
+    desc.includes("transit") ||
+    desc.includes("vehicle") ||
+    desc.includes("picked up")
+  ) {
+    return { label: "In Transit", stage: "in_transit", badgeClass: "is-in-transit" };
+  }
+  return { label: "Waiting", stage: "waiting", badgeClass: "is-waiting" };
+};
+
 function OperationalDashboard({ userRole, workerId, userName }) {
   const isMobileDashboard = useMobileDashboardLayout();
   const [stats, setStats] = useState(null);
   const [fulfillmentData, setFulfillmentData] = useState(null);
+  const [inTransitShipmentsList, setInTransitShipmentsList] = useState([]);
+  const [inTransitLoading, setInTransitLoading] = useState(false);
   const [orderTasks, setOrderTasks] = useState([]);
   const [workerPayoutData, setWorkerPayoutData] = useState({
     tasks: [],
@@ -604,13 +694,15 @@ function OperationalDashboard({ userRole, workerId, userName }) {
   });
   const [loading, setLoading] = useState(true);
   const [backendError, setBackendError] = useState(false);
-  const [amazonSyncing, setAmazonSyncing] = useState(["admin", "super_admin"].includes(userRole));
+  const [dashboardErrorMessage, setDashboardErrorMessage] = useState("");
+  const [amazonSyncing, setAmazonSyncing] = useState(false);
   const [amazonSyncError, setAmazonSyncError] = useState("");
   const [amazonSaleNotice, setAmazonSaleNotice] = useState(null);
   const amazonSyncPromiseRef = useRef(null);
   const dashboardMountedRef = useRef(true);
   const dashboardRequestIdRef = useRef(0);
   const lastDashboardRefreshRef = useRef(0);
+  const lastAmazonSyncStartedAtRef = useRef(0);
   const amazonSaleRingIntervalRef = useRef(null);
   const amazonSaleRingSessionRef = useRef(0);
   const amazonSaleDemoStartedRef = useRef(false);
@@ -628,6 +720,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
     };
     try {
       setBackendError(false);
+      setDashboardErrorMessage("");
       const response = await apiFetch(
         `${API_BASE_URL}/dashboard-stats?refresh=${Date.now()}`,
         freshFetchOptions
@@ -635,6 +728,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
       if (!response.ok) {
         if (requestId === dashboardRequestIdRef.current) {
           setBackendError(true);
+          setDashboardErrorMessage(await dashboardResponseErrorMessage(response));
         }
         return;
       }
@@ -734,6 +828,61 @@ function OperationalDashboard({ userRole, workerId, userName }) {
         setOrderTasks([]);
         setWorkerPayoutData({ tasks: [], orderTasks: [], payments: [] });
       }
+
+      // Load active In-Transit shipments with live tracking
+      if (userRole !== "worker") {
+        try {
+          const [shippingRes, trackingRes] = await Promise.all([
+            apiFetch(`${API_BASE_URL}/shipping?limit=100`, freshFetchOptions),
+            apiFetch(`${API_BASE_URL}/shipping/tracking-overview`, freshFetchOptions),
+          ]);
+          if (shippingRes.ok && requestId === dashboardRequestIdRef.current && dashboardMountedRef.current) {
+            const shipRecords = await shippingRes.json();
+            const trackMap = trackingRes.ok ? await trackingRes.json() : {};
+            const inTransitList = (Array.isArray(shipRecords) ? shipRecords : [])
+              .filter((rec) => {
+                const shippingStatus = String(rec.shipping_status || "")
+                  .trim()
+                  .toLowerCase();
+                // Order already closed as delivered must never appear in live active dispatches
+                if (shippingStatus === "delivered") return false;
+
+                const trk = String(rec.tracking_number || "").trim();
+                if (!trk) return false;
+
+                const trackInfo =
+                  trackMap[trk] ||
+                  trackMap[trk.toUpperCase()] ||
+                  trackMap[trk.toLowerCase()];
+                const resolved = resolveDashboardTrackingStatus(trackInfo, trk);
+                // Active board: In Transit + Waiting pickup only (never Delivered)
+                return resolved.stage === "in_transit" || resolved.stage === "waiting";
+              })
+              .map((rec) => {
+                const trk = String(rec.tracking_number || "").trim();
+                const trackInfo =
+                  trackMap[trk] ||
+                  trackMap[trk.toUpperCase()] ||
+                  trackMap[trk.toLowerCase()];
+                const resolved = resolveDashboardTrackingStatus(trackInfo, trk);
+                const isOutForDelivery =
+                  String(trackInfo?.status || "").toLowerCase().includes("vehicle") ||
+                  String(trackInfo?.status || "").toLowerCase().includes("out for delivery") ||
+                  String(trackInfo?.status_code || "").toUpperCase() === "OD" ||
+                  String(trackInfo?.status_stage || "").toLowerCase() === "out_for_delivery";
+                return {
+                  ...rec,
+                  tracking_info: trackInfo,
+                  tracking_status: resolved,
+                  is_out_for_delivery: isOutForDelivery,
+                };
+              });
+            setInTransitShipmentsList(inTransitList);
+          }
+        } catch (shipErr) {
+          console.error("Dashboard in-transit fetch error:", shipErr);
+        }
+      }
     } catch (error) {
       console.error("Dashboard error:", error);
       if (
@@ -741,6 +890,11 @@ function OperationalDashboard({ userRole, workerId, userName }) {
         dashboardMountedRef.current
       ) {
         setBackendError(true);
+        setDashboardErrorMessage(
+          error?.name === "TypeError" || error?.message?.includes("Failed to fetch")
+            ? dashboardNetworkErrorMessage
+            : error?.message || "Dashboard data could not be loaded."
+        );
       }
     } finally {
       if (
@@ -929,6 +1083,19 @@ function OperationalDashboard({ userRole, workerId, userName }) {
     return syncRun;
   }, [announceAmazonSale, fetchDashboardStats, userRole]);
 
+  const syncAmazonOpenOrdersIfDue = useCallback(
+    (force = false) => {
+      if (!["admin", "super_admin"].includes(userRole)) return;
+      const now = Date.now();
+      if (!force && now - lastAmazonSyncStartedAtRef.current < AMAZON_ORDER_SYNC_INTERVAL_MS) {
+        return;
+      }
+      lastAmazonSyncStartedAtRef.current = now;
+      syncAmazonOpenOrders();
+    },
+    [syncAmazonOpenOrders, userRole]
+  );
+
   useEffect(() => {
     const initialLoadId = setTimeout(fetchDashboardStats, 0);
     const refreshId = setInterval(fetchDashboardStats, 60000);
@@ -961,6 +1128,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
         return;
       }
       fetchDashboardStats();
+      syncAmazonOpenOrdersIfDue();
     };
 
     window.addEventListener("focus", refreshDashboard);
@@ -971,7 +1139,24 @@ function OperationalDashboard({ userRole, workerId, userName }) {
       window.removeEventListener("erp:navigation", refreshDashboard);
       document.removeEventListener("visibilitychange", refreshDashboard);
     };
-  }, [fetchDashboardStats]);
+  }, [fetchDashboardStats, syncAmazonOpenOrdersIfDue]);
+
+  useEffect(() => {
+    if (!["admin", "super_admin"].includes(userRole)) return undefined;
+
+    const initialSyncId = window.setTimeout(
+      () => syncAmazonOpenOrdersIfDue(true),
+      150
+    );
+    const syncIntervalId = window.setInterval(
+      () => syncAmazonOpenOrdersIfDue(true),
+      AMAZON_ORDER_SYNC_INTERVAL_MS
+    );
+    return () => {
+      window.clearTimeout(initialSyncId);
+      window.clearInterval(syncIntervalId);
+    };
+  }, [syncAmazonOpenOrdersIfDue, userRole]);
 
   useEffect(() => {
     dashboardMountedRef.current = true;
@@ -980,19 +1165,6 @@ function OperationalDashboard({ userRole, workerId, userName }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!["admin", "super_admin"].includes(userRole)) return undefined;
-
-    const initialSyncId = window.setTimeout(syncAmazonOpenOrders, 150);
-    const syncIntervalId = window.setInterval(
-      syncAmazonOpenOrders,
-      AMAZON_ORDER_SYNC_INTERVAL_MS
-    );
-    return () => {
-      window.clearTimeout(initialSyncId);
-      window.clearInterval(syncIntervalId);
-    };
-  }, [syncAmazonOpenOrders, userRole]);
 
   useEffect(() => {
     if (
@@ -1053,6 +1225,9 @@ function OperationalDashboard({ userRole, workerId, userName }) {
 
   const dashboardData = stats || {};
   const amazonData = dashboardData.amazon || {};
+  const websiteData = dashboardData.website || {};
+  const showWebsiteMetrics =
+    Boolean(websiteData.enabled) && ["admin", "super_admin", "manager"].includes(userRole);
   const pendingShipping = dashboardData.pending_shipping_orders || 0;
   const lowStock = dashboardData.low_stock_count || 0;
   const upcomingBills = dashboardData.upcoming_regular_bills || [];
@@ -1140,7 +1315,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
     0
   );
   const ordersTodayCombined =
-    salesSeries.at(-1)?.orderCount ??
+    Number(salesSeries.at(-1)?.orderCount || 0) *
     Number(dashboardData.new_orders_today || 0);
   const recentOrders = Array.isArray(dashboardData.recent_week_orders)
     ? dashboardData.recent_week_orders
@@ -1449,9 +1624,9 @@ function OperationalDashboard({ userRole, workerId, userName }) {
 
   const focusMetrics = [
     {
-      detail: `${pluralize(newOrdersLast7Days, "order")} · ERP + Amazon${
+      detail: `${pluralize(newOrdersLast7Days, "order")}  ERP + Amazon${
         fourteenDaySalesTotal > 0
-          ? ` · (14-day: $${fourteenDaySalesTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })})`
+          ? `  (14-day: $${fourteenDaySalesTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })})`
           : ""
       }`,
       href: "/portal/orders",
@@ -1464,7 +1639,22 @@ function OperationalDashboard({ userRole, workerId, userName }) {
       label: "Orders today",
       value: formatNumber(ordersTodayCombined),
     },
-    {
+        ...(showWebsiteMetrics
+      ? [
+          {
+            detail: `${formatNumber(websiteData.visitors_today || 0)} today / ${formatNumber(websiteData.unread_chat_messages || 0)} unread`,
+            href: "/portal/website",
+            label: "Live visitors",
+            value: formatNumber(websiteData.active_visitors || 0),
+          },
+          {
+            detail: `${formatNumber(websiteData.active_cart_items || 0)} items in active carts`,
+            href: "/portal/website",
+            label: "Cart adds today",
+            value: formatNumber(websiteData.add_to_cart_today || 0),
+          },
+        ]
+      : []),{
       detail: `${shippingRate}% of all orders shipped`,
       href: "/portal/shipping",
       label: "Waiting to ship",
@@ -1473,15 +1663,11 @@ function OperationalDashboard({ userRole, workerId, userName }) {
       ...(["admin", "super_admin"].includes(userRole)
         ? [
             {
-              detail: amazonSyncing
-                ? "Fetching latest Amazon orders"
-                : amazonSyncError
-                  ? "Latest saved count · sync unavailable"
-                  : `${amazonLastSyncLabel} · ${amazonPendingOrders} pending`,
+              detail: `${amazonLastSyncLabel} · ${amazonPendingOrders} pending`,
               href: "/portal/amazon/orders",
               label: "Amazon open orders",
-              loading: amazonSyncing,
-              value: amazonSyncing ? "Loading" : formatNumber(amazonOpenOrders),
+              loading: false,
+              value: formatNumber(amazonOpenOrders),
             },
           ]
       : [
@@ -1567,7 +1753,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
     return (
       <div className="dashboard-page">
         <div className="dashboard-state error">
-          Backend not connected. Please make sure FastAPI is running.
+          {dashboardErrorMessage || dashboardNetworkErrorMessage}
         </div>
       </div>
     );
@@ -1798,7 +1984,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
             role="status"
           >
             <span className="dashboard-amazon-sale-icon" aria-hidden="true">
-              ✓
+              
             </span>
             <div>
               {amazonSaleNotice.isTest ? (
@@ -1862,98 +2048,271 @@ function OperationalDashboard({ userRole, workerId, userName }) {
               }}
               type="button"
             >
-              ×
+              
             </button>
           </aside>
         ) : null}
 
-        <header className="dashboard-modern-header">
-          <div className="dashboard-modern-title">
-            <span>{todayLabel}</span>
+        {/* --- 1. HERO HEADER: Greeting with Date Eyebrow --- */}
+        <header className="erp-dash-header">
+          <div className="erp-dash-title-wrap">
+            <span className="erp-dash-date-eyebrow">{todayLabel.toUpperCase()}</span>
             <h1>
               {dashboardData.greeting}, {greetingName}
             </h1>
           </div>
         </header>
 
-        <section
-          aria-label="Key business metrics"
-          className="dashboard-modern-metrics"
-        >
+        {/* --- 2. EXECUTIVE METRICS GRID --- */}
+        <section aria-label="Key business metrics" className="erp-kpi-grid">
           {focusMetrics.map((metric) => (
             <a
               aria-busy={metric.loading || undefined}
-              className={metric.loading ? "is-loading" : undefined}
+              className={`erp-kpi-card ${metric.loading ? "is-loading" : ""}`}
               href={metric.href}
               key={metric.label}
             >
-              <span>{metric.label}</span>
-              <strong>
+              <div className="erp-kpi-header">
+                <span className="erp-kpi-title">{metric.label}</span>
+                <span className="erp-kpi-arrow-icon" aria-hidden="true">
+                  <svg fill="none" height="12" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24" width="12">
+                    <line x1="7" x2="17" y1="17" y2="7" />
+                    <polyline points="7 7 17 7 17 17" />
+                  </svg>
+                </span>
+              </div>
+              <div className="erp-kpi-main">
                 {metric.loading ? (
-                  <span className="dashboard-amazon-card-loading">
-                    <i aria-hidden="true" />
-                    Loading
-                  </span>
+                  <span className="erp-kpi-loading">Loading...</span>
                 ) : (
-                  metric.value
+                  <strong className="erp-kpi-num">{metric.value}</strong>
                 )}
-              </strong>
-              <small>{metric.detail}</small>
+              </div>
+              <div className="erp-kpi-footer">
+                <span className="erp-kpi-subtext">{metric.detail}</span>
+              </div>
             </a>
           ))}
         </section>
 
-        <section
-          aria-label="Operational notice"
-          className={`dashboard-modern-alert is-${focusNotice.tone}`}
-        >
-          <span className="dashboard-modern-alert-icon" aria-hidden="true">
-            {focusNotice.icon || (focusNotice.tone === "info" ? "i" : "!")}
-          </span>
-          <div className="dashboard-modern-alert-copy">
-            <span>{focusNotice.label || "Priority"}</span>
-            <h2>{focusNotice.title}</h2>
-            {focusNotice.detail && <p>{focusNotice.detail}</p>}
+        {/* --- 3. OPERATIONAL PRIORITY BANNER --- */}
+        <section aria-label="Operational priority actions" className={`erp-priority-banner is-${focusNotice.tone}`}>
+          <div className="erp-priority-badge-box">
+            <span>{focusNotice.tone === "success" ? "OK" : "!"}</span>
           </div>
-          <dl>
-            <div>
-              <dt>Shipping</dt>
-              <dd>{formatNumber(pendingShipping)}</dd>
-            </div>
-            <div>
-              <dt>Low stock</dt>
-              <dd>{formatNumber(lowStock)}</dd>
-            </div>
-            <div>
-              <dt>Bills</dt>
-              <dd>{formatNumber(overdueBillCount || upcomingBillCount)}</dd>
-            </div>
-          </dl>
-          <a href={focusNotice.href}>{focusNotice.action}</a>
+
+          <div className="erp-priority-main-content">
+            <span className="erp-priority-tag">
+              {focusNotice.tone === "success" ? "ALL CLEAR" : "PRIORITY"}
+            </span>
+            <h3>{focusNotice.title}</h3>
+            <p>{focusNotice.detail}</p>
+          </div>
+
+          <div className="erp-priority-stats-group">
+            <div className="erp-priority-stat-divider" />
+            <a className="erp-priority-stat-col" href="/portal/shipping">
+              <span className="erp-priority-stat-col-label">Shipping</span>
+              <strong className="erp-priority-stat-col-val">{formatNumber(pendingShipping)}</strong>
+            </a>
+            <div className="erp-priority-stat-divider" />
+            <a className="erp-priority-stat-col" href="/portal/inventory">
+              <span className="erp-priority-stat-col-label">Low stock</span>
+              <strong className="erp-priority-stat-col-val">{formatNumber(lowStock)}</strong>
+            </a>
+            <div className="erp-priority-stat-divider" />
+            <a className="erp-priority-stat-col" href="/portal/billings">
+              <span className="erp-priority-stat-col-label">Bills</span>
+              <strong className="erp-priority-stat-col-val">{formatNumber(overdueBillCount || upcomingBillCount)}</strong>
+            </a>
+            <div className="erp-priority-stat-divider" />
+          </div>
+
+          <a className="erp-priority-action-btn" href={focusNotice.href}>
+            {focusNotice.action}
+          </a>
         </section>
 
+        {/* --- 4. REAL-TIME LOGISTICS & CARRIER MOVEMENTS --- */}
+        {inTransitShipmentsList.length > 0 && (
+          <section className="erp-logistics-card">
+            <header className="erp-card-header">
+              <div className="erp-card-header-left">
+                <div className="erp-header-badge-row">
+                  <span className="erp-pulse-tag">
+                    <span className="erp-pulse-dot" />
+                    LIVE TRACKING
+                  </span>
+                  <h2>Active Carrier Dispatches</h2>
+                </div>
+                <p>Tracking {inTransitShipmentsList.length} outbound parcel{inTransitShipmentsList.length === 1 ? "" : "s"} moving with carriers or awaiting origin pickup.</p>
+              </div>
+
+              <div className="erp-card-header-right">
+                <a className="erp-link-btn" href="/portal/shipping">
+                  <span>Shipping Workspace</span>
+                  <svg fill="none" height="12" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="12">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                </a>
+              </div>
+            </header>
+
+            <div className="erp-table-responsive">
+              <table className="erp-clean-table">
+                <thead>
+                  <tr>
+                    <th>Order & Customer</th>
+                    <th>Carrier / Agent</th>
+                    <th>Tracking Number</th>
+                    <th>Live Carrier Status</th>
+                    <th>Est. Delivery</th>
+                    <th className="is-right">Direct Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inTransitShipmentsList.map((shipment) => {
+                    const trk = String(shipment.tracking_number || "").trim();
+                    const trackInfo = shipment.tracking_info;
+                    const carrier = trackInfo?.carrier || shipment.courier_name || "FedEx";
+                    const isOutForDelivery = shipment.is_out_for_delivery;
+                    const isWaiting = shipment.tracking_status?.stage === "waiting";
+                    const etaDate = formatCompactDateOnly(trackInfo?.estimated_delivery);
+                    const carrierUrl = trackInfo?.tracking_url || (trk ? `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(trk)}` : "/portal/shipping");
+
+                    const statusClass = isOutForDelivery
+                      ? "is-out"
+                      : isWaiting
+                        ? "is-wait"
+                        : "is-transit";
+
+                    const statusName = isOutForDelivery
+                      ? "Out for Delivery"
+                      : isWaiting
+                        ? "Waiting Pickup"
+                        : "In Transit";
+
+                    return (
+                      <tr className={`erp-logistics-row ${statusClass}`} key={`erp-logistics-${shipment.id}`}>
+                        <td>
+                          <div className="erp-order-cell">
+                            <span className="erp-order-tag">#{shipment.order_no}</span>
+                            <strong className="erp-order-customer">{shipment.customer_name || "Valued Customer"}</strong>
+                          </div>
+                        </td>
+
+                        <td>
+                          <div className="erp-carrier-cell">
+                            <span className="erp-carrier-bold">{carrier}</span>
+                            {shipment.courier_name && shipment.courier_name !== carrier && (
+                              <span className="erp-agent-chip">{shipment.courier_name}</span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td>
+                          {trk ? (
+                            <div className="erp-trk-box">
+                              <code>{trk}</code>
+                              <button
+                                aria-label="Copy tracking number"
+                                className="erp-icon-btn"
+                                onClick={() => navigator.clipboard.writeText(trk)}
+                                title="Copy tracking number"
+                                type="button"
+                              >
+                                <svg fill="none" height="11" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="11">
+                                  <rect height="13" rx="2" ry="2" width="13" x="9" y="9" />
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                </svg>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="erp-muted-text">Pending assignment</span>
+                          )}
+                        </td>
+
+                        <td>
+                          <div className="erp-status-cell">
+                            <span className={`erp-status-pill ${statusClass}`}>
+                              <span className="erp-status-point" />
+                              {statusName}
+                            </span>
+                            <small className="erp-status-text" title={trackInfo?.status_description}>
+                              {trackInfo?.status_description || (isWaiting ? "Label generated, awaiting carrier pickup." : "Package actively moving through hub.")}
+                            </small>
+                          </div>
+                        </td>
+
+                        <td>
+                          {etaDate ? (
+                            <div className="erp-eta-cell">
+                              <strong>{etaDate}</strong>
+                              {trackInfo?.destination && <small>{trackInfo.destination}</small>}
+                            </div>
+                          ) : (
+                            <span className="erp-muted-text">—</span>
+                          )}
+                        </td>
+
+                        <td className="is-right">
+                          {trk ? (
+                            <a
+                              className="erp-action-btn"
+                              href={carrierUrl}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                              title="Open live carrier tracking"
+                            >
+                              <span>Track Live</span>
+                              <svg fill="none" height="11" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24" width="11">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" x2="21" y1="14" y2="3" />
+                              </svg>
+                            </a>
+                          ) : (
+                            <a className="erp-action-btn is-secondary" href="/portal/shipping">
+                              <span>+ Add Trk</span>
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {/* --- 5. PERFORMANCE ANALYTICS (2-Column Balanced Grid) --- */}
         <section className="dashboard-modern-insights">
+          {/* Sales Performance Chart */}
           <article className="dashboard-modern-panel dashboard-modern-sales">
             <header className="dashboard-modern-panel-header">
               <div>
-                <span>Revenue</span>
+                <span className="dashboard-panel-eyebrow">REVENUE</span>
                 <h2>Sales performance</h2>
               </div>
               <div className="dashboard-modern-sales-total">
                 <strong>{formatUsd(sevenDaySales)}</strong>
-                <span>{pluralize(newOrdersLast7Days, "order")} · 7 days</span>
+                <span>{pluralize(newOrdersLast7Days, "ORDER").toUpperCase()} · 7 DAYS</span>
               </div>
             </header>
-            <SevenDaySalesChart data={salesSeries} />
+            <div className="dashboard-chart-container">
+              <SevenDaySalesChart data={salesSeries} />
+            </div>
           </article>
 
+          {/* Top Selling Products */}
           <article className="dashboard-modern-panel dashboard-modern-products">
             <header className="dashboard-modern-panel-header">
               <div>
-                <span>Last 7 days</span>
-                <h2>Top-selling products</h2>
+                <span className="dashboard-panel-eyebrow">TOP PERFORMERS</span>
+                <h2>Top-Selling Products</h2>
               </div>
-              <a href="/portal/products">View products</a>
+              <a className="dashboard-panel-header-link" href="/portal/products">View products &rarr;</a>
             </header>
             {topSellingProducts.length === 0 ? (
               <div className="dashboard-modern-empty">No product sales yet.</div>
@@ -1963,6 +2322,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
                   const imageUrl = getStaticUrl(product.image_url);
                   return (
                     <a
+                      className="dashboard-product-row-item"
                       href="/portal/products"
                       key={product.product_id || product.article_no}
                     >
@@ -1995,7 +2355,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
                         </small>
                       </span>
                       <span className="dashboard-modern-product-stats">
-                        <strong>{formatNumber(product.units_sold)}</strong>
+                        <strong>{formatNumber(product.units_sold)} pcs</strong>
                         <small>{formatUsd(product.sales_amount)}</small>
                       </span>
                     </a>
@@ -2006,26 +2366,28 @@ function OperationalDashboard({ userRole, workerId, userName }) {
           </article>
         </section>
 
+        {/* --- 6. ACTION QUEUE & RECENT ACTIVITY (2-Column Grid) --- */}
         <section className="dashboard-modern-bottom">
+          {/* Action Items */}
           <article className="dashboard-modern-panel">
             <header className="dashboard-modern-panel-header">
               <div>
-                <span>Work queue</span>
-                <h2>Needs action</h2>
+                <span className="dashboard-panel-eyebrow">WORK QUEUE</span>
+                <h2>Pending Action Items</h2>
               </div>
-              <strong>{attentionItems.length}</strong>
+              <span className="dashboard-badge-count">{attentionItems.length}</span>
             </header>
             {attentionItems.length === 0 ? (
               <div className="dashboard-modern-empty">No urgent work waiting.</div>
             ) : (
               <div className="dashboard-modern-action-list">
                 {attentionItems.slice(0, 5).map((item) => (
-                  <a href={item.href} key={item.key}>
-                    <span>
+                  <a className="dashboard-action-row" href={item.href} key={item.key}>
+                    <div className="dashboard-action-info">
                       <strong>{item.title}</strong>
                       <small>{item.detail}</small>
-                    </span>
-                    <em className={item.attention ? "is-hot" : ""}>
+                    </div>
+                    <em className={`dashboard-action-tag ${item.attention ? "is-hot" : ""}`}>
                       {item.meta}
                     </em>
                   </a>
@@ -2034,13 +2396,14 @@ function OperationalDashboard({ userRole, workerId, userName }) {
             )}
           </article>
 
+          {/* Recent Orders */}
           <article className="dashboard-modern-panel">
             <header className="dashboard-modern-panel-header">
               <div>
-                <span>Activity</span>
-                <h2>Latest orders</h2>
+                <span className="dashboard-panel-eyebrow">RECENT TRANSACTIONS</span>
+                <h2>Latest Orders</h2>
               </div>
-              <a href="/portal/orders">View all</a>
+              <a className="dashboard-panel-header-link" href="/portal/orders">View all &rarr;</a>
             </header>
             {recentOrders.length === 0 ? (
               <div className="dashboard-modern-empty">
@@ -2049,18 +2412,20 @@ function OperationalDashboard({ userRole, workerId, userName }) {
             ) : (
               <div className="dashboard-modern-order-list">
                 {recentOrders.slice(0, 5).map((order) => (
-                  <a href="/portal/orders" key={order.order_id}>
-                    <span>
+                  <a className="dashboard-order-row-item" href="/portal/orders" key={order.order_id}>
+                    <div className="dashboard-order-info">
                       <strong>{order.order_no}</strong>
                       <small>
-                        {order.customer_name || "Customer"} ·{" "}
-                        {order.platform || "ERP"}
+                        {order.customer_name || "Customer"} · {" "}
+                        <span className="dashboard-platform-pill">{order.platform || "ERP"}</span>
                       </small>
-                    </span>
-                    <span>
+                    </div>
+                    <div className="dashboard-order-amount">
                       <strong>{formatUsd(order.total_amount_usd)}</strong>
-                      <small>{order.status || "New"}</small>
-                    </span>
+                      <small className={`dashboard-status-label is-${String(order.status || "").toLowerCase().replace(/\s+/g, "-")}`}>
+                        {order.status || "New"}
+                      </small>
+                    </div>
                   </a>
                 ))}
               </div>
@@ -2219,3 +2584,5 @@ function Dashboard(props) {
 }
 
 export default Dashboard;
+
+

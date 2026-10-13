@@ -57,6 +57,11 @@ class ServiceTaker(Base):
         back_populates="service_taker",
         cascade="all, delete-orphan",
     )
+    manufacturing_orders = relationship(
+        "ServiceTakerManufacturingOrder",
+        back_populates="service_taker",
+        cascade="all, delete-orphan",
+    )
 
 
 class ServiceTakerProduct(Base):
@@ -206,6 +211,20 @@ class ServiceTakerOrder(Base):
     request_no = Column(String, nullable=False, unique=True, index=True)
     client_reference = Column(String, nullable=True, index=True)
     status = Column(String, nullable=False, default="Submitted", index=True)
+    shipping_request_type = Column(String, nullable=False, default="stock")
+    manufacturing_order_id = Column(
+        Integer,
+        ForeignKey("service_taker_manufacturing_orders.id"),
+        nullable=True,
+        index=True,
+    )
+    product_description = Column(Text, nullable=True)
+    package_quantity = Column(Integer, nullable=False, default=1)
+    package_weight_kg = Column(Float, nullable=True)
+    package_length_cm = Column(Float, nullable=True)
+    package_width_cm = Column(Float, nullable=True)
+    package_height_cm = Column(Float, nullable=True)
+    preferred_courier = Column(String, nullable=True)
     recipient_name = Column(String, nullable=False)
     recipient_company = Column(String, nullable=True)
     recipient_phone = Column(String, nullable=True)
@@ -239,6 +258,7 @@ class ServiceTakerOrder(Base):
     )
 
     service_taker = relationship("ServiceTaker", back_populates="orders")
+    manufacturing_order = relationship("ServiceTakerManufacturingOrder")
     items = relationship(
         "ServiceTakerOrderItem",
         back_populates="order",
@@ -276,6 +296,162 @@ class ServiceTakerOrderItem(Base):
     order = relationship("ServiceTakerOrder", back_populates="items")
     product = relationship("ServiceTakerProduct")
 
+class ServiceTakerManufacturingOrder(Base):
+    __tablename__ = "service_taker_manufacturing_orders"
+    __table_args__ = (
+        Index(
+            "ix_service_taker_manufacturing_status",
+            "service_taker_id",
+            "status",
+        ),
+        Index(
+            "ix_service_taker_manufacturing_due",
+            "service_taker_id",
+            "estimated_ready_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    service_taker_id = Column(
+        Integer,
+        ForeignKey("service_takers.id"),
+        nullable=False,
+        index=True,
+    )
+    product_id = Column(
+        Integer,
+        ForeignKey("service_taker_products.id"),
+        nullable=True,
+        index=True,
+    )
+    request_no = Column(String, nullable=False, unique=True, index=True)
+    client_reference = Column(String, nullable=True, index=True)
+    status = Column(String, nullable=False, default="Quote requested", index=True)
+    product_name = Column(String, nullable=False)
+    image_url = Column(String, nullable=True)
+    quantity = Column(Integer, nullable=False, default=1)
+    steel_type = Column(String, nullable=True)
+    tang_type = Column(String, nullable=True)
+    blade_thickness_mm = Column(Float, nullable=True)
+    blade_length_in = Column(Float, nullable=True)
+    overall_length_in = Column(Float, nullable=True)
+    handle_material = Column(String, nullable=True)
+    sheath_type = Column(String, nullable=True)
+    finish = Column(String, nullable=True)
+    hardness = Column(String, nullable=True)
+    edge_type = Column(String, nullable=True)
+    packaging = Column(String, nullable=True)
+    target_unit_price = Column(Float, nullable=True)
+    quoted_unit_price = Column(Float, nullable=False, default=0)
+    tooling_cost = Column(Float, nullable=False, default=0)
+    quoted_total = Column(Float, nullable=False, default=0)
+    deposit_required = Column(Float, nullable=False, default=0)
+    requested_ready_at = Column(DateTime, nullable=True)
+    estimated_ready_at = Column(DateTime, nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    production_started_at = Column(DateTime, nullable=True)
+    ready_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    admin_notes = Column(Text, nullable=True)
+    last_update = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    service_taker = relationship("ServiceTaker", back_populates="manufacturing_orders")
+    product = relationship("ServiceTakerProduct")
+    payments = relationship(
+        "ServiceTakerManufacturingPayment",
+        back_populates="manufacturing_order",
+        cascade="all, delete-orphan",
+        order_by="ServiceTakerManufacturingPayment.paid_at.desc()",
+    )
+    updates = relationship(
+        "ServiceTakerManufacturingUpdate",
+        back_populates="manufacturing_order",
+        cascade="all, delete-orphan",
+        order_by="ServiceTakerManufacturingUpdate.created_at.desc()",
+    )
+
+
+class ServiceTakerManufacturingPayment(Base):
+    __tablename__ = "service_taker_manufacturing_payments"
+    __table_args__ = (
+        Index(
+            "ix_service_taker_manufacturing_payment_order",
+            "manufacturing_order_id",
+            "paid_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    service_taker_id = Column(
+        Integer,
+        ForeignKey("service_takers.id"),
+        nullable=False,
+        index=True,
+    )
+    manufacturing_order_id = Column(
+        Integer,
+        ForeignKey("service_taker_manufacturing_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    amount = Column(Float, nullable=False, default=0)
+    payment_type = Column(String, nullable=False, default="Deposit")
+    status = Column(String, nullable=False, default="Confirmed", index=True)
+    method = Column(String, nullable=True)
+    reference = Column(String, nullable=True, index=True)
+    note = Column(Text, nullable=True)
+    proof_url = Column(Text, nullable=True)
+    proof_name = Column(String, nullable=True)
+    proof_uploaded_at = Column(DateTime, nullable=True)
+    paid_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    confirmed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    manufacturing_order = relationship("ServiceTakerManufacturingOrder", back_populates="payments")
+
+
+class ServiceTakerManufacturingUpdate(Base):
+    __tablename__ = "service_taker_manufacturing_updates"
+    __table_args__ = (
+        Index(
+            "ix_service_taker_manufacturing_update_order",
+            "manufacturing_order_id",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    service_taker_id = Column(
+        Integer,
+        ForeignKey("service_takers.id"),
+        nullable=False,
+        index=True,
+    )
+    manufacturing_order_id = Column(
+        Integer,
+        ForeignKey("service_taker_manufacturing_orders.id"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(String, nullable=False, default="Update")
+    message = Column(Text, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    manufacturing_order = relationship("ServiceTakerManufacturingOrder", back_populates="updates")
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
 
 class ServiceTakerInventoryTransaction(Base):
     __tablename__ = "service_taker_inventory_transactions"

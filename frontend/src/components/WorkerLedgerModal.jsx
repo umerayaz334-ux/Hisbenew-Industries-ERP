@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../api/api";
+import { useConfirmDialog } from "./DialogProvider";
 import { formatUtcLocal } from "../utils/dateUtils";
 import "./WorkerLedgerModal.css";
 
@@ -36,6 +37,8 @@ export function buildWorkerLedgerEntries(workerId, tasks, payments) {
         rawDate,
         dateFormatted: rawDate ? formatUtcLocal(rawDate) : "Completed job",
         type: "job",
+        taskId: task.original_id || task.id,
+        canDelete: task.task_kind !== "order" && String(task.source_type || "").toLowerCase() === "manual",
         typeLabel: "Job Completed",
         title: task.step_name || "Production step",
         subtitle: `${task.source_type === "Order" ? "Order: " : ""}${
@@ -109,10 +112,14 @@ export default function WorkerLedgerModal({
   onClose,
   onRecordPayout,
   onSelectWorker,
+  onTasksChange,
 }) {
+  const confirmDialog = useConfirmDialog();
   const [fetchedTasks, setFetchedTasks] = useState([]);
   const [fetchedPayments, setFetchedPayments] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState(null);
+  const [actionError, setActionError] = useState("");
 
   const [filterType, setFilterType] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -186,6 +193,43 @@ export default function WorkerLedgerModal({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDeleteJob = async (entry) => {
+    const confirmed = await confirmDialog({
+      title: "Delete worker job?",
+      message: `Delete "${entry.title}" from this worker's account statement?`,
+      detail: "This removes the job and its earnings from the account balance.",
+      tone: "danger",
+      confirmText: "Delete job",
+    });
+    if (!confirmed) return;
+
+    setDeletingTaskId(entry.taskId);
+    setActionError("");
+    try {
+      await api.delete(`/production/manual-tasks/${entry.taskId}`);
+      if (onTasksChange) {
+        await onTasksChange();
+      } else {
+        setFetchedTasks((current) =>
+          current.filter(
+            (task) =>
+              !(
+                String(task.id) === String(entry.taskId) &&
+                String(task.source_type || "").toLowerCase() === "manual"
+              )
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Delete worker account job error:", error);
+      setActionError(
+        error.response?.data?.detail || "The worker job could not be deleted."
+      );
+    } finally {
+      setDeletingTaskId(null);
+    }
   };
 
   return (
@@ -291,6 +335,7 @@ export default function WorkerLedgerModal({
           <div className="wlm-filter-inputs">
             <input
               className="wlm-search-input"
+              aria-label="Search statement"
               placeholder="Search statement..."
               type="text"
               value={searchQuery}
@@ -298,12 +343,14 @@ export default function WorkerLedgerModal({
             />
             <input
               className="wlm-date-input"
+              aria-label="Filter statement from date"
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
             />
             <input
               className="wlm-date-input"
+              aria-label="Filter statement to date"
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
@@ -313,6 +360,11 @@ export default function WorkerLedgerModal({
 
         {/* Ledger Statement Table */}
         <div className="wlm-table-wrap">
+          {actionError && (
+            <div className="wlm-action-error" role="alert">
+              {actionError}
+            </div>
+          )}
           {loadingData ? (
             <div style={{ textAlign: "center", padding: "3rem" }}>Loading statement transactions...</div>
           ) : filteredEntries.length === 0 ? (
@@ -330,6 +382,7 @@ export default function WorkerLedgerModal({
                   <th style={{ textAlign: "right" }}>Earned (+)</th>
                   <th style={{ textAlign: "right" }}>Paid (-)</th>
                   <th style={{ textAlign: "right" }}>Running Balance</th>
+                  <th className="wlm-actions-heading">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -376,6 +429,25 @@ export default function WorkerLedgerModal({
                             : "(Clear)"}
                         </small>
                       </strong>
+                    </td>
+                    <td className="wlm-actions-cell">
+                      {entry.canDelete && (
+                        <button
+                          aria-label={`Delete ${entry.title} job`}
+                          className="wlm-delete-job-btn no-print"
+                          disabled={deletingTaskId === entry.taskId}
+                          onClick={() => handleDeleteJob(entry)}
+                          title="Delete job"
+                          type="button"
+                        >
+                          <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="m19 6-1 14H6L5 6" />
+                            <path d="M10 11v5M14 11v5" />
+                          </svg>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

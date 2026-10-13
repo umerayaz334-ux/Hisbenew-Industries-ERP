@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, event
 from sqlalchemy.orm import sessionmaker, declarative_base
 import json
 
@@ -30,11 +30,37 @@ if not is_sqlite_database:
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_options)
 
+if is_sqlite_database:
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode = WAL")
+            cursor.execute("PRAGMA synchronous = NORMAL")
+            cursor.execute("PRAGMA busy_timeout = 30000")
+            cursor.execute("PRAGMA cache_size = -64000")
+            cursor.execute("PRAGMA temp_store = MEMORY")
+            cursor.execute("PRAGMA mmap_size = 268435456")
+            cursor.execute("PRAGMA foreign_keys = ON")
+        except Exception:
+            pass
+        finally:
+            cursor.close()
+
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
     bind=engine
 )
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 
 Base = declarative_base()
 
@@ -46,6 +72,10 @@ TENANT_SCOPED_TABLES = (
     "user_role_requests",
     "public_access_requests",
     "internal_messages",
+    "internal_message_contact_requests",
+    "website_visitor_sessions",
+    "website_visitor_activities",
+    "website_visitor_messages",
     "internal_calls",
     "internal_call_signals",
     "order_import_batches",
@@ -76,6 +106,12 @@ TENANT_SCOPED_TABLES = (
     "regular_bill_payments",
     "accounting_accounts",
     "accounting_transactions",
+    "accounting_document_payments",
+    "accounting_bank_transactions",
+    "accounting_bank_rules",
+    "accounting_recurring_templates",
+    "accounting_document_lines",
+    "accounting_documents",
     "production_batches",
     "production_tasks",
     "shared_data",
@@ -89,6 +125,9 @@ TENANT_SCOPED_TABLES = (
     "service_taker_orders",
     "service_taker_order_items",
     "service_taker_inventory_transactions",
+    "service_taker_manufacturing_orders",
+    "service_taker_manufacturing_payments",
+    "service_taker_manufacturing_updates",
     "amazon_accounts",
     "print_agents",
     "print_jobs",
@@ -211,6 +250,669 @@ def ensure_amazon_account_tenant_unique_index(connection) -> None:
 
 def sqlite_table_columns(connection, table_name: str) -> list[str]:
     return [row[1] for row in connection.execute(text(f"PRAGMA table_info({table_name})"))]
+
+
+def ensure_accounting_schema_sqlite(connection, default_tenant_id: int) -> None:
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL UNIQUE,
+            base_currency VARCHAR DEFAULT 'PKR',
+            reporting_currency VARCHAR DEFAULT 'PKR',
+            fiscal_year_start_month INTEGER DEFAULT 1,
+            fiscal_year_start_day INTEGER DEFAULT 1,
+            lock_date DATETIME,
+            allow_multi_currency BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_fiscal_years (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            name VARCHAR NOT NULL,
+            start_date DATETIME NOT NULL,
+            end_date DATETIME NOT NULL,
+            status VARCHAR DEFAULT 'Open',
+            closed_at DATETIME,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, name),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_period_locks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            fiscal_year_id INTEGER,
+            period_start DATETIME NOT NULL,
+            period_end DATETIME NOT NULL,
+            locked BOOLEAN DEFAULT 1,
+            locked_at DATETIME,
+            reason TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, period_start, period_end),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(fiscal_year_id) REFERENCES accounting_fiscal_years(id)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_currency_rates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            currency VARCHAR NOT NULL,
+            rate_to_base FLOAT DEFAULT 1,
+            effective_date DATETIME NOT NULL,
+            source VARCHAR DEFAULT 'Manual',
+            is_active BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, currency, effective_date),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_journal_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            entry_no VARCHAR NOT NULL,
+            entry_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            memo TEXT,
+            source_type VARCHAR,
+            source_id INTEGER,
+            status VARCHAR DEFAULT 'Posted',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, entry_no),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_journal_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            journal_entry_id INTEGER NOT NULL,
+            account_id INTEGER NOT NULL,
+            description TEXT,
+            debit FLOAT DEFAULT 0,
+            credit FLOAT DEFAULT 0,
+            currency VARCHAR DEFAULT 'PKR',
+            exchange_rate FLOAT DEFAULT 1,
+            amount_pkr FLOAT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(journal_entry_id) REFERENCES accounting_journal_entries(id),
+            FOREIGN KEY(account_id) REFERENCES accounting_accounts(id)
+        )
+    """))
+
+
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            document_type VARCHAR NOT NULL,
+            document_no VARCHAR NOT NULL,
+            contact_name VARCHAR NOT NULL,
+            contact_email VARCHAR,
+            issue_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            due_date DATETIME,
+            status VARCHAR DEFAULT 'Open',
+            currency VARCHAR DEFAULT 'PKR',
+            exchange_rate FLOAT DEFAULT 1,
+            subtotal FLOAT DEFAULT 0,
+            tax_total FLOAT DEFAULT 0,
+            total FLOAT DEFAULT 0,
+            notes TEXT,
+            source_type VARCHAR,
+            source_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, document_type, document_no),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_document_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            document_id INTEGER NOT NULL,
+            account_id INTEGER NOT NULL,
+            description TEXT,
+            quantity FLOAT DEFAULT 1,
+            unit_price FLOAT DEFAULT 0,
+            amount FLOAT DEFAULT 0,
+            tax_amount FLOAT DEFAULT 0,
+            total FLOAT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(document_id) REFERENCES accounting_documents(id),
+            FOREIGN KEY(account_id) REFERENCES accounting_accounts(id)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_document_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            document_id INTEGER NOT NULL,
+            account_id INTEGER NOT NULL,
+            amount FLOAT DEFAULT 0,
+            currency VARCHAR DEFAULT 'PKR',
+            exchange_rate FLOAT DEFAULT 1,
+            amount_pkr FLOAT DEFAULT 0,
+            payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            reference VARCHAR,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(document_id) REFERENCES accounting_documents(id),
+            FOREIGN KEY(account_id) REFERENCES accounting_accounts(id)
+        )
+    """))
+
+
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_bank_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            account_id INTEGER NOT NULL,
+            transaction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            description TEXT,
+            reference VARCHAR,
+            counterparty VARCHAR,
+            money_in FLOAT DEFAULT 0,
+            money_out FLOAT DEFAULT 0,
+            currency VARCHAR DEFAULT 'PKR',
+            exchange_rate FLOAT DEFAULT 1,
+            amount_pkr FLOAT DEFAULT 0,
+            status VARCHAR DEFAULT 'Unmatched',
+            matched_source_type VARCHAR,
+            matched_source_id INTEGER,
+            matched_at DATETIME,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(account_id) REFERENCES accounting_accounts(id)
+        )
+    """))
+
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_recurring_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            name VARCHAR NOT NULL,
+            template_type VARCHAR DEFAULT 'Money Entry',
+            status VARCHAR DEFAULT 'Active',
+            frequency VARCHAR DEFAULT 'Monthly',
+            interval_count INTEGER DEFAULT 1,
+            next_run_date DATETIME NOT NULL,
+            end_date DATETIME,
+            last_run_at DATETIME,
+            occurrences_generated INTEGER DEFAULT 0,
+            max_occurrences INTEGER,
+            account_id INTEGER,
+            line_account_id INTEGER,
+            direction VARCHAR,
+            category VARCHAR DEFAULT 'Other',
+            amount FLOAT DEFAULT 0,
+            tax_amount FLOAT DEFAULT 0,
+            currency VARCHAR DEFAULT 'PKR',
+            exchange_rate FLOAT DEFAULT 1,
+            contact_name VARCHAR,
+            contact_email VARCHAR,
+            document_status VARCHAR DEFAULT 'Open',
+            line_description TEXT,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(account_id) REFERENCES accounting_accounts(id),
+            FOREIGN KEY(line_account_id) REFERENCES accounting_accounts(id)
+        )
+    """))
+
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_bank_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            name VARCHAR NOT NULL,
+            account_id INTEGER,
+            match_field VARCHAR DEFAULT 'Any',
+            match_type VARCHAR DEFAULT 'Contains',
+            match_value VARCHAR NOT NULL,
+            action VARCHAR DEFAULT 'Create Money Entry',
+            direction VARCHAR,
+            category VARCHAR DEFAULT 'Other',
+            counterparty VARCHAR,
+            platform VARCHAR,
+            description_template TEXT,
+            priority INTEGER DEFAULT 100,
+            is_active BOOLEAN DEFAULT 1,
+            auto_match BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(account_id) REFERENCES accounting_accounts(id)
+        )
+    """))
+
+    for statement in (
+        "CREATE INDEX IF NOT EXISTS ix_accounting_settings_tenant_id ON accounting_settings(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_fiscal_years_tenant_id ON accounting_fiscal_years(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_period_locks_tenant_id ON accounting_period_locks(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_currency_rates_tenant_id ON accounting_currency_rates(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_journal_entries_tenant_id ON accounting_journal_entries(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_journal_entries_source ON accounting_journal_entries(tenant_id, source_type, source_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_journal_lines_tenant_id ON accounting_journal_lines(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_journal_lines_entry_id ON accounting_journal_lines(journal_entry_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_journal_lines_account_id ON accounting_journal_lines(account_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_documents_tenant_id ON accounting_documents(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_documents_type_status ON accounting_documents(tenant_id, document_type, status)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_documents_due_date ON accounting_documents(tenant_id, due_date)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_document_lines_tenant_id ON accounting_document_lines(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_document_lines_document_id ON accounting_document_lines(document_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_document_lines_account_id ON accounting_document_lines(account_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_document_payments_tenant_id ON accounting_document_payments(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_document_payments_document_id ON accounting_document_payments(document_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_document_payments_account_id ON accounting_document_payments(account_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_bank_transactions_tenant_id ON accounting_bank_transactions(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_bank_transactions_account_id ON accounting_bank_transactions(account_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_bank_transactions_status ON accounting_bank_transactions(tenant_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_bank_transactions_match ON accounting_bank_transactions(tenant_id, matched_source_type, matched_source_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_bank_rules_tenant_id ON accounting_bank_rules(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_bank_rules_account_id ON accounting_bank_rules(account_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_bank_rules_active ON accounting_bank_rules(tenant_id, is_active, priority)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_recurring_templates_tenant_id ON accounting_recurring_templates(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_recurring_templates_due ON accounting_recurring_templates(tenant_id, status, next_run_date)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_recurring_templates_account_id ON accounting_recurring_templates(account_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_transactions_tenant_id ON accounting_transactions(tenant_id)",
+        "CREATE INDEX IF NOT EXISTS ix_accounting_accounts_tenant_id ON accounting_accounts(tenant_id)",
+    ):
+        try:
+            connection.execute(text(statement))
+        except Exception:
+            pass
+
+    connection.execute(
+        text("""
+            INSERT OR IGNORE INTO accounting_settings (
+                tenant_id,
+                base_currency,
+                reporting_currency,
+                fiscal_year_start_month,
+                fiscal_year_start_day,
+                allow_multi_currency
+            )
+            SELECT id, 'PKR', 'PKR', 1, 1, 1 FROM tenants
+        """)
+    )
+
+    try:
+        account_columns = sqlite_table_columns(connection, "accounting_accounts")
+    except Exception:
+        account_columns = []
+    if account_columns:
+        if "tenant_id" not in account_columns:
+            connection.execute(text("ALTER TABLE accounting_accounts ADD COLUMN tenant_id INTEGER"))
+        connection.execute(
+            text("UPDATE accounting_accounts SET tenant_id = :tenant_id WHERE tenant_id IS NULL"),
+            {"tenant_id": default_tenant_id},
+        )
+        unique_name_indexes = []
+        for row in connection.execute(text("PRAGMA index_list(accounting_accounts)")):
+            index_name = row[1]
+            is_unique = bool(row[2])
+            if not is_unique:
+                continue
+            index_columns = [info[2] for info in connection.execute(text(f"PRAGMA index_info('{index_name}')"))]
+            if index_columns == ["name"]:
+                unique_name_indexes.append(index_name)
+        if unique_name_indexes:
+            connection.execute(text("PRAGMA foreign_keys=OFF"))
+            connection.execute(text("DROP TABLE IF EXISTS accounting_accounts_new"))
+            connection.execute(text("""
+                CREATE TABLE accounting_accounts_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id INTEGER,
+                    name VARCHAR NOT NULL,
+                    account_type VARCHAR DEFAULT 'Bank',
+                    platform VARCHAR,
+                    currency VARCHAR DEFAULT 'PKR',
+                    opening_balance FLOAT DEFAULT 0,
+                    notes TEXT,
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(tenant_id, name),
+                    FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+                )
+            """))
+            connection.execute(text("""
+                INSERT INTO accounting_accounts_new (
+                    id,
+                    tenant_id,
+                    name,
+                    account_type,
+                    platform,
+                    currency,
+                    opening_balance,
+                    notes,
+                    is_active,
+                    created_at,
+                    updated_at
+                )
+                SELECT
+                    id,
+                    COALESCE(tenant_id, :tenant_id),
+                    name,
+                    account_type,
+                    platform,
+                    currency,
+                    opening_balance,
+                    notes,
+                    is_active,
+                    created_at,
+                    updated_at
+                FROM accounting_accounts
+            """), {"tenant_id": default_tenant_id})
+            connection.execute(text("DROP TABLE accounting_accounts"))
+            connection.execute(text("ALTER TABLE accounting_accounts_new RENAME TO accounting_accounts"))
+            connection.execute(text("PRAGMA foreign_keys=ON"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_accounts_tenant_id ON accounting_accounts(tenant_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_accounts_name ON accounting_accounts(name)"))
+        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_accounting_account_tenant_name ON accounting_accounts(tenant_id, name)"))
+
+    try:
+        transaction_columns = sqlite_table_columns(connection, "accounting_transactions")
+    except Exception:
+        transaction_columns = []
+    if transaction_columns:
+        if "tenant_id" not in transaction_columns:
+            connection.execute(text("ALTER TABLE accounting_transactions ADD COLUMN tenant_id INTEGER"))
+        connection.execute(
+            text("""
+                UPDATE accounting_transactions
+                SET tenant_id = COALESCE(
+                    tenant_id,
+                    (SELECT accounting_accounts.tenant_id FROM accounting_accounts WHERE accounting_accounts.id = accounting_transactions.account_id),
+                    :tenant_id
+                )
+                WHERE tenant_id IS NULL
+            """),
+            {"tenant_id": default_tenant_id},
+        )
+
+
+def ensure_accounting_schema_postgres(connection, default_tenant_id: int) -> None:
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_settings (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id) UNIQUE,
+            base_currency VARCHAR DEFAULT 'PKR',
+            reporting_currency VARCHAR DEFAULT 'PKR',
+            fiscal_year_start_month INTEGER DEFAULT 1,
+            fiscal_year_start_day INTEGER DEFAULT 1,
+            lock_date TIMESTAMP,
+            allow_multi_currency BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_fiscal_years (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            name VARCHAR NOT NULL,
+            start_date TIMESTAMP NOT NULL,
+            end_date TIMESTAMP NOT NULL,
+            status VARCHAR DEFAULT 'Open',
+            closed_at TIMESTAMP,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, name)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_period_locks (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            fiscal_year_id INTEGER REFERENCES accounting_fiscal_years(id),
+            period_start TIMESTAMP NOT NULL,
+            period_end TIMESTAMP NOT NULL,
+            locked BOOLEAN DEFAULT TRUE,
+            locked_at TIMESTAMP,
+            reason TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, period_start, period_end)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_currency_rates (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            currency VARCHAR NOT NULL,
+            rate_to_base FLOAT DEFAULT 1,
+            effective_date TIMESTAMP NOT NULL,
+            source VARCHAR DEFAULT 'Manual',
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, currency, effective_date)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_journal_entries (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            entry_no VARCHAR NOT NULL,
+            entry_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            memo TEXT,
+            source_type VARCHAR,
+            source_id INTEGER,
+            status VARCHAR DEFAULT 'Posted',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, entry_no)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_journal_lines (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            journal_entry_id INTEGER NOT NULL REFERENCES accounting_journal_entries(id),
+            account_id INTEGER NOT NULL REFERENCES accounting_accounts(id),
+            description TEXT,
+            debit FLOAT DEFAULT 0,
+            credit FLOAT DEFAULT 0,
+            currency VARCHAR DEFAULT 'PKR',
+            exchange_rate FLOAT DEFAULT 1,
+            amount_pkr FLOAT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_documents (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            document_type VARCHAR NOT NULL,
+            document_no VARCHAR NOT NULL,
+            contact_name VARCHAR NOT NULL,
+            contact_email VARCHAR,
+            issue_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            due_date TIMESTAMP,
+            status VARCHAR DEFAULT 'Open',
+            currency VARCHAR DEFAULT 'PKR',
+            exchange_rate FLOAT DEFAULT 1,
+            subtotal FLOAT DEFAULT 0,
+            tax_total FLOAT DEFAULT 0,
+            total FLOAT DEFAULT 0,
+            notes TEXT,
+            source_type VARCHAR,
+            source_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tenant_id, document_type, document_no)
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_document_lines (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            document_id INTEGER NOT NULL REFERENCES accounting_documents(id),
+            account_id INTEGER NOT NULL REFERENCES accounting_accounts(id),
+            description TEXT,
+            quantity FLOAT DEFAULT 1,
+            unit_price FLOAT DEFAULT 0,
+            amount FLOAT DEFAULT 0,
+            tax_amount FLOAT DEFAULT 0,
+            total FLOAT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_document_payments (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            document_id INTEGER NOT NULL REFERENCES accounting_documents(id),
+            account_id INTEGER NOT NULL REFERENCES accounting_accounts(id),
+            amount FLOAT DEFAULT 0,
+            currency VARCHAR DEFAULT 'PKR',
+            exchange_rate FLOAT DEFAULT 1,
+            amount_pkr FLOAT DEFAULT 0,
+            payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            reference VARCHAR,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+
+
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_bank_transactions (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            account_id INTEGER NOT NULL REFERENCES accounting_accounts(id),
+            transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            description TEXT,
+            reference VARCHAR,
+            counterparty VARCHAR,
+            money_in FLOAT DEFAULT 0,
+            money_out FLOAT DEFAULT 0,
+            currency VARCHAR DEFAULT 'PKR',
+            exchange_rate FLOAT DEFAULT 1,
+            amount_pkr FLOAT DEFAULT 0,
+            status VARCHAR DEFAULT 'Unmatched',
+            matched_source_type VARCHAR,
+            matched_source_id INTEGER,
+            matched_at TIMESTAMP,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_recurring_templates (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            name VARCHAR NOT NULL,
+            template_type VARCHAR DEFAULT 'Money Entry',
+            status VARCHAR DEFAULT 'Active',
+            frequency VARCHAR DEFAULT 'Monthly',
+            interval_count INTEGER DEFAULT 1,
+            next_run_date TIMESTAMP NOT NULL,
+            end_date TIMESTAMP,
+            last_run_at TIMESTAMP,
+            occurrences_generated INTEGER DEFAULT 0,
+            max_occurrences INTEGER,
+            account_id INTEGER REFERENCES accounting_accounts(id),
+            line_account_id INTEGER REFERENCES accounting_accounts(id),
+            direction VARCHAR,
+            category VARCHAR DEFAULT 'Other',
+            amount FLOAT DEFAULT 0,
+            tax_amount FLOAT DEFAULT 0,
+            currency VARCHAR DEFAULT 'PKR',
+            exchange_rate FLOAT DEFAULT 1,
+            contact_name VARCHAR,
+            contact_email VARCHAR,
+            document_status VARCHAR DEFAULT 'Open',
+            line_description TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+
+    connection.execute(text("""
+        CREATE TABLE IF NOT EXISTS accounting_bank_rules (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id),
+            name VARCHAR NOT NULL,
+            account_id INTEGER REFERENCES accounting_accounts(id),
+            match_field VARCHAR DEFAULT 'Any',
+            match_type VARCHAR DEFAULT 'Contains',
+            match_value VARCHAR NOT NULL,
+            action VARCHAR DEFAULT 'Create Money Entry',
+            direction VARCHAR,
+            category VARCHAR DEFAULT 'Other',
+            counterparty VARCHAR,
+            platform VARCHAR,
+            description_template TEXT,
+            priority INTEGER DEFAULT 100,
+            is_active BOOLEAN DEFAULT TRUE,
+            auto_match BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+
+    connection.execute(text("ALTER TABLE accounting_accounts DROP CONSTRAINT IF EXISTS accounting_accounts_name_key"))
+    connection.execute(text("DROP INDEX IF EXISTS uq_accounting_accounts_name"))
+    connection.execute(text("DROP INDEX IF EXISTS ix_accounting_accounts_name"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_accounts_name ON accounting_accounts(name)"))
+    connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_accounting_account_tenant_name ON accounting_accounts(tenant_id, name)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_settings_tenant_id ON accounting_settings(tenant_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_fiscal_years_tenant_id ON accounting_fiscal_years(tenant_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_period_locks_tenant_id ON accounting_period_locks(tenant_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_currency_rates_tenant_id ON accounting_currency_rates(tenant_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_journal_entries_tenant_id ON accounting_journal_entries(tenant_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_journal_entries_source ON accounting_journal_entries(tenant_id, source_type, source_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_journal_lines_tenant_id ON accounting_journal_lines(tenant_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_journal_lines_entry_id ON accounting_journal_lines(journal_entry_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_journal_lines_account_id ON accounting_journal_lines(account_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_bank_rules_tenant_id ON accounting_bank_rules(tenant_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_bank_rules_account_id ON accounting_bank_rules(account_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_bank_rules_active ON accounting_bank_rules(tenant_id, is_active, priority)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_recurring_templates_tenant_id ON accounting_recurring_templates(tenant_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_recurring_templates_due ON accounting_recurring_templates(tenant_id, status, next_run_date)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_recurring_templates_account_id ON accounting_recurring_templates(account_id)"))
+    connection.execute(text("""
+        INSERT INTO accounting_settings (
+            tenant_id,
+            base_currency,
+            reporting_currency,
+            fiscal_year_start_month,
+            fiscal_year_start_day,
+            allow_multi_currency
+        )
+        SELECT id, 'PKR', 'PKR', 1, 1, TRUE FROM tenants
+        ON CONFLICT (tenant_id) DO NOTHING
+    """))
 
 
 def ensure_tenant_schema_sqlite(connection) -> int:
@@ -396,6 +1098,160 @@ def ensure_tenant_schema_postgres(connection) -> int:
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_custom_pages_tenant_id ON custom_pages(tenant_id)"))
     return int(default_tenant_id)
 
+def ensure_website_visitor_chat_schema(connection) -> None:
+    """Keep public website visitor tracking/chat tables current."""
+    if connection.dialect.name == "sqlite":
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS website_visitor_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER,
+                session_id VARCHAR NOT NULL,
+                visitor_name VARCHAR,
+                visitor_contact VARCHAR,
+                ip_address VARCHAR,
+                country VARCHAR,
+                city VARCHAR,
+                first_page_path VARCHAR,
+                page_path VARCHAR,
+                user_agent TEXT,
+                cart_item_count INTEGER DEFAULT 0,
+                page_view_count INTEGER DEFAULT 0,
+                add_to_cart_count INTEGER DEFAULT 0,
+                add_to_cart_units INTEGER DEFAULT 0,
+                message_count INTEGER DEFAULT 0,
+                unread_count INTEGER DEFAULT 0,
+                last_product_id INTEGER,
+                last_product_name VARCHAR,
+                last_message_preview TEXT,
+                last_add_to_cart_at DATETIME,
+                last_message_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        session_columns = sqlite_table_columns(connection, "website_visitor_sessions")
+        for column_name, column_def in {
+            "ip_address": "VARCHAR",
+            "country": "VARCHAR",
+            "city": "VARCHAR",
+            "first_page_path": "VARCHAR",
+            "page_view_count": "INTEGER DEFAULT 0",
+            "message_count": "INTEGER DEFAULT 0",
+            "unread_count": "INTEGER DEFAULT 0",
+            "last_message_preview": "TEXT",
+            "last_message_at": "DATETIME",
+        }.items():
+            if column_name not in session_columns:
+                connection.execute(text(f"ALTER TABLE website_visitor_sessions ADD COLUMN {column_name} {column_def}"))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS website_visitor_activities (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER,
+                visitor_session_id INTEGER,
+                session_id VARCHAR NOT NULL,
+                event_type VARCHAR NOT NULL DEFAULT 'page_view',
+                page_path VARCHAR,
+                page_title VARCHAR,
+                product_id INTEGER,
+                product_name VARCHAR,
+                cart_item_count INTEGER DEFAULT 0,
+                details TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(visitor_session_id) REFERENCES website_visitor_sessions(id)
+            )
+        """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS website_visitor_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER,
+                visitor_session_id INTEGER,
+                session_id VARCHAR NOT NULL,
+                sender_type VARCHAR NOT NULL DEFAULT 'visitor',
+                sender_name VARCHAR,
+                sender_user_id INTEGER,
+                body TEXT NOT NULL,
+                read_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(visitor_session_id) REFERENCES website_visitor_sessions(id),
+                FOREIGN KEY(sender_user_id) REFERENCES users(id)
+            )
+        """))
+    else:
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS website_visitor_sessions (
+                id SERIAL PRIMARY KEY,
+                tenant_id INTEGER REFERENCES tenants(id),
+                session_id VARCHAR NOT NULL,
+                visitor_name VARCHAR,
+                visitor_contact VARCHAR,
+                ip_address VARCHAR,
+                country VARCHAR,
+                city VARCHAR,
+                first_page_path VARCHAR,
+                page_path VARCHAR,
+                user_agent TEXT,
+                cart_item_count INTEGER DEFAULT 0,
+                page_view_count INTEGER DEFAULT 0,
+                add_to_cart_count INTEGER DEFAULT 0,
+                add_to_cart_units INTEGER DEFAULT 0,
+                message_count INTEGER DEFAULT 0,
+                unread_count INTEGER DEFAULT 0,
+                last_product_id INTEGER,
+                last_product_name VARCHAR,
+                last_message_preview TEXT,
+                last_add_to_cart_at TIMESTAMP,
+                last_message_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        for column_name, column_def in {
+            "ip_address": "VARCHAR",
+            "country": "VARCHAR",
+            "city": "VARCHAR",
+            "first_page_path": "VARCHAR",
+            "page_view_count": "INTEGER DEFAULT 0",
+            "message_count": "INTEGER DEFAULT 0",
+            "unread_count": "INTEGER DEFAULT 0",
+            "last_message_preview": "TEXT",
+            "last_message_at": "TIMESTAMP",
+        }.items():
+            connection.execute(text(f"ALTER TABLE website_visitor_sessions ADD COLUMN IF NOT EXISTS {column_name} {column_def}"))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS website_visitor_activities (
+                id SERIAL PRIMARY KEY,
+                tenant_id INTEGER REFERENCES tenants(id),
+                visitor_session_id INTEGER REFERENCES website_visitor_sessions(id),
+                session_id VARCHAR NOT NULL,
+                event_type VARCHAR NOT NULL DEFAULT 'page_view',
+                page_path VARCHAR,
+                page_title VARCHAR,
+                product_id INTEGER,
+                product_name VARCHAR,
+                cart_item_count INTEGER DEFAULT 0,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS website_visitor_messages (
+                id SERIAL PRIMARY KEY,
+                tenant_id INTEGER REFERENCES tenants(id),
+                visitor_session_id INTEGER REFERENCES website_visitor_sessions(id),
+                session_id VARCHAR NOT NULL,
+                sender_type VARCHAR NOT NULL DEFAULT 'visitor',
+                sender_name VARCHAR,
+                sender_user_id INTEGER REFERENCES users(id),
+                body TEXT NOT NULL,
+                read_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_website_visitor_sessions_tenant_seen ON website_visitor_sessions(tenant_id, last_seen_at)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_website_visitor_sessions_tenant_message ON website_visitor_sessions(tenant_id, last_message_at)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_website_visitor_activities_session_time ON website_visitor_activities(session_id, created_at)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_website_visitor_messages_session_time ON website_visitor_messages(session_id, created_at)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_website_visitor_messages_unread ON website_visitor_messages(tenant_id, sender_type, read_at)"))
 
 SCALING_INDEXES = (
     "CREATE INDEX IF NOT EXISTS ix_internal_messages_recipient_unread "
@@ -439,7 +1295,8 @@ def migrate_database():
     if not is_sqlite_database:
         # create_all does not add columns to an existing production table.
         with engine.begin() as connection:
-            ensure_tenant_schema_postgres(connection)
+            default_tenant_id = ensure_tenant_schema_postgres(connection)
+            ensure_accounting_schema_postgres(connection, default_tenant_id)
             connection.execute(
                 text(
                     "ALTER TABLE products ADD COLUMN IF NOT EXISTS "
@@ -449,9 +1306,68 @@ def migrate_database():
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS raw_pin VARCHAR"))
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_privacy_settings TEXT"))
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_expiry_minutes INTEGER DEFAULT 0"))
+            connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_url TEXT"))
+            connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR"))
+            connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR"))
+            connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_size INTEGER"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS image_url TEXT"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES service_taker_products(id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_service_taker_manufacturing_product_id ON service_taker_manufacturing_orders(product_id)"))
+            connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS shipping_request_type VARCHAR DEFAULT 'stock' NOT NULL"))
+            connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS manufacturing_order_id INTEGER REFERENCES service_taker_manufacturing_orders(id)"))
+            connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS product_description TEXT"))
+            connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS package_quantity INTEGER DEFAULT 1 NOT NULL"))
+            connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS package_weight_kg FLOAT"))
+            connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS package_length_cm FLOAT"))
+            connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS package_width_cm FLOAT"))
+            connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS package_height_cm FLOAT"))
+            connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS preferred_courier VARCHAR"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_service_taker_orders_manufacturing_order_id ON service_taker_orders(manufacturing_order_id)"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_payments ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'Confirmed'"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_payments ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMP"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_payments ADD COLUMN IF NOT EXISTS confirmed_by_user_id INTEGER REFERENCES users(id)"))
+            connection.execute(text('ALTER TABLE service_taker_manufacturing_payments ADD COLUMN IF NOT EXISTS proof_url TEXT'))
+            connection.execute(text('ALTER TABLE service_taker_manufacturing_payments ADD COLUMN IF NOT EXISTS proof_name VARCHAR'))
+            connection.execute(text('ALTER TABLE service_taker_manufacturing_payments ADD COLUMN IF NOT EXISTS proof_uploaded_at TIMESTAMP'))
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS internal_message_contact_requests (
+                    id SERIAL PRIMARY KEY,
+                    tenant_id INTEGER REFERENCES tenants(id),
+                    requester_user_id INTEGER NOT NULL REFERENCES users(id),
+                    recipient_user_id INTEGER NOT NULL REFERENCES users(id),
+                    message TEXT,
+                    status VARCHAR DEFAULT 'pending',
+                    reviewed_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS website_visitor_sessions (
+                    id SERIAL PRIMARY KEY,
+                    tenant_id INTEGER REFERENCES tenants(id),
+                    session_id VARCHAR NOT NULL,
+                    visitor_name VARCHAR,
+                    visitor_contact VARCHAR,
+                    page_path VARCHAR,
+                    user_agent TEXT,
+                    cart_item_count INTEGER DEFAULT 0,
+                    add_to_cart_count INTEGER DEFAULT 0,
+                    add_to_cart_units INTEGER DEFAULT 0,
+                    last_product_id INTEGER,
+                    last_product_name VARCHAR,
+                    last_add_to_cart_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_internal_message_contact_requests_tenant_id ON internal_message_contact_requests(tenant_id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_website_visitor_sessions_tenant_id ON website_visitor_sessions(tenant_id)"))
+            ensure_website_visitor_chat_schema(connection)
         return
     with engine.connect() as connection:
-        ensure_tenant_schema_sqlite(connection)
+        default_tenant_id = ensure_tenant_schema_sqlite(connection)
+        ensure_accounting_schema_sqlite(connection, default_tenant_id)
 
         # Add the USA fulfillment front-room location to portable databases.
         try:
@@ -502,7 +1418,7 @@ def migrate_database():
                 print("Added 'session_expiry_minutes' column to users table")
         except Exception as e:
             print(f"Error adding columns to users table: {e}")
-        
+
         # Check and add payout-related columns to orders table
         try:
             result = connection.execute(text("PRAGMA table_info(orders)"))
@@ -722,8 +1638,54 @@ def migrate_database():
                     FOREIGN KEY(recipient_user_id) REFERENCES users(id)
                 )
             """))
+            internal_message_columns = sqlite_table_columns(connection, "internal_messages")
+            for column_name, column_def in (
+                ("attachment_url", "TEXT"),
+                ("attachment_name", "VARCHAR"),
+                ("attachment_type", "VARCHAR"),
+                ("attachment_size", "INTEGER"),
+            ):
+                if column_name not in internal_message_columns:
+                    connection.execute(text(f"ALTER TABLE internal_messages ADD COLUMN {column_name} {column_def}"))
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS internal_message_contact_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id INTEGER,
+                    requester_user_id INTEGER NOT NULL,
+                    recipient_user_id INTEGER NOT NULL,
+                    message TEXT,
+                    status VARCHAR DEFAULT 'pending',
+                    reviewed_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(requester_user_id) REFERENCES users(id),
+                    FOREIGN KEY(recipient_user_id) REFERENCES users(id)
+                )
+            """))
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS website_visitor_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id INTEGER,
+                    session_id VARCHAR NOT NULL,
+                    visitor_name VARCHAR,
+                    visitor_contact VARCHAR,
+                    page_path VARCHAR,
+                    user_agent TEXT,
+                    cart_item_count INTEGER DEFAULT 0,
+                    add_to_cart_count INTEGER DEFAULT 0,
+                    add_to_cart_units INTEGER DEFAULT 0,
+                    last_product_id INTEGER,
+                    last_product_name VARCHAR,
+                    last_add_to_cart_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_internal_message_contact_requests_tenant_id ON internal_message_contact_requests(tenant_id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_website_visitor_sessions_tenant_id ON website_visitor_sessions(tenant_id)"))
+            ensure_website_visitor_chat_schema(connection)
             connection.commit()
-            print("Created internal_messages table (or already exists)")
+            print("Created internal_messages, messenger requests, and website visitor tables (or already exist)")
         except Exception as e:
             print(f"Error creating internal messages table: {e}")
 
@@ -1317,3 +2279,108 @@ def migrate_database():
             connection.commit()
         except Exception as e:
             print(f"Error adding service-taker product media columns: {e}")
+
+        # Shipping request type and parcel details for service-taker shipping.
+        try:
+            result = connection.execute(text("PRAGMA table_info(service_taker_orders)"))
+            service_order_columns = [row[1] for row in result]
+            service_order_shipping_columns = {
+                "shipping_request_type": "VARCHAR NOT NULL DEFAULT 'stock'",
+                "manufacturing_order_id": "INTEGER",
+                "product_description": "TEXT",
+                "package_quantity": "INTEGER NOT NULL DEFAULT 1",
+                "package_weight_kg": "FLOAT",
+                "package_length_cm": "FLOAT",
+                "package_width_cm": "FLOAT",
+                "package_height_cm": "FLOAT",
+                "preferred_courier": "VARCHAR",
+            }
+            for column_name, column_def in service_order_shipping_columns.items():
+                if column_name not in service_order_columns:
+                    connection.execute(
+                        text(
+                            "ALTER TABLE service_taker_orders "
+                            f"ADD COLUMN {column_name} {column_def}"
+                        )
+                    )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_service_taker_orders_manufacturing_order_id "
+                    "ON service_taker_orders(manufacturing_order_id)"
+                )
+            )
+            connection.commit()
+        except Exception as e:
+            print(f"Error adding service-taker shipping request columns: {e}")
+        # Manufacturing quote media and customer-marked deposit confirmations.
+        try:
+            result = connection.execute(
+                text("PRAGMA table_info(service_taker_manufacturing_orders)")
+            )
+            manufacturing_order_columns = [row[1] for row in result]
+            manufacturing_order_media_columns = {
+                "image_url": "TEXT",
+                "product_id": "INTEGER",
+            }
+            for column_name, column_def in manufacturing_order_media_columns.items():
+                if column_name not in manufacturing_order_columns:
+                    connection.execute(
+                        text(
+                            "ALTER TABLE service_taker_manufacturing_orders "
+                            f"ADD COLUMN {column_name} {column_def}"
+                        )
+                    )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_service_taker_manufacturing_product_id "
+                    "ON service_taker_manufacturing_orders(product_id)"
+                )
+            )
+            result = connection.execute(
+                text("PRAGMA table_info(service_taker_manufacturing_payments)")
+            )
+            manufacturing_payment_columns = [row[1] for row in result]
+            manufacturing_payment_status_columns = {
+                'status': "VARCHAR DEFAULT 'Confirmed'",
+                'confirmed_at': 'DATETIME',
+                'confirmed_by_user_id': 'INTEGER',
+                'proof_url': 'TEXT',
+                'proof_name': 'VARCHAR',
+                'proof_uploaded_at': 'DATETIME',
+            }
+            for column_name, column_def in manufacturing_payment_status_columns.items():
+                if column_name not in manufacturing_payment_columns:
+                    connection.execute(
+                        text(
+                            "ALTER TABLE service_taker_manufacturing_payments "
+                            f"ADD COLUMN {column_name} {column_def}"
+                        )
+                    )
+            connection.commit()
+        except Exception as e:
+            print(f"Error adding service-taker manufacturing flow columns: {e}")
+        # High-performance indexes for accelerated query execution (Phase 1)
+        try:
+            perf_indexes = [
+                "CREATE INDEX IF NOT EXISTS ix_order_items_order_id ON order_items (order_id)",
+                "CREATE INDEX IF NOT EXISTS ix_order_items_product_id ON order_items (product_id)",
+                "CREATE INDEX IF NOT EXISTS ix_order_items_order_product ON order_items (order_id, product_id)",
+                "CREATE INDEX IF NOT EXISTS ix_orders_customer_id ON orders (customer_id)",
+                "CREATE INDEX IF NOT EXISTS ix_orders_shipping_status ON orders (shipping_status)",
+                "CREATE INDEX IF NOT EXISTS ix_orders_platform ON orders (platform)",
+                "CREATE INDEX IF NOT EXISTS ix_products_article_no ON products (article_no)",
+                "CREATE INDEX IF NOT EXISTS ix_products_category ON products (category)",
+                "CREATE INDEX IF NOT EXISTS ix_products_name ON products (name)",
+                "CREATE INDEX IF NOT EXISTS ix_customers_phone ON customers (phone)",
+                "CREATE INDEX IF NOT EXISTS ix_customers_name ON customers (name)",
+                "CREATE INDEX IF NOT EXISTS ix_stock_movements_product_id ON stock_movements (product_id)",
+                "CREATE INDEX IF NOT EXISTS ix_stock_movements_movement_type ON stock_movements (movement_type)",
+                "CREATE INDEX IF NOT EXISTS ix_stock_movements_created_at ON stock_movements (created_at)",
+                "CREATE INDEX IF NOT EXISTS ix_shipping_tracking_number ON shipping (tracking_number)",
+                "CREATE INDEX IF NOT EXISTS ix_shipping_courier_name ON shipping (courier_name)",
+            ]
+            for idx_sql in perf_indexes:
+                connection.execute(text(idx_sql))
+            connection.commit()
+        except Exception as e:
+            print(f"Error creating performance indexes: {e}")

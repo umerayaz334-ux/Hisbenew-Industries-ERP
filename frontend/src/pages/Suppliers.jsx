@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { formatUtcLocal, parseUtcLocal } from "../utils/dateUtils";
+import { normalizeAppPath, scopedAppPath } from "../utils/routeUtils";
 import WorkerAccounts2 from "./WorkerAccounts2";
 import "./Suppliers.css";
 
@@ -94,12 +95,24 @@ const getSupplierOrderStatusClass = (status = "") =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-");
 
+const supplierPathFromWindow = () => normalizeAppPath(window.location.pathname);
+
 const supplierIdFromPath = () => {
-  const match = window.location.pathname.match(
-    /^\/portal\/suppliers\/(\d+)\/?$/
+  const match = supplierPathFromWindow().match(
+    /^\/portal\/(?:suppliers|worker-accounts\/suppliers)\/(\d+)\/?$/
   );
   return match ? Number(match[1]) : null;
 };
+
+const supplierDirectoryPathFromPath = () =>
+  supplierPathFromWindow().startsWith("/portal/worker-accounts")
+    ? scopedAppPath("/portal/worker-accounts")
+    : scopedAppPath("/portal/suppliers");
+
+const supplierAccountPathFromPath = (supplierId) =>
+  supplierPathFromWindow().startsWith("/portal/worker-accounts")
+    ? scopedAppPath(`/portal/worker-accounts/suppliers/${supplierId}`)
+    : scopedAppPath(`/portal/suppliers/${supplierId}`);
 
 const PlusIcon = () => (
   <svg aria-hidden="true" viewBox="0 0 20 20">
@@ -143,8 +156,9 @@ const CollapseIcon = ({ open }) => (
 function Suppliers() {
   const [suppliers, setSuppliers] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(() => Boolean(supplierIdFromPath()));
   const [detailSupplier, setDetailSupplier] = useState(null);
+  const [routeSupplierError, setRouteSupplierError] = useState("");
   const [form, setForm] = useState(createEmptySupplierForm);
   const [editingSupplierId, setEditingSupplierId] = useState(null);
   const [paymentForm, setPaymentForm] = useState({
@@ -366,18 +380,11 @@ function Suppliers() {
   }, []);
 
   useEffect(() => {
-    const syncSupplierRoute = () => {
-      const supplierId = supplierIdFromPath();
+    let active = true;
 
-      if (!supplierId) {
-        setShowDetails(false);
-        setDetailSupplier(null);
-        return;
-      }
-
-      const supplier = suppliers.find((item) => item.id === supplierId);
-      if (!supplier) return;
-
+    const openRouteSupplier = (supplier) => {
+      if (!active || !supplier) return;
+      setRouteSupplierError("");
       setDetailSupplier(supplier);
       setPaymentsPage(1);
       setStockVisibleCount(PAGE_SIZE);
@@ -388,11 +395,42 @@ function Suppliers() {
       setShowDetails(true);
     };
 
+    const syncSupplierRoute = () => {
+      const supplierId = supplierIdFromPath();
+
+      if (!supplierId) {
+        setShowDetails(false);
+        setDetailSupplier(null);
+        setRouteSupplierError("");
+        return;
+      }
+
+      setShowDetails(true);
+      setRouteSupplierError("");
+      const supplier = suppliers.find((item) => item.id === supplierId);
+      if (supplier) {
+        openRouteSupplier(supplier);
+        return;
+      }
+
+      api
+        .get(`/suppliers/${supplierId}`)
+        .then((response) => openRouteSupplier(response.data))
+        .catch((error) => {
+          console.error("Supplier route load error:", error);
+          if (!active) return;
+          setShowDetails(true);
+          setDetailSupplier(null);
+          setRouteSupplierError(error.response?.data?.detail || "Supplier account could not be loaded.");
+        });
+    };
+
     const frameId = window.requestAnimationFrame(syncSupplierRoute);
     window.addEventListener("popstate", syncSupplierRoute);
     window.addEventListener("erp:navigation", syncSupplierRoute);
 
     return () => {
+      active = false;
       window.cancelAnimationFrame(frameId);
       window.removeEventListener("popstate", syncSupplierRoute);
       window.removeEventListener("erp:navigation", syncSupplierRoute);
@@ -463,9 +501,10 @@ function Suppliers() {
         window.history.pushState(
           {},
           "",
-          `/portal/suppliers/${response.data.id}`
+          supplierAccountPathFromPath(response.data.id)
         );
         window.dispatchEvent(new Event("erp:navigation"));
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }
       setShowForm(false);
       setEditingSupplierId(null);
@@ -478,6 +517,7 @@ function Suppliers() {
   };
 
   const handleView = (supplier) => {
+    setRouteSupplierError("");
     setDetailSupplier(supplier);
     setPaymentsPage(1);
     setStockVisibleCount(PAGE_SIZE);
@@ -492,8 +532,9 @@ function Suppliers() {
       note: "",
     });
     setShowDetails(true);
-    window.history.pushState({}, "", `/portal/suppliers/${supplier.id}`);
+    window.history.pushState({}, "", supplierAccountPathFromPath(supplier.id));
     window.dispatchEvent(new Event("erp:navigation"));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleSupplierRowKeyDown = (event, supplier) => {
@@ -588,7 +629,7 @@ function Suppliers() {
     if (!detailSupplier?.id) return;
 
     window.open(
-      `${window.location.origin}/portal/suppliers/${detailSupplier.id}/ledger`,
+      `${window.location.origin}${scopedAppPath(`/portal/suppliers/${detailSupplier.id}/ledger`)}`,
       "_blank",
       "noopener,noreferrer"
     );
@@ -1188,8 +1229,9 @@ function Suppliers() {
   };
 
   const closeDetails = () => {
-    if (window.location.pathname !== "/portal/suppliers") {
-      window.history.pushState({}, "", "/portal/suppliers");
+    const directoryPath = supplierDirectoryPathFromPath();
+    if (window.location.pathname !== directoryPath) {
+      window.history.pushState({}, "", directoryPath);
       window.dispatchEvent(new Event("erp:navigation"));
     }
     setShowDetails(false);
@@ -1317,10 +1359,13 @@ function Suppliers() {
     : isReceiveOrderMode
       ? "Add to Stock"
       : "Add Purchase";
+  const routeSupplierId = supplierIdFromPath();
+  const isSupplierDetailView =
+    showDetails || Boolean(routeSupplierId) || Boolean(detailSupplier);
 
   return (
     <div className="suppliers-page">
-      {!showDetails && (
+      {!isSupplierDetailView && (
         <>
           <header className="suppliers-command-header">
         <div className="suppliers-command-main">
@@ -1437,7 +1482,7 @@ function Suppliers() {
                     onClick={handleCancel}
                     type="button"
                   >
-                    ×
+                    &times;
                   </button>
                 </div>
 
@@ -1690,7 +1735,26 @@ function Suppliers() {
         </>
       )}
 
-      {showDetails && detailSupplier && (
+
+        </>
+      )}
+      {isSupplierDetailView && (!detailSupplier ? (
+        <main className="supplier-account-page supplier-account-modal">
+          <div className="account-empty-state">
+            <strong>{routeSupplierError || "Opening account..."}</strong>
+            <span>
+              {routeSupplierError
+                ? "Go back to the accounts list and choose an available supplier."
+                : "Loading the selected supplier account."}
+            </span>
+            {routeSupplierError && (
+              <button className="secondary-btn" onClick={closeDetails} type="button">
+                Back to accounts
+              </button>
+            )}
+          </div>
+        </main>
+      ) : (
         <main
           aria-labelledby="supplier-account-title"
           className="supplier-account-page supplier-account-modal"
@@ -2438,7 +2502,8 @@ function Suppliers() {
             </section>
 
         </main>
-      )}
+      ))}
+
 
       {supplierAddStockOpen && (
         <div className="confirm-overlay" onClick={closeSupplierStockModal}>
@@ -3012,8 +3077,6 @@ function Suppliers() {
             </div>
           </div>
         </div>
-      )}
-        </>
       )}
 
       {confirmDialog.visible && (

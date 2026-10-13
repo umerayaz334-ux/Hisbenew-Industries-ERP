@@ -24,3 +24,105 @@
   color: #942e23;
   border: 1px solid #e4aaa0;
 }
+
+.worker-job-modal {
+  box-sizing: border-box;
+  max-width: 640px;
+}
+
+.worker-job-queue-header,
+.worker-job-queue-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px 90px 92px 32px;
+  gap: 6px;
+  align-items: center;
+}
+
+.worker-job-queue-header {
+  padding: 0 8px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.worker-job-queue-row {
+  min-width: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.worker-job-queue-row > * {
+  min-width: 0;
+}
+
+.worker-job-queue-input,
+.worker-job-queue-status {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.worker-job-remove-btn {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #dc2626;
+  cursor: pointer;
+}
+
+.worker-job-remove-btn:hover {
+  border-color: #f87171;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.worker-job-remove-btn:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .worker-job-queue-header {
+    display: none;
+  }
+
+  .worker-job-queue-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 92px 32px;
+  }
+
+  .worker-job-queue-row > strong {
+    grid-column: 1 / 4;
+    grid-row: 1;
+  }
+
+  .worker-job-queue-row > input:first-of-type {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .worker-job-queue-row > input:nth-of-type(2) {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .worker-job-queue-row > select {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .worker-job-queue-row > button {
+    grid-column: 4;
+    grid-row: 1;
+  }
+}

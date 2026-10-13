@@ -314,15 +314,21 @@
     font-weight: 850;
   }
 
-  .shipping-page .shipping-history-table td:nth-child(3) {
+  .shipping-page .shipping-history-table td[data-label="Company Name"] {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    overflow-wrap: anywhere;
+  }
+
+  .shipping-page .shipping-history-table td:nth-child(4) {
     grid-column: 2 / 3;
     grid-row: 1;
     justify-self: end;
   }
 
-  .shipping-page .shipping-history-table td:nth-child(4),
-  .shipping-page .shipping-history-table td:nth-child(7),
-  .shipping-page .shipping-history-table td:nth-child(8) {
+  .shipping-page .shipping-history-table td:nth-child(5),
+  .shipping-page .shipping-history-table td:nth-child(8),
+  .shipping-page .shipping-history-table td:nth-child(9) {
     grid-column: 1 / -1;
     display: flex;
     min-height: 46px;
@@ -334,14 +340,14 @@
     background: #f6f8fa;
   }
 
-  .shipping-page .shipping-history-table td:nth-child(4)::before,
-  .shipping-page .shipping-history-table td:nth-child(7)::before,
-  .shipping-page .shipping-history-table td:nth-child(8)::before {
+  .shipping-page .shipping-history-table td:nth-child(5)::before,
+  .shipping-page .shipping-history-table td:nth-child(8)::before,
+  .shipping-page .shipping-history-table td:nth-child(9)::before {
     margin-bottom: 0;
   }
 
-  .shipping-page .shipping-history-table td:nth-child(5),
-  .shipping-page .shipping-history-table td:nth-child(6) {
+  .shipping-page .shipping-history-table td:nth-child(6),
+  .shipping-page .shipping-history-table td:nth-child(7) {
     display: flex;
     min-height: 54px;
     align-items: center;
@@ -352,16 +358,16 @@
     background: #f6f8fa;
   }
 
-  .shipping-page .shipping-history-table td:nth-child(5)::before,
-  .shipping-page .shipping-history-table td:nth-child(6)::before {
+  .shipping-page .shipping-history-table td:nth-child(6)::before,
+  .shipping-page .shipping-history-table td:nth-child(7)::before {
     margin-bottom: 0;
   }
 
-  .shipping-page .shipping-history-table td:nth-child(5) {
+  .shipping-page .shipping-history-table td:nth-child(6) {
     grid-column: 1 / 2;
   }
 
-  .shipping-page .shipping-history-table td:nth-child(6) {
+  .shipping-page .shipping-history-table td:nth-child(7) {
     grid-column: 2 / 3;
   }
 
@@ -420,8 +426,8 @@
     width: 100%;
   }
 
-  .shipping-page .shipping-history-table td:nth-child(5),
-  .shipping-page .shipping-history-table td:nth-child(6) {
+  .shipping-page .shipping-history-table td:nth-child(6),
+  .shipping-page .shipping-history-table td:nth-child(7) {
     grid-column: 1 / -1;
   }
 }
@@ -536,9 +542,9 @@
     padding: 0 !important;
   }
 
-  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(4),
-  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(7),
-  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(8) {
+  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(5),
+  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(8),
+  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(9) {
     grid-column: 1 / -1 !important;
     display: flex !important;
     min-height: 44px !important;
@@ -548,8 +554,8 @@
     border-radius: 9px !important;
   }
 
-  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(5),
-  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(6) {
+  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(6),
+  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(7) {
     display: flex !important;
     min-height: 52px !important;
     align-items: center !important;
@@ -576,8 +582,8 @@
     width: 100% !important;
   }
 
-  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(5),
-  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(6) {
+  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(6),
+  .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(7) {
     grid-column: 1 / -1 !important;
   }
 }

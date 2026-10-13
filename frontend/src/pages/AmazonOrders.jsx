@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import api from "../api/api";
 import "./AmazonOrders.css";
 
@@ -171,19 +171,14 @@ function AmazonOrders({ authenticatedUser }) {
     }
   };
 
-  const cards = useMemo(
-    () => [
-      ["FBA orders", summary.order_count, `${summary.orders_today} today`],
-      ["Units ordered", summary.unit_count, "Amazon fulfilled"],
-      ["Revenue", money(summary.revenue, orders[0]?.currency), "Recent imported range"],
-      ["Pending", summary.pending_count, "Amazon confirmation"],
-      ["Unshipped", summary.unshipped_count, "Amazon processing"],
-      ["Shipped", summary.shipped_count, "Completed by Amazon"],
-      ["Unmapped items", summary.unmapped_item_count, "Needs product mapping"],
-      ["Order issues", summary.orders_with_issues, "Needs review"],
-    ],
-    [orders, summary]
-  );
+  const lastSuccessfulJob = jobs.find((job) => job.status === "Completed");
+  const activeFilterCount = [search, status, mappingStatus, issuesOnly].filter(Boolean).length;
+  const clearFilters = () => {
+    setSearch("");
+    setStatus("");
+    setMappingStatus("");
+    setIssuesOnly(false);
+  };
 
   if (!isAdmin) {
     return (
@@ -199,7 +194,11 @@ function AmazonOrders({ authenticatedUser }) {
     <main className="amazon-orders-page">
       <header className="amazon-orders-top-bar">
         <div className="amazon-orders-top-title">
-          <h1>📦 Amazon FBA Orders</h1>
+          <div>
+            <span className="amazon-orders-eyebrow">Amazon / Fulfillment</span>
+            <h1>FBA Orders</h1>
+            <p>Track fulfillment, review order items, and monitor sync activity.</p>
+          </div>
           <span
             className={`amazon-orders-badge ${
               connection?.connection_status === "Connected"
@@ -209,14 +208,13 @@ function AmazonOrders({ authenticatedUser }) {
           >
             ● {connection?.connection_status || "Not configured"}
           </span>
-          <span className="amazon-orders-safety-badge">FBA Fulfill · Isolated</span>
         </div>
         <div className="amazon-orders-top-meta">
-          {jobs[0] && (
-            <small>
-              Synced {formatDateTime(jobs[0].completed_at || jobs[0].created_at)}
-            </small>
-          )}
+          <small>Last successful order sync<br /><strong>{lastSuccessfulJob ? formatDateTime(lastSuccessfulJob.completed_at) : "No recent successful sync"}</strong></small>
+          <button type="button" className="amazon-orders-refresh" disabled={loading}
+            onClick={() => { loadOrders(); loadReferenceData(); }}>
+            {loading ? "Refreshing…" : "Refresh view"}
+          </button>
         </div>
       </header>
 
@@ -228,8 +226,12 @@ function AmazonOrders({ authenticatedUser }) {
           <div className="amazon-orders-notice is-error">{error}</div>
         ) : null}
 
-        {/* Single Executive FBA Orders Summary Banner */}
-        <section className="amazon-orders-exec-bar">
+        <details className="amazon-orders-overview" open>
+          <summary className="amazon-orders-disclosure">
+            <span><span className="amazon-orders-eyebrow">At a glance</span><strong>Order overview</strong></span>
+            <span className="amazon-orders-disclosure-meta">{number(summary.order_count)} orders <span className="amazon-orders-chevron" aria-hidden="true">⌄</span></span>
+          </summary>
+        <section className="amazon-orders-exec-bar" aria-label="Order summary">
           <div className="amazon-orders-exec-block is-primary">
             <span className="amazon-orders-exec-label">Total FBA Orders</span>
             <strong className="amazon-orders-exec-value">
@@ -268,7 +270,7 @@ function AmazonOrders({ authenticatedUser }) {
           <div className="amazon-orders-exec-block is-highlight">
             <span className="amazon-orders-exec-label">Total FBA Revenue</span>
             <strong className="amazon-orders-exec-value is-blue">
-              {money(summary.revenue)}
+              {money(summary.revenue, orders[0]?.currency)}
             </strong>
             <small className="amazon-orders-exec-badge">
               {summary.unmapped_item_count > 0
@@ -277,22 +279,29 @@ function AmazonOrders({ authenticatedUser }) {
             </small>
           </div>
         </section>
+        </details>
 
         <section className="amazon-orders-workspace">
           <div className="amazon-orders-section-heading">
             <div>
-              <span className="amazon-orders-eyebrow">Order control</span>
-              <h2>Recent Amazon-fulfilled orders</h2>
+              <span className="amazon-orders-eyebrow">Order workspace</span>
+              <h2>All orders</h2>
             </div>
             <span>
               Showing {number(orders.length)} of {number(summary.order_count)}
             </span>
           </div>
 
+          <details className="amazon-orders-filter-panel" open>
+            <summary className="amazon-orders-disclosure">
+              <strong>Search & filters</strong>
+              <span className="amazon-orders-disclosure-meta">{activeFilterCount ? `${activeFilterCount} active` : "All orders"}<span className="amazon-orders-chevron" aria-hidden="true">⌄</span></span>
+            </summary>
           <div className="amazon-orders-filters">
             <label>
               <span>Search</span>
               <input
+                type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Order ID, Seller SKU, ASIN or product"
@@ -333,15 +342,18 @@ function AmazonOrders({ authenticatedUser }) {
               />
               Issues only
             </label>
+            {activeFilterCount > 0 && <button type="button" className="amazon-orders-clear" onClick={clearFilters}>Clear filters</button>}
           </div>
+          </details>
 
           <div className="amazon-orders-table-wrap">
             {loading ? (
               <div className="amazon-orders-empty">Loading FBA orders…</div>
             ) : orders.length === 0 ? (
               <div className="amazon-orders-empty">
-                No FBA orders match the selected filters. Import a controlled
-                7–14 day range to begin.
+                <strong>No orders found</strong>
+                <p>{activeFilterCount ? "Try a different search or clear your filters." : "Orders will appear here after your next Amazon sync."}</p>
+                {activeFilterCount > 0 && <button type="button" className="amazon-orders-clear" onClick={clearFilters}>Clear filters</button>}
               </div>
             ) : (
               <table className="amazon-orders-table">
@@ -360,7 +372,7 @@ function AmazonOrders({ authenticatedUser }) {
                 <tbody>
                   {orders.map((order) => (
                     <Fragment key={order.id}>
-                      <tr>
+                      <tr className={expandedOrderId === order.id ? "is-expanded" : ""}>
                         <td>
                           <div className="amazon-orders-order-id">
                             <strong>{order.amazon_order_id}</strong>
@@ -417,13 +429,15 @@ function AmazonOrders({ authenticatedUser }) {
                           <div className="amazon-orders-actions">
                             <button
                               type="button"
+                              aria-expanded={expandedOrderId === order.id}
+                              aria-controls={`amazon-order-detail-${order.id}`}
                               onClick={() =>
                                 setExpandedOrderId((current) =>
                                   current === order.id ? null : order.id
                                 )
                               }
                             >
-                              {expandedOrderId === order.id ? "Hide" : "Details"}
+                              {expandedOrderId === order.id ? "Collapse −" : "Details +"}
                             </button>
                             <button type="button" onClick={() => openHistory(order)}>
                               History
@@ -437,7 +451,7 @@ function AmazonOrders({ authenticatedUser }) {
                           className="amazon-orders-detail-row"
                         >
                           <td colSpan="8">
-                            <div className="amazon-orders-detail">
+                            <div className="amazon-orders-detail" id={`amazon-order-detail-${order.id}`}>
                               <div className="amazon-orders-detail-heading">
                                 <div>
                                   <strong>Order items</strong>
@@ -513,13 +527,14 @@ function AmazonOrders({ authenticatedUser }) {
           </div>
         </section>
 
-        <section className="amazon-orders-jobs">
-          <div className="amazon-orders-section-heading">
+        <details className="amazon-orders-jobs">
+          <summary className="amazon-orders-disclosure">
             <div>
               <span className="amazon-orders-eyebrow">Operational history</span>
-              <h2>Recent order synchronization jobs</h2>
+              <strong>Sync activity</strong>
             </div>
-          </div>
+            <span className="amazon-orders-disclosure-meta">{jobs[0]?.status || "No activity"}<span className="amazon-orders-chevron" aria-hidden="true">⌄</span></span>
+          </summary>
           {jobs.length === 0 ? (
             <div className="amazon-orders-empty is-compact">No order jobs yet.</div>
           ) : (
@@ -544,7 +559,7 @@ function AmazonOrders({ authenticatedUser }) {
               ))}
             </div>
           )}
-        </section>
+        </details>
       </div>
 
       {historyTarget ? (

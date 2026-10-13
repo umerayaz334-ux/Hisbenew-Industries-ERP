@@ -4164,3 +4164,10 @@
     min-width: 100%;
   }
 }
+
+.products-catalog-pricing { padding: 14px 18px; background: #f5f1e9; border-bottom: 1px solid #dedbd4; }
+.products-catalog-pricing label { font-weight: 600; font-size: 13px; margin-right: 14px; }
+.products-catalog-pricing input { width: 88px; padding: 8px; border: 1px solid #b8bdb4; border-radius: 6px; background: white; }
+.products-catalog-pricing p { font-size: 12px; color: #596456; margin: 8px 0 0; }
+.products-catalog-pricing input[aria-invalid="true"] { border-color: #b42318; }
+.products-catalog-selector-list { min-height: 0; }

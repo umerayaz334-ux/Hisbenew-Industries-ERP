@@ -922,6 +922,23 @@
   white-space: nowrap;
 }
 
+.service-access-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.service-access-line span {
+  padding: 5px 8px;
+  border: 1px solid #b9d8ce;
+  border-radius: 999px;
+  background: #eef8f4;
+  color: var(--service-green);
+  font-size: 10px;
+  font-weight: 750;
+}
+
 .service-rate-line {
   display: flex;
   flex-wrap: wrap;
@@ -1346,11 +1363,28 @@
 }
 
 .service-status.is-cancelled,
+.service-status.is-rejected,
 .service-status.is-out-of-stock,
 .service-status.is-paused {
   border-color: #e2c6c1;
   background: #fff5f3;
   color: var(--service-danger);
+}
+
+.service-status.is-quote-requested,
+.service-status.is-quoted,
+.service-status.is-deposit-pending,
+.service-status.is-pending-confirmation,
+.service-status.is-waiting-for-company-confirmation {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #9a5b10;
+}
+
+.service-status.is-quality-check {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #0f4c81;
 }
 
 .service-row-button {
@@ -1863,6 +1897,69 @@
   grid-column: 1 / -1;
 }
 
+.service-access-choice {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #dbe3df;
+  border-radius: 6px;
+  background: #fbfcfc;
+}
+
+.service-access-choice legend {
+  padding: 0 6px;
+  color: #58645d;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.service-access-choice > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.service-access-choice label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 74px;
+  padding: 12px;
+  border: 1px solid #d6ded9;
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--service-ink);
+}
+
+.service-access-choice label.is-selected {
+  border-color: var(--service-green);
+  background: #edf7f3;
+}
+
+.service-access-choice input {
+  width: 18px;
+  min-height: 18px;
+  padding: 0;
+  accent-color: var(--service-green);
+}
+
+.service-access-choice span {
+  display: grid;
+  gap: 4px;
+}
+
+.service-access-choice strong {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.service-access-choice small {
+  color: var(--service-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .service-lines {
   display: grid;
   gap: 8px;
@@ -2108,6 +2205,10 @@
     grid-column: auto;
   }
 
+  .service-access-choice > div {
+    grid-template-columns: 1fr;
+  }
+
   .service-line {
     grid-template-columns: 1fr 86px 36px;
   }
@@ -2132,11 +2233,2645 @@
     border-right: 0;
   }
 
+  .service-access-choice > div {
+    grid-template-columns: 1fr;
+  }
+
+  .service-pending-confirmation-list article,
+  .service-deposit-confirmation {
+    grid-template-columns: 1fr;
+  }
+
   .service-line {
     grid-template-columns: 1fr;
   }
 
   .service-line button {
     width: 100%;
+  }
+}
+
+.service-manufacturing-product-cell {
+  min-width: 300px;
+}
+
+.service-manufacturing-roadmap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.service-manufacturing-roadmap span {
+  padding: 3px 6px;
+  border: 1px solid #dbe4df;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #6b746f;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.service-manufacturing-roadmap span.is-active {
+  border-color: #a7d6c5;
+  background: #e8f7f0;
+  color: var(--service-green);
+}
+
+.service-pending-confirmation-list {
+  display: grid;
+  gap: 10px;
+  padding: 8px 20px 20px;
+}
+
+.service-pending-confirmation-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 7px;
+  background: #fff7ed;
+}
+
+.service-pending-confirmation-list article > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.service-pending-confirmation-list article strong,
+.service-pending-confirmation-list article span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-pending-confirmation-list article > b {
+  color: #9a3412;
+  font-size: 13px;
+}
+
+.service-deposit-confirmation {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.service-deposit-confirmation > div {
+  display: grid;
+  gap: 4px;
+  padding: 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.service-deposit-confirmation span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.service-deposit-confirmation strong {
+  color: #071022;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.service-section-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 6px;
+}
+
+.service-section-heading span {
+  color: #64748b;
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.service-section-heading h2 {
+  color: #071022;
+  font-size: 1.05rem;
+  margin: 4px 0 0;
+}
+
+.service-section-heading > strong {
+  color: #0f766e;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.service-billing-section {
+  margin-top: 18px;
+}
+
+.service-payment-panel,
+.service-timeline {
+  border-top: 1px solid #e2e8f0;
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
+.service-payment-panel h3,
+.service-timeline h3 {
+  color: #071022;
+  font-size: 0.95rem;
+  margin: 0 0 12px;
+}
+
+.service-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.service-timeline article {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.service-timeline article strong {
+  color: #0f766e;
+  display: block;
+  font-size: 0.82rem;
+  margin-bottom: 4px;
+}
+
+.service-timeline article p {
+  color: #0f172a;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.service-timeline article span,
+.service-timeline > span {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+.service-kpi-grid article.is-local-order::before {
+  background: #0f766e;
+}
+
+.service-kpi-grid article.is-local-live::before {
+  background: #2563eb;
+}
+
+.service-kpi-grid article.is-local-clear::before {
+  background: #16a34a;
+}
+
+.service-kpi-grid article.is-local-balance::before {
+  background: #7c3aed;
+}
+
+.service-local-command-panel {
+  border-color: #cfe4dc;
+  background: #fbfefd;
+}
+
+.service-local-stage-rail {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.service-local-stage-rail > div.has-work {
+  background: #f4fbf8;
+}
+
+.service-local-stage-rail > div.has-work > span {
+  border-color: #74b49a;
+  color: #0f766e;
+}
+
+.service-local-orders-panel .service-recent-head,
+.service-local-orders-panel .service-recent-row {
+  grid-template-columns: minmax(110px, 0.8fr) minmax(190px, 1.6fr) minmax(95px, 0.75fr) minmax(105px, 0.8fr) minmax(125px, 0.9fr);
+}
+
+.service-local-orders-panel .service-recent-row > span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+}
+
+.service-local-orders-panel .service-recent-row > .service-status {
+  justify-self: start;
+}
+
+.service-customer-order-view {
+  display: grid;
+  width: 100%;
+  gap: 12px;
+}
+
+.service-portal-order-table-fallback {
+  display: none;
+}
+
+.service-customer-order-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.service-customer-order-summary article,
+.service-customer-order-card {
+  border: 1px solid #dce5ea;
+  border-radius: 7px;
+  background: #ffffff;
+  box-shadow: 0 6px 16px rgba(15, 76, 129, 0.05);
+}
+
+.service-customer-order-summary article {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-height: 76px;
+  padding: 11px 12px;
+}
+
+.service-customer-order-summary span,
+.service-customer-order-facts span,
+.service-customer-progress-card span,
+.service-customer-payment-card span,
+.service-customer-updates h3 {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.service-customer-order-summary strong {
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.service-customer-order-summary small {
+  overflow: hidden;
+  color: #526173;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-customer-order-list {
+  display: grid;
+  gap: 10px;
+}
+
+.service-customer-order-card {
+  display: grid;
+  gap: 11px;
+  padding: 12px;
+}
+
+.service-customer-order-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.service-customer-order-title {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.service-customer-order-title img,
+.service-customer-order-title > span {
+  width: 46px;
+  height: 46px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.service-customer-order-title > span {
+  display: grid;
+  place-items: center;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #0f4c81;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.service-customer-order-title div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.service-customer-order-title small {
+  overflow: hidden;
+  color: #0f4c81;
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-customer-order-title h2 {
+  margin: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 760;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-customer-order-title p {
+  margin: 0;
+  overflow: hidden;
+  color: #526173;
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-customer-order-facts,
+.service-customer-payment-card {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.service-customer-order-facts div,
+.service-customer-payment-card div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.service-customer-order-facts strong,
+.service-customer-payment-card strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-customer-progress-card {
+  display: grid;
+  gap: 8px;
+  padding-top: 1px;
+}
+
+.service-customer-progress-card > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.service-customer-progress-card strong {
+  color: #16a34a;
+  font-size: 12px;
+}
+
+.service-customer-progress-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.service-customer-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f4c81, #16a34a);
+}
+
+.service-customer-order-actions,
+.service-pending-proof-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.service-pending-proof-actions > span {
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.service-payment-proof-field {
+  grid-column: 1 / -1;
+}
+
+.service-payment-proof-field span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-customer-updates {
+  display: grid;
+  gap: 5px;
+  padding-top: 9px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.service-customer-updates h3 {
+  margin: 0;
+}
+
+.service-customer-updates div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+}
+
+.service-customer-updates strong {
+  color: #0f172a;
+  font-size: 12px;
+}
+
+.service-customer-updates span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+@media (max-width: 980px) {
+  .service-customer-order-summary,
+  .service-customer-order-facts,
+  .service-customer-payment-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .service-customer-order-view {
+    gap: 10px;
+  }
+
+  .service-customer-order-summary,
+  .service-customer-order-facts,
+  .service-customer-payment-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .service-customer-order-summary article {
+    min-height: 64px;
+    padding: 9px;
+  }
+
+  .service-customer-order-summary strong {
+    font-size: 18px;
+  }
+
+  .service-customer-order-card {
+    gap: 9px;
+    padding: 10px;
+  }
+
+  .service-customer-order-card > header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .service-customer-order-title {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .service-customer-order-title img,
+  .service-customer-order-title > span {
+    width: 40px;
+    height: 40px;
+  }
+
+  .service-customer-order-title h2 {
+    font-size: 14px;
+  }
+
+  .service-customer-order-title p {
+    font-size: 10px;
+  }
+
+  .service-customer-order-facts div,
+  .service-customer-payment-card div {
+    padding: 8px;
+  }
+
+  .service-customer-order-facts strong,
+  .service-customer-payment-card strong {
+    font-size: 12px;
+  }
+
+  .service-customer-order-actions .service-row-button,
+  .service-pending-proof-actions .service-row-button {
+    flex: 1 1 132px;
+    justify-content: center;
+  }
+}
+@media (max-width: 760px) {
+  .service-local-orders-panel .service-recent-row > span:nth-child(4) {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .service-local-orders-panel .service-recent-row > .service-status {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+}
+/* Compact customer local orders refresh */
+.service-customer-order-view {
+  gap: 10px;
+}
+
+.service-customer-order-summary {
+  gap: 8px;
+}
+
+.service-customer-order-summary article {
+  min-height: 62px;
+  padding: 10px 12px;
+  border-color: #dde6df;
+  box-shadow: none;
+}
+
+.service-customer-order-summary strong {
+  font-size: 20px;
+}
+
+.service-customer-order-summary small {
+  color: #66736d;
+  font-size: 10px;
+}
+
+.service-customer-order-card {
+  gap: 8px;
+  padding: 10px 12px;
+  border-color: #dde6df;
+  box-shadow: none;
+}
+
+.service-customer-order-card > header {
+  align-items: center;
+  gap: 10px;
+}
+
+.service-customer-order-title {
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 9px;
+}
+
+.service-customer-order-title img,
+.service-customer-order-title > span {
+  width: 42px;
+  height: 42px;
+}
+
+.service-customer-order-title h2 {
+  font-size: 15px;
+  line-height: 1.12;
+}
+
+.service-customer-order-title p {
+  font-size: 10px;
+}
+
+.service-customer-order-facts {
+  gap: 6px;
+}
+
+.service-customer-order-facts div {
+  gap: 2px;
+  padding: 8px 9px;
+  border-color: #dde6df;
+  background: #fbfcfa;
+}
+
+.service-customer-order-facts span,
+.service-customer-progress-card span,
+.service-customer-updates h3 {
+  color: #66736d;
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+.service-customer-order-facts strong {
+  font-size: 12px;
+}
+
+.service-customer-progress-card {
+  gap: 6px;
+  padding-top: 0;
+}
+
+.service-customer-progress-card > div:first-child {
+  min-height: 18px;
+}
+
+.service-customer-progress-card strong {
+  font-size: 11px;
+}
+
+.service-customer-progress-bar {
+  height: 7px;
+}
+
+.service-customer-next-step {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 8px 10px;
+  border-left: 3px solid #103f36;
+  border-radius: 6px;
+  background: #f4f8f5;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.service-customer-order-actions {
+  gap: 6px;
+}
+
+.service-customer-order-actions .service-primary-button,
+.service-customer-order-actions .service-row-button {
+  min-height: 34px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.service-customer-updates {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding-top: 7px;
+}
+
+.service-customer-updates div {
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.service-customer-updates strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-manufacturing-roadmap {
+  gap: 3px;
+  margin-top: 0;
+}
+
+.service-manufacturing-roadmap span {
+  padding: 3px 5px;
+  font-size: 8.5px;
+  letter-spacing: 0;
+}
+
+@media (max-width: 620px) {
+  .service-customer-order-card > header {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .service-customer-order-title {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .service-customer-order-title img,
+  .service-customer-order-title > span {
+    width: 36px;
+    height: 36px;
+  }
+
+  .service-customer-order-card > header .service-status {
+    max-width: 120px;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .service-customer-order-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service-customer-next-step {
+    align-items: flex-start;
+  }
+
+  .service-customer-updates {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Final compact customer local orders and payment confirmations */
+.service-customer-order-view {
+  display: grid;
+  gap: 12px;
+}
+
+.service-customer-order-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.service-customer-order-summary article {
+  display: grid;
+  min-width: 0;
+  min-height: 68px;
+  gap: 4px;
+  padding: 11px 12px;
+  border: 1px solid #dbe5de;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.service-customer-order-summary span,
+.service-customer-order-summary strong,
+.service-customer-order-summary small,
+.service-customer-order-facts span,
+.service-customer-order-facts strong {
+  display: block;
+  min-width: 0;
+}
+
+.service-customer-order-summary span,
+.service-customer-order-facts span,
+.service-customer-progress-card span,
+.service-customer-updates h3,
+.service-billing-actions-bar span {
+  color: #64736d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.service-customer-order-summary strong {
+  color: #06121f;
+  font-size: 20px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.service-customer-order-summary small {
+  color: #6b7a85;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-customer-order-list {
+  display: grid;
+  gap: 12px;
+}
+
+.service-customer-order-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #dbe5de;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.service-customer-order-card > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid #edf2ee;
+}
+
+.service-customer-order-card > header .service-status {
+  justify-self: end;
+  max-width: 160px;
+  white-space: nowrap;
+}
+
+.service-customer-order-title {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.service-customer-order-title img,
+.service-customer-order-title > span {
+  width: 46px;
+  height: 46px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.service-customer-order-title > span {
+  display: grid;
+  place-items: center;
+  background: #f3f6f4;
+  color: #0f4c81;
+  font-weight: 900;
+}
+
+.service-customer-order-title small {
+  display: block;
+  color: #0f4c81;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.service-customer-order-title h2 {
+  margin: 1px 0 2px;
+  color: #06121f;
+  font-size: 17px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.service-customer-order-title p {
+  margin: 0;
+  color: #536477;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.service-customer-order-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.service-customer-order-facts div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid #dfe8e2;
+  border-radius: 8px;
+  background: #f8faf9;
+}
+
+.service-customer-order-facts strong {
+  color: #07111f;
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.service-customer-progress-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fcfdfc;
+}
+
+.service-customer-progress-card > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.service-customer-progress-card strong {
+  color: #16a34a;
+  font-size: 12px;
+}
+
+.service-customer-progress-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e9ef;
+}
+
+.service-customer-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f4c81, #16a34a);
+}
+
+.service-manufacturing-roadmap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 0;
+}
+
+.service-manufacturing-roadmap span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 4px 7px;
+  border: 1px solid #dbe4df;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #6b746f;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.service-manufacturing-roadmap span.is-active {
+  border-color: #a7d6c5;
+  background: #e8f7f0;
+  color: #075e54;
+}
+
+.service-customer-next-step {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 8px 10px;
+  border-left: 3px solid #0f766e;
+  border-radius: 8px;
+  background: #f4f8f5;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.service-customer-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-customer-order-actions .service-primary-button,
+.service-customer-order-actions .service-row-button,
+.service-pending-proof-actions .service-row-button {
+  min-height: 34px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.service-customer-updates {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #edf2ee;
+}
+
+.service-customer-updates h3 {
+  margin: 0;
+}
+
+.service-customer-updates div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.service-customer-updates strong {
+  min-width: 0;
+  color: #07111f;
+  font-size: 12px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.service-customer-updates span {
+  color: #536477;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.service-billing-main {
+  overflow: hidden;
+}
+
+.service-billing-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fbfcfa;
+}
+
+.service-billing-actions-bar div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.service-billing-actions-bar strong {
+  color: #07111f;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.service-pending-confirmation-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px 14px 14px;
+}
+
+.service-pending-confirmation-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) auto auto minmax(170px, auto);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fffaf0;
+}
+
+.service-pending-confirmation-list article > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.service-pending-confirmation-list article strong,
+.service-pending-confirmation-list article span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-pending-confirmation-list article > b {
+  color: #9a3412;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.service-pending-proof-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.service-pending-proof-actions > span {
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.service-payment-upload-modal {
+  max-width: 620px;
+}
+
+.service-payment-upload-modal .service-modal-body {
+  padding: 16px;
+}
+
+.service-payment-proof-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.service-payment-proof-field {
+  padding: 11px;
+  border: 1px dashed #b8c7d6;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.service-payment-proof-field span {
+  display: block;
+  margin-top: 7px;
+  color: #536477;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .service-customer-order-summary,
+  .service-customer-order-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service-pending-confirmation-list article {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .service-pending-proof-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 620px) {
+  .service-customer-order-view,
+  .service-customer-order-list {
+    gap: 9px;
+  }
+
+  .service-customer-order-summary {
+    gap: 7px;
+  }
+
+  .service-customer-order-summary article {
+    min-height: 62px;
+    padding: 9px;
+  }
+
+  .service-customer-order-summary strong {
+    font-size: 17px;
+  }
+
+  .service-customer-order-card {
+    gap: 9px;
+    padding: 10px;
+  }
+
+  .service-customer-order-card > header {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .service-customer-order-card > header .service-status {
+    justify-self: start;
+    max-width: 100%;
+  }
+
+  .service-customer-order-title {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .service-customer-order-title img,
+  .service-customer-order-title > span {
+    width: 38px;
+    height: 38px;
+  }
+
+  .service-customer-order-title h2 {
+    font-size: 14px;
+  }
+
+  .service-customer-order-title p {
+    font-size: 11px;
+  }
+
+  .service-customer-order-facts {
+    gap: 6px;
+  }
+
+  .service-customer-order-facts div,
+  .service-customer-progress-card {
+    padding: 8px;
+  }
+
+  .service-manufacturing-roadmap {
+    gap: 4px;
+  }
+
+  .service-manufacturing-roadmap span {
+    min-height: 20px;
+    padding: 3px 5px;
+    font-size: 8.5px;
+  }
+
+  .service-customer-order-actions .service-primary-button,
+  .service-customer-order-actions .service-row-button,
+  .service-pending-proof-actions .service-row-button {
+    flex: 1 1 136px;
+    justify-content: center;
+  }
+
+  .service-customer-updates {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .service-customer-updates div {
+    display: grid;
+    gap: 4px;
+  }
+
+  .service-customer-updates span {
+    white-space: normal;
+  }
+
+  .service-billing-actions-bar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 12px;
+  }
+
+  .service-billing-actions-bar .service-primary-button {
+    width: 100%;
+  }
+
+  .service-pending-confirmation-list {
+    padding: 9px 10px 10px;
+  }
+
+  .service-pending-confirmation-list article {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .service-payment-proof-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .service-customer-order-summary,
+  .service-customer-order-facts {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   LOCAL ORDERS AUTOMATION WORKFLOW TIMELINE & PROCESS POPUP STYLES
+   ========================================================================== */
+
+.service-workflow-timeline-wrapper {
+  position: relative;
+  width: 100%;
+  padding: 12px 0 8px;
+  margin: 6px 0;
+}
+
+.service-workflow-timeline-track-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.service-workflow-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.service-workflow-nav-btn:hover:not(:disabled) {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.service-workflow-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: #f1f5f9;
+}
+
+.service-workflow-timeline-rail {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.service-workflow-track-bg {
+  position: absolute;
+  top: 50%;
+  left: 20px;
+  right: 20px;
+  height: 4px;
+  transform: translateY(-50%);
+  background: #e2e8f0;
+  border-radius: 999px;
+  z-index: 1;
+}
+
+.service-workflow-track-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #eab308, #10b981);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.service-workflow-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 2;
+  cursor: default;
+  user-select: none;
+  min-width: 60px;
+}
+
+.service-workflow-node.is-clickable {
+  cursor: pointer;
+}
+
+.service-workflow-node-date {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 7px;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+  transition: color 0.15s ease;
+}
+
+.service-workflow-node.is-completed .service-workflow-node-date {
+  color: #0f766e;
+}
+
+.service-workflow-node.is-current .service-workflow-node-date {
+  color: #d97706;
+  font-weight: 800;
+}
+
+.service-workflow-node-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 3px solid #cbd5e1;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.service-workflow-node.is-clickable:hover .service-workflow-node-dot {
+  transform: scale(1.15);
+}
+
+.service-workflow-node.is-completed .service-workflow-node-dot {
+  border-color: #10b981;
+  background: #10b981;
+  color: #ffffff;
+}
+
+.service-workflow-check {
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.service-workflow-node.is-current .service-workflow-node-dot {
+  border-color: #f59e0b;
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25);
+  transform: scale(1.18);
+}
+
+.service-workflow-inner-circle {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.service-workflow-node.is-pending .service-workflow-node-dot {
+  border-color: #cbd5e1;
+  background: #ffffff;
+}
+
+.service-workflow-node.is-pending .service-workflow-inner-circle {
+  background: #cbd5e1;
+}
+
+.service-workflow-node-label {
+  margin-top: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #64748b;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.service-workflow-node.is-completed .service-workflow-node-label {
+  color: #0f766e;
+}
+
+.service-workflow-node.is-current .service-workflow-node-label {
+  color: #b45309;
+  font-weight: 800;
+}
+
+/* Redesigned Local Order Process Popup Modal */
+.service-local-order-process-modal {
+  width: min(940px, 96vw) !important;
+  max-height: 94vh !important;
+  border-radius: 10px !important;
+}
+
+.service-process-modal-content {
+  display: grid;
+  gap: 16px;
+  padding: 4px 0 12px;
+}
+
+/* Service Taker Client Banner & Total Balance Bar */
+.service-process-client-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #071022 0%, #0f2744 100%);
+  border-radius: 8px;
+  color: #ffffff;
+}
+
+.service-process-client-info {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.service-process-badge {
+  display: inline-block;
+  align-self: start;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+}
+
+.service-process-client-info h3 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 780;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+}
+
+.service-process-client-info p {
+  margin: 0;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.service-process-balance-highlight {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+  background: rgba(255, 255, 255, 0.07);
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  min-width: 220px;
+}
+
+.service-process-balance-highlight span {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #fbbf24;
+}
+
+.service-process-balance-highlight strong {
+  font-size: 22px;
+  font-weight: 800;
+  color: #fbbf24;
+  line-height: 1.1;
+}
+
+.service-process-balance-highlight small {
+  font-size: 10px;
+  color: #cbd5e1;
+}
+
+/* Workflow Section in Modal */
+.service-process-workflow-section {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.service-process-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.service-process-section-header span {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.service-process-section-header h4 {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 750;
+  color: #0f172a;
+}
+
+.service-workflow-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.service-workflow-action-btn {
+  padding: 6px 13px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 0;
+}
+
+.service-workflow-action-btn.is-advance {
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.service-workflow-action-btn.is-advance:hover {
+  background: #115e59;
+}
+
+.service-workflow-action-btn.is-complete {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.service-workflow-action-btn.is-complete:hover {
+  background: #15803d;
+}
+
+/* Financial Stats Summary Grid */
+.service-process-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.service-process-stat-card {
+  display: grid;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.service-process-stat-card span {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.service-process-stat-card strong {
+  font-size: 16px;
+  font-weight: 780;
+  color: #0f172a;
+}
+
+.service-process-stat-card strong.is-success {
+  color: #16a34a;
+}
+
+.service-process-stat-card strong.is-due {
+  color: #dc2626;
+}
+
+.service-process-stat-card strong.is-settled {
+  color: #16a34a;
+}
+
+.service-process-stat-card small {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.service-process-stat-card.is-highlight {
+  background: #fffdf5;
+  border-color: #fde68a;
+}
+
+/* Product Specs & Drawing Box */
+.service-process-specs-container {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fcfdfe;
+}
+
+.service-process-spec-image-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.service-process-spec-image-box img {
+  width: 140px;
+  height: 140px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #cbd5e1;
+}
+
+.service-process-spec-no-image {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  height: 140px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  color: #64748b;
+}
+
+.service-process-spec-no-image span {
+  font-size: 36px;
+  font-weight: 800;
+  color: #0f4c81;
+}
+
+.service-process-spec-no-image small {
+  font-size: 9.5px;
+  margin-top: 4px;
+}
+
+.service-process-spec-details {
+  display: grid;
+  gap: 8px;
+}
+
+.service-process-spec-details h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 750;
+  color: #0f172a;
+}
+
+.service-spec-chips-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.service-spec-chips-grid > div {
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.service-spec-chips-grid span {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.service-spec-chips-grid strong {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-process-notes-callout {
+  padding: 8px 11px;
+  border-radius: 6px;
+  background: #fefce8;
+  border: 1px solid #fef08a;
+  font-size: 11px;
+}
+
+.service-process-notes-callout span {
+  font-weight: 800;
+  color: #854d0e;
+  margin-bottom: 2px;
+  display: block;
+}
+
+.service-process-notes-callout p {
+  margin: 0;
+  color: #713f12;
+}
+
+/* Pricing Form & Payments */
+.service-process-form,
+.service-process-payments-section,
+.service-process-audit-timeline {
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.service-process-form h4,
+.service-process-payments-section h4,
+.service-process-audit-timeline h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 750;
+  color: #0f172a;
+}
+
+.service-process-pending-payments {
+  margin-bottom: 12px;
+}
+
+.service-process-pending-payments h5,
+.service-process-record-payment-box h5 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 750;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.service-process-proof-card {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 10px 14px !important;
+  background: #fff7ed !important;
+  border: 1px solid #fed7aa !important;
+  border-radius: 7px !important;
+  gap: 12px !important;
+}
+
+.service-process-proof-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-primary-button.is-compact {
+  min-height: 30px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+}
+
+.service-process-record-payment-box {
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Updates Log */
+.service-process-update-items {
+  display: grid;
+  gap: 8px;
+}
+
+.service-process-update-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 11px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.service-process-update-icon {
+  font-size: 16px;
+  line-height: 1;
+  color: #0f766e;
+}
+
+.service-process-update-content {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.service-process-update-content strong {
+  font-size: 12px;
+  color: #0f766e;
+}
+
+.service-process-update-content p {
+  margin: 0;
+  font-size: 11.5px;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.service-process-update-content span {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+@media (max-width: 768px) {
+  .service-process-specs-container {
+    grid-template-columns: 1fr;
+  }
+  .service-process-spec-image-box img,
+  .service-process-spec-no-image {
+    width: 100%;
+    max-width: 220px;
+    height: 180px;
+  }
+  .service-spec-chips-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .service-process-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .service-process-client-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .service-process-balance-highlight {
+    text-align: left;
+  }
+}
+
+/* Service taker account rows and account popup */
+.service-danger-button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1px solid #e3b5ae;
+  border-radius: 6px;
+  background: #fff6f4;
+  color: var(--service-danger);
+  font: inherit;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.service-danger-button:hover {
+  border-color: #c8867e;
+  background: #fee7e2;
+}
+
+.service-danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.service-client-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 16px;
+  background: #f4f7f5;
+}
+
+.service-client-table {
+  min-width: 980px;
+  overflow: hidden;
+  border: 1px solid var(--service-line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.service-client-clickable-row {
+  cursor: pointer;
+}
+
+.service-client-identity {
+  display: flex;
+  min-width: 220px;
+  align-items: center;
+  gap: 10px;
+}
+
+.service-client-avatar {
+  display: grid !important;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border: 1px solid #b8d8ce;
+  border-radius: 8px;
+  background: #eaf6f1;
+  color: var(--service-green-dark);
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.service-client-identity > span:last-child,
+.service-client-table td > span,
+.service-client-balance-cell {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.service-client-identity strong,
+.service-client-identity small,
+.service-client-table td > span,
+.service-client-table td small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-client-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.service-client-tags span {
+  display: inline-flex !important;
+  min-height: 24px;
+  align-items: center;
+  margin: 0 !important;
+  padding: 0 8px;
+  border: 1px solid #b8d8ce;
+  border-radius: 999px;
+  background: #eef8f4;
+  color: #0f5d45;
+  font-size: 10.5px;
+  font-weight: 780;
+}
+
+.service-client-balance-cell strong {
+  color: #0f513a;
+}
+
+.service-client-actions-cell {
+  min-width: 250px !important;
+}
+
+.service-client-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.service-client-empty-cell {
+  padding: 30px !important;
+  text-align: center;
+}
+
+.service-client-empty-cell strong,
+.service-client-empty-cell span {
+  display: block;
+  max-width: none !important;
+}
+
+.service-account-modal {
+  width: min(980px, 100%);
+}
+
+.service-delete-modal {
+  width: min(520px, 100%);
+}
+
+.service-account-modal-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.service-account-modal-summary article {
+  display: grid;
+  min-height: 86px;
+  align-content: center;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--service-line);
+  border-radius: 8px;
+  background: #f9fbfa;
+}
+
+.service-account-modal-summary span,
+.service-account-panel > header span,
+.service-account-info-grid span,
+.service-account-order-list button > span,
+.service-account-payment-list small,
+.service-account-payment-amount small {
+  color: #64736d;
+  font-size: 10.5px;
+  font-weight: 780;
+  text-transform: uppercase;
+}
+
+.service-account-modal-summary strong {
+  color: #111827;
+  font-size: 18px;
+  font-weight: 820;
+}
+
+.service-account-modal-summary small {
+  color: #68716d;
+  font-size: 11px;
+}
+
+.service-account-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--service-line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.service-account-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.service-account-panel h3 {
+  margin: 2px 0 0;
+  font-size: 16px;
+  font-weight: 820;
+}
+
+.service-account-total {
+  color: #0f513a;
+  font-size: 16px;
+}
+
+.service-account-info-grid {
+  display: grid;
+  overflow: hidden;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--service-line);
+  border-radius: 8px;
+  background: var(--service-line);
+}
+
+.service-account-info-grid div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 10px;
+  background: #fbfcfb;
+}
+
+.service-account-info-grid strong {
+  overflow: hidden;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-account-info-grid .is-wide {
+  grid-column: span 2;
+}
+
+.service-account-order-list {
+  display: grid;
+  gap: 7px;
+}
+
+.service-account-order-list button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid #d8e0dc;
+  border-radius: 8px;
+  background: #fbfcfb;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.service-account-order-list button:hover {
+  border-color: #9fb9ae;
+  background: #f4faf7;
+}
+
+.service-account-order-list strong,
+.service-account-order-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-account-collapse {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.service-account-collapse span {
+  color: #111827;
+  font-size: 15px;
+  font-weight: 820;
+}
+
+.service-account-collapse strong {
+  color: #0f513a;
+  font-size: 12px;
+}
+
+.service-account-payment-list {
+  display: grid;
+  gap: 7px;
+}
+
+.service-account-payment-list article {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid #e1e7e4;
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.service-account-payment-list article > div:nth-child(2) {
+  min-width: 0;
+}
+
+.service-account-payment-list article > div:nth-child(2) strong,
+.service-account-payment-list article > div:nth-child(2) span,
+.service-account-payment-list article > div:nth-child(2) small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-account-proof-thumb {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #d5dfda;
+  border-radius: 7px;
+  background: #eef3f0;
+  color: #59635e;
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.service-account-proof-thumb a,
+.service-account-proof-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.service-account-proof-thumb img {
+  object-fit: cover;
+}
+
+.service-account-proof-thumb a {
+  display: grid;
+  place-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.service-account-payment-amount {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  text-align: right;
+}
+
+.service-account-empty {
+  padding: 14px;
+  border: 1px dashed #cfd8d3;
+  border-radius: 8px;
+  background: #f9fbfa;
+  color: #64736d;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.service-delete-warning {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #efd1ca;
+  border-radius: 8px;
+  background: #fff7f5;
+}
+
+.service-delete-warning strong {
+  color: var(--service-danger);
+  font-size: 18px;
+}
+
+.service-delete-warning span {
+  color: #6b554f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.service-delete-warning input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d8b8b1;
+  border-radius: 6px;
+  font: inherit;
+}
+
+@media (max-width: 760px) {
+  .service-client-table-wrap {
+    padding: 10px;
+  }
+
+  .service-account-modal-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service-account-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service-account-payment-list article {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .service-account-payment-amount {
+    grid-column: 1 / -1;
+    justify-items: start;
+    text-align: left;
+  }
+}
+
+@media (max-width: 520px) {
+  .service-account-modal-summary,
+  .service-account-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .service-account-info-grid .is-wide {
+    grid-column: auto;
+  }
+
+  .service-client-row-actions {
+    justify-content: flex-start;
+  }
+}
+
+
+/* ==========================================================================
+   CHARGES / BILLING PAGE REDESIGN
+   ========================================================================== */
+
+.service-charges-container {
+  display: grid;
+  gap: 18px;
+  width: 100%;
+}
+
+.service-charges-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.service-charges-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.service-charges-card span {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.service-charges-card strong {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.service-charges-card small {
+  font-size: 11px;
+  color: #10b981;
+  font-weight: 600;
+}
+
+.service-charges-card.is-pending strong {
+  color: #d97706;
+}
+
+.service-charges-card.is-pending small {
+  color: #b45309;
+}
+
+.service-charges-card.is-due strong {
+  color: #dc2626;
+}
+
+.service-charges-card.is-due small {
+  color: #991b1b;
+}
+
+.service-charges-main-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.service-charges-type-pill {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+@media (max-width: 768px) {
+  .service-charges-metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ==========================================================================
+   MODERN RESPONSIVE & CLEAN PORTAL UI ENHANCEMENTS
+   ========================================================================== */
+
+.service-workspace.is-portal {
+  background: #f8fafc;
+  padding: 0;
+}
+
+.service-workspace.is-portal .service-workbench {
+  margin: 16px clamp(12px, 2.5vw, 32px) 32px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.service-workspace.is-portal .service-table-wrap {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  width: 100%;
+}
+
+.service-workspace.is-portal .service-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.service-workspace.is-portal .service-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.service-workspace.is-portal .service-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 13px;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.service-workspace.is-portal .service-table tr:hover td {
+  background: #f8fafc;
+}
+
+/* Responsive Table scroll */
+@media (max-width: 900px) {
+  .service-workspace.is-portal .service-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .service-workspace.is-portal .service-table {
+    min-width: 680px;
+  }
+}
+
+/* Modal Responsive Polish */
+.service-local-order-process-modal {
+  max-width: 960px;
+  width: 95vw;
+  border-radius: 10px;
+}
+
+@media (max-width: 768px) {
+  .service-process-modal-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .service-process-specs-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .service-workflow-track-steps {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .service-process-header-balance-banner {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 8px;
+  }
+}
+
+/* Compact service taker local quote request */
+.service-simple-quote-form {
+  grid-template-columns: minmax(0, 1.35fr) minmax(180px, 0.65fr);
+  gap: 14px;
+}
+
+.service-simple-quote-form .service-simple-quote-field {
+  min-width: 0;
+}
+
+.service-simple-quote-form .service-file-field {
+  min-height: 48px;
+  border-style: dashed;
+  background: #f8fafc;
+}
+
+.service-simple-quote-form .service-file-field:hover {
+  border-color: #0f766e;
+  background: #f1f8f6;
+}
+
+.service-simple-quote-note {
+  border: 1px solid #cfe8df;
+  border-radius: 8px;
+  padding: 11px 13px;
+  background: #f2fbf7;
+  color: #0f513f;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .service-simple-quote-form {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+/* Company-side local order specifications */
+.service-company-spec-panel {
+  grid-column: 1 / -1;
+  border: 1px solid #dbe6df;
+  border-radius: 8px;
+  background: #fbfcfb;
+  padding: 14px;
+}
+
+.service-company-spec-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.service-company-spec-title span {
+  color: #5f6f85;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.service-company-spec-title strong {
+  color: #0f513f;
+  font-size: 13px;
+}
+
+.service-company-spec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.service-company-spec-grid label {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .service-company-spec-panel {
+    padding: 12px;
+  }
+
+  .service-company-spec-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .service-company-spec-grid {
+    grid-template-columns: 1fr;
   }
 }

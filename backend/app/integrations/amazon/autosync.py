@@ -8,7 +8,11 @@ from sqlalchemy import or_
 
 from ...database import SessionLocal
 from .constants import CONNECTION_CONNECTED
-from .jobs import enqueue_full_amazon_sync_jobs, process_amazon_job
+from .jobs import (
+    enqueue_full_amazon_sync_jobs,
+    fail_stale_processing_jobs,
+    process_amazon_job,
+)
 from .models import AmazonAccount, AmazonSyncJob
 from .security import sanitize_external_message
 
@@ -113,6 +117,8 @@ def run_due_amazon_auto_sync() -> bool:
         )
         if now < due_at:
             return False
+
+        fail_stale_processing_jobs(db, amazon_account_id=account.id, now=now)
 
         active_job = (
             db.query(AmazonSyncJob.id)

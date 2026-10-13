@@ -5,6 +5,28 @@ from datetime import datetime
 from .database import Base
 
 
+class MuseSubmission(Base):
+    __tablename__ = "muse_submissions"
+    __table_args__ = (UniqueConstraint("tenant_id", "submission_key"),)
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+    submission_key = Column(String, nullable=False)
+    kind = Column(String, nullable=False)
+    payload = Column(Text, nullable=False)
+    status = Column(String, default="Pending", nullable=False)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)
+
+
+class MuseApiKey(Base):
+    __tablename__ = "muse_api_keys"
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, unique=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    key_hash = Column(String, nullable=False, unique=True)
+
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -1134,6 +1156,22 @@ class PublicAccessRequest(Base):
     approved_user = relationship("User", foreign_keys=[approved_user_id])
     reviewed_by = relationship("User", foreign_keys=[reviewed_by_user_id])
 
+class InternalMessageContactRequest(Base):
+    __tablename__ = "internal_message_contact_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    requester_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    recipient_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    message = Column(Text, nullable=True)
+    status = Column(String, default="pending", index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    requester = relationship("User", foreign_keys=[requester_user_id])
+    recipient = relationship("User", foreign_keys=[recipient_user_id])
+
 class InternalMessage(Base):
     __tablename__ = "internal_messages"
 
@@ -1142,11 +1180,81 @@ class InternalMessage(Base):
     sender_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     recipient_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     body = Column(Text, nullable=False)
+    attachment_url = Column(Text, nullable=True)
+    attachment_name = Column(String, nullable=True)
+    attachment_type = Column(String, nullable=True)
+    attachment_size = Column(Integer, nullable=True)
     read_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     sender = relationship("User", foreign_keys=[sender_user_id])
     recipient = relationship("User", foreign_keys=[recipient_user_id])
+
+
+class WebsiteVisitorSession(Base):
+    __tablename__ = "website_visitor_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    session_id = Column(String, nullable=False, index=True)
+    visitor_name = Column(String, nullable=True)
+    visitor_contact = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+    country = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    first_page_path = Column(String, nullable=True)
+    page_path = Column(String, nullable=True)
+    user_agent = Column(Text, nullable=True)
+    cart_item_count = Column(Integer, default=0)
+    page_view_count = Column(Integer, default=0)
+    add_to_cart_count = Column(Integer, default=0)
+    add_to_cart_units = Column(Integer, default=0)
+    message_count = Column(Integer, default=0)
+    unread_count = Column(Integer, default=0)
+    last_product_id = Column(Integer, nullable=True)
+    last_product_name = Column(String, nullable=True)
+    last_message_preview = Column(Text, nullable=True)
+    last_add_to_cart_at = Column(DateTime, nullable=True)
+    last_message_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    last_seen_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class WebsiteVisitorActivity(Base):
+    __tablename__ = "website_visitor_activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    visitor_session_id = Column(Integer, ForeignKey("website_visitor_sessions.id"), nullable=True, index=True)
+    session_id = Column(String, nullable=False, index=True)
+    event_type = Column(String, nullable=False, default="page_view", index=True)
+    page_path = Column(String, nullable=True)
+    page_title = Column(String, nullable=True)
+    product_id = Column(Integer, nullable=True)
+    product_name = Column(String, nullable=True)
+    cart_item_count = Column(Integer, default=0)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    visitor_session = relationship("WebsiteVisitorSession")
+
+
+class WebsiteVisitorMessage(Base):
+    __tablename__ = "website_visitor_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    visitor_session_id = Column(Integer, ForeignKey("website_visitor_sessions.id"), nullable=True, index=True)
+    session_id = Column(String, nullable=False, index=True)
+    sender_type = Column(String, nullable=False, default="visitor", index=True)
+    sender_name = Column(String, nullable=True)
+    sender_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    body = Column(Text, nullable=False)
+    read_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    visitor_session = relationship("WebsiteVisitorSession")
+    sender_user = relationship("User", foreign_keys=[sender_user_id])
 
 
 class InternalCall(Base):
@@ -1483,6 +1591,7 @@ class Shipping(Base):
     order_id = Column(Integer, ForeignKey("orders.id"), unique=True, nullable=False)
 
     courier_name = Column(String, nullable=True)
+    dispatch_agent = Column(String, nullable=True)
     tracking_number = Column(String, nullable=True)
     package_weight_kg = Column(Float, nullable=True)
     shipping_cost = Column(Float, nullable=True)
@@ -1710,12 +1819,130 @@ class RegularBillPayment(Base):
     bill = relationship("RegularBill", back_populates="payments")
 
 
+class AccountingSettings(Base):
+    __tablename__ = "accounting_settings"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="uq_accounting_settings_tenant"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    base_currency = Column(String, default="PKR")
+    reporting_currency = Column(String, default="PKR")
+    fiscal_year_start_month = Column(Integer, default=1)
+    fiscal_year_start_day = Column(Integer, default=1)
+    lock_date = Column(DateTime, nullable=True)
+    allow_multi_currency = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AccountingFiscalYear(Base):
+    __tablename__ = "accounting_fiscal_years"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_accounting_fiscal_year_tenant_name"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
+    start_date = Column(DateTime, nullable=False, index=True)
+    end_date = Column(DateTime, nullable=False, index=True)
+    status = Column(String, default="Open", index=True)
+    closed_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AccountingPeriodLock(Base):
+    __tablename__ = "accounting_period_locks"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "period_start", "period_end", name="uq_accounting_period_lock_tenant_dates"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    fiscal_year_id = Column(Integer, ForeignKey("accounting_fiscal_years.id"), nullable=True, index=True)
+    period_start = Column(DateTime, nullable=False, index=True)
+    period_end = Column(DateTime, nullable=False, index=True)
+    locked = Column(Boolean, default=True, index=True)
+    locked_at = Column(DateTime, nullable=True)
+    reason = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AccountingCurrencyRate(Base):
+    __tablename__ = "accounting_currency_rates"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "currency", "effective_date", name="uq_accounting_currency_rate_tenant_date"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    currency = Column(String, nullable=False, index=True)
+    rate_to_base = Column(Float, default=1)
+    effective_date = Column(DateTime, nullable=False, index=True)
+    source = Column(String, default="Manual")
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AccountingJournalEntry(Base):
+    __tablename__ = "accounting_journal_entries"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "entry_no", name="uq_accounting_journal_entry_tenant_no"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    entry_no = Column(String, nullable=False, index=True)
+    entry_date = Column(DateTime, default=datetime.utcnow, index=True)
+    memo = Column(Text, nullable=True)
+    source_type = Column(String, nullable=True, index=True)
+    source_id = Column(Integer, nullable=True, index=True)
+    status = Column(String, default="Posted", index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    lines = relationship(
+        "AccountingJournalLine",
+        back_populates="journal_entry",
+        cascade="all, delete-orphan",
+    )
+
+
+class AccountingJournalLine(Base):
+    __tablename__ = "accounting_journal_lines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    journal_entry_id = Column(Integer, ForeignKey("accounting_journal_entries.id"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounting_accounts.id"), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    debit = Column(Float, default=0)
+    credit = Column(Float, default=0)
+    currency = Column(String, default="PKR")
+    exchange_rate = Column(Float, default=1)
+    amount_pkr = Column(Float, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    journal_entry = relationship("AccountingJournalEntry", back_populates="lines")
+    account = relationship("AccountingAccount")
+
+
 class AccountingAccount(Base):
     __tablename__ = "accounting_accounts"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_accounting_account_tenant_name"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
-    name = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, index=True, nullable=False)
     account_type = Column(String, default="Bank")
     platform = Column(String, nullable=True, index=True)
     currency = Column(String, default="PKR")
@@ -1755,6 +1982,163 @@ class AccountingTransaction(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     account = relationship("AccountingAccount", back_populates="transactions")
+
+
+class AccountingDocument(Base):
+    __tablename__ = "accounting_documents"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "document_type", "document_no", name="uq_accounting_document_tenant_type_no"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    document_type = Column(String, nullable=False, index=True)
+    document_no = Column(String, nullable=False, index=True)
+    contact_name = Column(String, nullable=False, index=True)
+    contact_email = Column(String, nullable=True)
+    issue_date = Column(DateTime, default=datetime.utcnow, index=True)
+    due_date = Column(DateTime, nullable=True, index=True)
+    status = Column(String, default="Open", index=True)
+    currency = Column(String, default="PKR")
+    exchange_rate = Column(Float, default=1)
+    subtotal = Column(Float, default=0)
+    tax_total = Column(Float, default=0)
+    total = Column(Float, default=0)
+    notes = Column(Text, nullable=True)
+    source_type = Column(String, nullable=True, index=True)
+    source_id = Column(Integer, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    lines = relationship("AccountingDocumentLine", back_populates="document", cascade="all, delete-orphan")
+    payments = relationship("AccountingDocumentPayment", back_populates="document", cascade="all, delete-orphan")
+
+
+class AccountingDocumentLine(Base):
+    __tablename__ = "accounting_document_lines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    document_id = Column(Integer, ForeignKey("accounting_documents.id"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounting_accounts.id"), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    quantity = Column(Float, default=1)
+    unit_price = Column(Float, default=0)
+    amount = Column(Float, default=0)
+    tax_amount = Column(Float, default=0)
+    total = Column(Float, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    document = relationship("AccountingDocument", back_populates="lines")
+    account = relationship("AccountingAccount")
+
+
+class AccountingDocumentPayment(Base):
+    __tablename__ = "accounting_document_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    document_id = Column(Integer, ForeignKey("accounting_documents.id"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounting_accounts.id"), nullable=False, index=True)
+    amount = Column(Float, default=0)
+    currency = Column(String, default="PKR")
+    exchange_rate = Column(Float, default=1)
+    amount_pkr = Column(Float, default=0)
+    payment_date = Column(DateTime, default=datetime.utcnow, index=True)
+    reference = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    document = relationship("AccountingDocument", back_populates="payments")
+    account = relationship("AccountingAccount")
+
+
+class AccountingBankTransaction(Base):
+    __tablename__ = "accounting_bank_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    account_id = Column(Integer, ForeignKey("accounting_accounts.id"), nullable=False, index=True)
+    transaction_date = Column(DateTime, default=datetime.utcnow, index=True)
+    description = Column(Text, nullable=True)
+    reference = Column(String, nullable=True, index=True)
+    counterparty = Column(String, nullable=True, index=True)
+    money_in = Column(Float, default=0)
+    money_out = Column(Float, default=0)
+    currency = Column(String, default="PKR")
+    exchange_rate = Column(Float, default=1)
+    amount_pkr = Column(Float, default=0)
+    status = Column(String, default="Unmatched", index=True)
+    matched_source_type = Column(String, nullable=True, index=True)
+    matched_source_id = Column(Integer, nullable=True, index=True)
+    matched_at = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    account = relationship("AccountingAccount")
+
+
+class AccountingBankRule(Base):
+    __tablename__ = "accounting_bank_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    account_id = Column(Integer, ForeignKey("accounting_accounts.id"), nullable=True, index=True)
+    match_field = Column(String, default="Any")
+    match_type = Column(String, default="Contains")
+    match_value = Column(String, nullable=False)
+    action = Column(String, default="Create Money Entry")
+    direction = Column(String, nullable=True)
+    category = Column(String, default="Other")
+    counterparty = Column(String, nullable=True)
+    platform = Column(String, nullable=True)
+    description_template = Column(Text, nullable=True)
+    priority = Column(Integer, default=100)
+    is_active = Column(Boolean, default=True)
+    auto_match = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    account = relationship("AccountingAccount")
+
+
+class AccountingRecurringTemplate(Base):
+    __tablename__ = "accounting_recurring_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    template_type = Column(String, default="Money Entry", index=True)
+    status = Column(String, default="Active", index=True)
+    frequency = Column(String, default="Monthly")
+    interval_count = Column(Integer, default=1)
+    next_run_date = Column(DateTime, nullable=False, index=True)
+    end_date = Column(DateTime, nullable=True)
+    last_run_at = Column(DateTime, nullable=True)
+    occurrences_generated = Column(Integer, default=0)
+    max_occurrences = Column(Integer, nullable=True)
+    account_id = Column(Integer, ForeignKey("accounting_accounts.id"), nullable=True, index=True)
+    line_account_id = Column(Integer, ForeignKey("accounting_accounts.id"), nullable=True, index=True)
+    direction = Column(String, nullable=True)
+    category = Column(String, default="Other")
+    amount = Column(Float, default=0)
+    tax_amount = Column(Float, default=0)
+    currency = Column(String, default="PKR")
+    exchange_rate = Column(Float, default=1)
+    contact_name = Column(String, nullable=True)
+    contact_email = Column(String, nullable=True)
+    document_status = Column(String, default="Open")
+    line_description = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    account = relationship("AccountingAccount", foreign_keys=[account_id])
+    line_account = relationship("AccountingAccount", foreign_keys=[line_account_id])
 
 
 class ProductionBatch(Base):
@@ -1837,16 +2221,16 @@ class SharedData(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
-    
+
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
-    
+
     shared_platform = Column(String, default="WhatsApp")  # WhatsApp, Email, SMS, etc.
     shared_data = Column(String, nullable=True)  # The actual message shared
-    
+
     shared_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     order = relationship("Order")
     customer = relationship("Customer")
 
@@ -1914,6 +2298,9 @@ from .service_takers.models import (
     ServiceTakerInbound,
     ServiceTakerInboundItem,
     ServiceTakerInventoryTransaction,
+    ServiceTakerManufacturingOrder,
+    ServiceTakerManufacturingPayment,
+    ServiceTakerManufacturingUpdate,
     ServiceTakerOrder,
     ServiceTakerOrderItem,
     ServiceTakerProduct,
@@ -1955,8 +2342,20 @@ TENANT_SCOPED_MODELS = (
     CourierPayment,
     RegularBill,
     RegularBillPayment,
+    AccountingSettings,
+    AccountingFiscalYear,
+    AccountingPeriodLock,
+    AccountingCurrencyRate,
+    AccountingJournalEntry,
+    AccountingJournalLine,
     AccountingAccount,
     AccountingTransaction,
+    AccountingDocument,
+    AccountingDocumentLine,
+    AccountingDocumentPayment,
+    AccountingBankTransaction,
+    AccountingBankRule,
+    AccountingRecurringTemplate,
     ProductionBatch,
     ProductionTask,
     SharedData,
@@ -1971,6 +2370,9 @@ TENANT_SCOPED_MODELS = (
     ServiceTakerOrder,
     ServiceTakerOrderItem,
     ServiceTakerInventoryTransaction,
+    ServiceTakerManufacturingOrder,
+    ServiceTakerManufacturingPayment,
+    ServiceTakerManufacturingUpdate,
 )
 
 
@@ -2064,4 +2466,3 @@ def assign_tenant_ids_before_flush(session, flush_context, instances):
     for item in session.new:
         if isinstance(item, TENANT_SCOPED_MODELS) and getattr(item, "tenant_id", None) is None:
             item.tenant_id = tenant_id
-

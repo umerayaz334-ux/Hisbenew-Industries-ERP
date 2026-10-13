@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form, Request, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, or_, select
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
@@ -34,7 +35,7 @@ from urllib import request as urllib_request
 
 from .config import APP_DATA_DIR, CORS_ALLOW_ORIGINS, CORS_ALLOW_ORIGIN_REGEX, FRONTEND_DIST_DIR, INTERNAL_CALL_ICE_SERVERS, STATIC_DIR, UPLOAD_DIR
 from .database import Base, DEFAULT_TENANT_NAME, DEFAULT_TENANT_SLUG, engine, SessionLocal, ensure_scaling_indexes, migrate_database
-from .models import Tenant, Module, TenantModule, CustomPage, Product, Customer, User, ActivityLog, UserRoleRequest, PublicAccessRequest, InternalMessage, InternalCall, InternalCallSignal, InspirationItem, OrderImportBatch, Order, OrderItem, StockMovement, Supplier, SupplierOrderItem, SupplierSupplyItem, SupplierTransaction, SupplierPayment, WorkflowStep, Worker, WorkerPayment, Shipping, FulfillmentShipment, FulfillmentBox, FulfillmentBoxItem, FulfillmentInventoryDiscrepancy, FulfillmentOrder, FulfillmentOrderItem, FulfillmentPick, CourierPayment, RegularBill, RegularBillPayment, AccountingAccount, AccountingTransaction, ProductionBatch, ProductionTask, SharedData, WorkspaceData, OrderWorkflowTask, OrderFollowUp
+from .models import Tenant, Module, TenantModule, CustomPage, Product, Customer, User, ActivityLog, UserRoleRequest, PublicAccessRequest, InternalMessage, InternalMessageContactRequest, WebsiteVisitorSession, WebsiteVisitorActivity, WebsiteVisitorMessage, InternalCall, InternalCallSignal, InspirationItem, OrderImportBatch, Order, OrderItem, StockMovement, Supplier, SupplierOrderItem, SupplierSupplyItem, SupplierTransaction, SupplierPayment, WorkflowStep, Worker, WorkerPayment, Shipping, FulfillmentShipment, FulfillmentBox, FulfillmentBoxItem, FulfillmentInventoryDiscrepancy, FulfillmentOrder, FulfillmentOrderItem, FulfillmentPick, CourierPayment, RegularBill, RegularBillPayment, AccountingSettings, AccountingFiscalYear, AccountingPeriodLock, AccountingCurrencyRate, AccountingJournalEntry, AccountingJournalLine, AccountingAccount, AccountingTransaction, AccountingDocument, AccountingDocumentLine, AccountingDocumentPayment, AccountingBankTransaction, AccountingBankRule, AccountingRecurringTemplate, ProductionBatch, ProductionTask, SharedData, WorkspaceData, OrderWorkflowTask, OrderFollowUp
 from .integrations.amazon import router as amazon_router
 from .integrations.amazon.autosync import amazon_auto_sync_service
 from .integrations.amazon.constants import (
@@ -54,7 +55,9 @@ from .integrations.amazon.models import (
 )
 from .school import ensure_default_school_foundation, router as school_router
 from .service_takers import router as service_taker_router
-from .deployment_control import router as deployment_router
+from .routers.deployment_router import router as deployment_router
+from .routers.backups_router import router as backups_router
+from .services.backup_service import start_backup_scheduler, stop_backup_scheduler
 from .security import (
     create_access_token,
     decode_access_token,
@@ -63,19 +66,20 @@ from .security import (
     validate_upload_extension,
     verify_pin,
 )
-from .realtime import realtime_hub
-from .label_printing import LabelPrintError, list_label_printers, print_tspl_labels
-from .product_catalog import (
+from .services.realtime import realtime_hub
+from .services.printing.label_printing import LabelPrintError, list_label_printers, print_tspl_labels
+from .services.catalog.product_catalog import (
     CATALOG_DOWNLOAD_TOKEN_TTL_SECONDS,
     MAX_FAIRE_WORKBOOK_BYTES,
     ProductCatalogError,
     build_product_catalog_pdf,
     create_catalog_download_token,
     decode_catalog_download_token,
+    validate_catalog_discount,
     import_faire_workbook,
     verify_catalog_download_token,
 )
-from .usa_shipping import (
+from .services.shipping.usa_shipping import (
     MAX_RATE_WORKBOOK_BYTES,
     RateWorkbookError,
     activate_usa_rate_card,
@@ -83,6 +87,19 @@ from .usa_shipping import (
     normalize_service as normalize_usa_shipping_service,
     parse_usa_rate_workbook,
     usa_rate_card_summary,
+)
+from .integrations.fedex.tracking import (
+    detect_carrier_by_tracking,
+    fetch_fedex_tracking_batch,
+    generate_mock_tracking_response,
+    is_real_fedex_delivered_result,
+    tracking_unavailable_response,
+    get_carrier_tracking_url,
+    get_public_fedex_settings,
+    load_fedex_settings,
+    save_fedex_settings,
+    set_manual_tracking_status,
+    test_fedex_connection,
 )
 from .schemas import (
     TenantCreate, TenantUpdate, TenantDeleteRequest, TenantOut, ModuleOut, TenantModuleUpdate,
@@ -92,7 +109,7 @@ from .schemas import (
     UserCreate, UserUpdate, UserPinReset, UserOut, LoginRequest, LoginResponse, UserProfileUpdate,
     RoleRequestCreate, RoleRequestUpdate, RoleRequestOut,
     PublicAccessRequestCreate, PublicAccessRequestReview, PublicAccessRequestUpdate, PublicAccessRequestOut,
-    InternalMessageCreate, InternalMessageOut, InternalMessageUserOut,
+    InternalMessageCreate, InternalMessageOut, InternalMessageUserOut, InternalMessageContactRequestCreate, InternalMessageContactRequestReview, InternalMessageContactRequestOut, InternalMessageContactSearchOut,
     InternalCallCreate, InternalCallAction, InternalCallOut,
     InternalCallSignalCreate, InternalCallSignalOut,
     ActivityPageViewCreate, ActivityLogOut,
@@ -113,6 +130,19 @@ from .schemas import (
     RegularBillCreate, RegularBillUpdate, RegularBillPaymentCreate, RegularBillOut,
     AccountingAccountCreate, AccountingAccountUpdate, AccountingAccountOut,
     AccountingTransactionCreate, AccountingTransactionUpdate, AccountingTransactionOut,
+    AccountingSettingsUpdate, AccountingSettingsOut,
+    AccountingFiscalYearCreate, AccountingFiscalYearUpdate, AccountingFiscalYearOut,
+    AccountingPeriodLockCreate, AccountingPeriodLockUpdate, AccountingPeriodLockOut,
+    AccountingCurrencyRateCreate, AccountingCurrencyRateUpdate, AccountingCurrencyRateOut,
+    AccountingJournalLineCreate, AccountingJournalLineOut,
+    AccountingJournalEntryCreate, AccountingJournalEntryUpdate, AccountingJournalEntryOut,
+    AccountingDocumentLineCreate, AccountingDocumentLineOut,
+    AccountingDocumentPaymentCreate, AccountingDocumentPaymentOut,
+    AccountingDocumentCreate, AccountingDocumentUpdate, AccountingDocumentOut,
+    AccountingBankTransactionCreate, AccountingBankTransactionUpdate,
+    AccountingBankTransactionImportRequest, AccountingBankTransactionMatchRequest, AccountingBankTransactionOut,
+    AccountingBankRuleCreate, AccountingBankRuleUpdate, AccountingBankRuleApplyRequest, AccountingBankRuleOut,
+    AccountingRecurringTemplateCreate, AccountingRecurringTemplateUpdate, AccountingRecurringRunRequest, AccountingRecurringTemplateOut,
     ManualProductionTaskCreate, ProductionBatchCreate, ProductionBatchUpdate, ProductionTaskAssign,
     ProductionTaskProgressUpdate, ProductionTaskComplete,
     SharedDataCreate, SharedDataOut, WorkspaceDataPayload,
@@ -131,25 +161,97 @@ def get_db(request: Request):
     finally:
         db.close()
 
-from .print_agent import router as print_agent_router
+from .routers.print_agent_router import router as print_agent_router
 
 # Initialize FastAPI application with a descriptive title
 app = FastAPI(title="Hisbenew Industries ERP")
+
+# Highly Optimized WebP Dynamic Image Delivery (High Priority)
+@app.get("/static/uploads/{file_path:path}")
+def serve_optimized_upload_image(file_path: str, request: Request, w: int | None = Query(None)):
+    """
+    Lightning-fast image delivery with on-the-fly WebP compression,
+    intelligent resolution downscaling, disk caching, and strong browser caching headers.
+    """
+    raw_path = Path(STATIC_DIR) / "uploads" / file_path
+    if not raw_path.exists() or not raw_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    ext = raw_path.suffix.lower()
+    if ext not in {".png", ".jpg", ".jpeg", ".webp"}:
+        return FileResponse(
+            path=str(raw_path),
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
+    # Determine target resolution
+    max_dim = 1000
+    if w and w > 0:
+        max_dim = min(int(w), 1200)
+
+    # Check for optimized WebP cache
+    opt_dir = Path(STATIC_DIR) / "optimized"
+    opt_path = opt_dir / f"{raw_path.stem}_w{max_dim}.webp"
+
+    try:
+        if not opt_path.exists() or opt_path.stat().st_mtime < raw_path.stat().st_mtime:
+            opt_dir.mkdir(parents=True, exist_ok=True)
+            from PIL import Image
+
+            with Image.open(raw_path) as im:
+                if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+                    im = im.convert("RGBA")
+                else:
+                    im = im.convert("RGB")
+
+                # Resize to target dimension
+                if max(im.size) > max_dim:
+                    resample_filter = Image.Resampling.BILINEAR if max_dim <= 200 else Image.Resampling.LANCZOS
+                    im.thumbnail((max_dim, max_dim), resample_filter)
+
+                # Quality 78 and method 4 for 10x faster generation and minimal size
+                im.save(str(opt_path), "WEBP", quality=78, method=4)
+
+        # Check ETag / If-None-Match for instantaneous 304 response
+        file_stat = opt_path.stat()
+        etag = f'"{int(file_stat.st_mtime)}-{file_stat.st_size}"'
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "public, max-age=31536000, immutable"})
+
+        return FileResponse(
+            path=str(opt_path),
+            media_type="image/webp",
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "ETag": etag,
+                "X-Image-Optimized": "true",
+            },
+        )
+    except Exception:
+        return FileResponse(
+            path=str(raw_path),
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
 app.include_router(school_router)
 app.include_router(amazon_router)
 app.include_router(service_taker_router)
 app.include_router(deployment_router)
 app.include_router(print_agent_router)
+app.include_router(backups_router)
 app.router.add_event_handler("startup", realtime_hub.start)
 app.router.add_event_handler("shutdown", realtime_hub.stop)
 app.router.add_event_handler("startup", amazon_auto_sync_service.start)
 app.router.add_event_handler("shutdown", amazon_auto_sync_service.stop)
+app.router.add_event_handler("startup", start_backup_scheduler)
+app.router.add_event_handler("shutdown", stop_backup_scheduler)
 
 ALL_ERP_PAGES = [
     "School ERP",
     "Dashboard",
     "Customers",
     "Orders",
+    "Local Orders",
     "Payouts",
     "Billings",
     "Accounting",
@@ -164,12 +266,12 @@ ALL_ERP_PAGES = [
     "Service Products",
     "Service Inbound",
     "Service Shipments",
+    "Service Manufacturing",
     "Service Charges",
     "Follow Ups",
     "Products",
     "Inventory",
     "Label Printer",
-    "Label Printer 2",
     "Suppliers",
     "Manufacturing",
     "Production",
@@ -177,6 +279,7 @@ ALL_ERP_PAGES = [
     "Worker Payouts",
     "Reports",
     "Website",
+    "Website Visitors",
     "Deployment",
     "Settings",
     "Amazon Settings",
@@ -203,6 +306,7 @@ SERVICE_TAKER_PORTAL_PAGES = [
     "Service Products",
     "Service Inbound",
     "Service Shipments",
+    "Service Manufacturing",
     "Service Charges",
 ]
 
@@ -576,6 +680,7 @@ ROLE_PAGE_DEFAULTS = {
         "Worker Payouts",
         "Reports",
         "Website",
+        "Website Visitors",
         "Settings",
         "Quotes",
         "Inspiration",
@@ -599,6 +704,7 @@ ROLE_PAGE_DEFAULTS = {
 }
 
 PAGE_PARENT_MAP = {
+    "Local Orders": "Orders",
     "Payouts": "Orders",
     "Billings": "Orders",
     "Accounting": "Orders",
@@ -620,6 +726,7 @@ PAGE_PARENT_MAP = {
     "Add Company": "Settings",
     "Companies": "Settings",
     "Website": "Settings",
+    "Website Visitors": "Website",
     "Deployment": "Settings",
     "Amazon Settings": "Settings",
     "Amazon Listings": "Products",
@@ -638,7 +745,24 @@ def normalize_username(username: str | None, name: str) -> str:
 
 def normalize_allowed_pages(role: str, pages: list[str] | None) -> list[str]:
     if role == "service_taker":
-        return SERVICE_TAKER_PORTAL_PAGES.copy()
+        requested_service_pages = SERVICE_TAKER_PORTAL_PAGES.copy() if pages is None else pages
+        normalized_service_pages = [
+            page
+            for page in requested_service_pages
+            if page in SERVICE_TAKER_PORTAL_PAGES
+        ]
+        has_fulfillment_page = any(
+            page in normalized_service_pages
+            for page in ('Service Inbound', 'Service Shipments')
+        )
+        if (
+            "Service Charges" in normalized_service_pages
+            and not has_fulfillment_page
+            and "Service Manufacturing" not in normalized_service_pages
+        ):
+            insert_at = 1 if "Service Dashboard" in normalized_service_pages else 0
+            normalized_service_pages.insert(insert_at, "Service Manufacturing")
+        return normalized_service_pages
     if role == "super_admin":
         return SUPER_ADMIN_PLATFORM_PAGES.copy()
     requested = ROLE_PAGE_DEFAULTS.get(role, ROLE_PAGE_DEFAULTS["worker"]) if pages is None else pages
@@ -662,6 +786,7 @@ def normalize_allowed_pages(role: str, pages: list[str] | None) -> list[str]:
         "Amazon Finances",
         "Amazon Pricing",
         "Service Takers",
+        "Local Orders",
     ):
         if role in {"admin", "super_admin"} and admin_page not in normalized:
             normalized.append(admin_page)
@@ -678,6 +803,8 @@ def normalize_allowed_pages(role: str, pages: list[str] | None) -> list[str]:
     )
     if (can_print_product_labels or can_print_warehouse_labels) and "Label Printer" not in normalized:
         normalized.append("Label Printer")
+    if "Website" in normalized and "Website Visitors" not in normalized:
+        normalized.append("Website Visitors")
     if "Dashboard" not in normalized:
         normalized.insert(0, "Dashboard")
     return normalized
@@ -689,7 +816,11 @@ def normalize_session_expiry_minutes(value: int | None) -> int:
     return max(0, int(value))
 
 TENANT_ADMIN_ROLES = {"admin", "super_admin"}
-TENANT_ALWAYS_ALLOWED_PAGES = {"Dashboard", "Settings", "Users"}
+TENANT_ALWAYS_ALLOWED_PAGES = {"Dashboard"}
+TENANT_MODULE_PAGE_ALIASES = {
+    "Printer Settings": "Label Printer",
+    "Worker Accounts": "Workers",
+}
 SCRATCH_COMPANY_NAME = "Cuterex"
 SCRATCH_COMPANY_SLUG = "cuterex"
 SCRATCH_COMPANY_ADMIN_USERNAME = "Cuterex"
@@ -811,17 +942,45 @@ def require_super_admin(request: Request, db: Session) -> User:
     return user
 
 
+def selected_tenant_header_present(request: Request) -> bool:
+    return bool((request.headers.get("X-ERP-Tenant-Id") or "").strip())
+
+
+def is_platform_super_admin_request(request: Request, user: User | None) -> bool:
+    return bool(user and user.role == "super_admin" and not selected_tenant_header_present(request))
+
+
+def tenant_scope_id_for_request(request: Request, user: User | None) -> int | None:
+    if not user:
+        return None
+    if is_platform_super_admin_request(request, user):
+        return None
+    return getattr(request.state, "tenant_id", None) or user.tenant_id
+
+
+def normalize_assignable_user_role(request: Request, actor: User, role: str | None) -> str:
+    clean_role = (role or "unassigned").strip()
+    if clean_role not in ROLE_PAGE_DEFAULTS:
+        clean_role = "unassigned"
+    if clean_role == "super_admin" and not is_platform_super_admin_request(request, actor):
+        raise HTTPException(status_code=403, detail="Only platform Super Admin can assign the Super admin role.")
+    return clean_role
+
+
 def tenant_id_for_write(
     request: Request,
     db: Session,
     requested_tenant_id: int | None = None,
 ) -> int:
     user = require_tenant_admin(request, db)
-    if user.role == "super_admin" and requested_tenant_id is not None:
+    tenant_scope_id = tenant_scope_id_for_request(request, user)
+    if is_platform_super_admin_request(request, user) and requested_tenant_id is not None:
         return get_tenant_or_404(db, requested_tenant_id).id
-    if user.tenant_id is not None:
-        if requested_tenant_id is not None and requested_tenant_id != user.tenant_id:
+    if tenant_scope_id is not None:
+        if requested_tenant_id is not None and requested_tenant_id != tenant_scope_id:
             raise HTTPException(status_code=403, detail="This user cannot write into another company tenant.")
+        return tenant_scope_id
+    if user.tenant_id is not None:
         return user.tenant_id
     return get_default_tenant(db).id
 
@@ -867,6 +1026,10 @@ def tenant_enabled_page_set(db: Session, tenant_id: int | None) -> tuple[set[str
     return cache[cache_key]
 
 
+def tenant_module_controller_page(page: str) -> str:
+    return TENANT_MODULE_PAGE_ALIASES.get(page, page)
+
+
 def tenant_filtered_allowed_pages(
     db: Session | None,
     tenant_id: int | None,
@@ -881,7 +1044,9 @@ def tenant_filtered_allowed_pages(
     return [
         page
         for page in pages
-        if page in TENANT_ALWAYS_ALLOWED_PAGES or page not in known_pages or page in enabled
+        if page in TENANT_ALWAYS_ALLOWED_PAGES
+        or tenant_module_controller_page(page) not in known_pages
+        or tenant_module_controller_page(page) in enabled
     ]
 
 
@@ -1066,7 +1231,11 @@ def internal_message_response(message: InternalMessage, current_user_id: int) ->
         "recipient_user_id": message.recipient_user_id,
         "sender_name": message.sender.name if message.sender else "User",
         "recipient_name": message.recipient.name if message.recipient else "User",
-        "body": message.body,
+        "body": message.body or "",
+        "attachment_url": message.attachment_url,
+        "attachment_name": message.attachment_name,
+        "attachment_type": message.attachment_type,
+        "attachment_size": message.attachment_size,
         "read_at": message.read_at,
         "created_at": message.created_at,
         "is_mine": message.sender_user_id == current_user_id,
@@ -1117,6 +1286,8 @@ def internal_call_signal_response(signal: InternalCallSignal) -> dict:
 
 def publish_internal_message(message: InternalMessage) -> None:
     for user_id in {message.sender_user_id, message.recipient_user_id}:
+        if user_id is None:
+            continue
         realtime_hub.publish_from_thread(
             [user_id],
             {
@@ -1252,10 +1423,12 @@ def require_page_access(request: Request, db: Session, page: str) -> User:
     except (TypeError, json.JSONDecodeError):
         stored_pages = None
 
+    access_role = "admin" if user.role == "super_admin" and selected_tenant_header_present(request) else user.role
+    access_pages = None if access_role != user.role else stored_pages
     allowed_pages = tenant_filtered_allowed_pages(
         db,
-        user.tenant_id,
-        normalize_allowed_pages(user.role, stored_pages),
+        tenant_scope_id_for_request(request, user),
+        normalize_allowed_pages(access_role, access_pages),
     )
     if page not in allowed_pages:
         raise HTTPException(status_code=403, detail=f"{page} access is required.")
@@ -1649,6 +1822,7 @@ def record_activity(
         actor_user_name = "System"
 
     activity = ActivityLog(
+        tenant_id=db.info.get("tenant_id"),
         actor_user_id=actor_user_id,
         actor_user_name=actor_user_name,
         action=action,
@@ -1871,9 +2045,14 @@ async def create_product(
 @app.get("/users", response_model=list[UserOut])
 def list_users(request: Request, db: Session = Depends(get_db)):
     actor = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     query = db.query(User).options(joinedload(User.tenant))
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(User.tenant_id == tenant_scope_id)
+        if actor.role == "super_admin":
+            query = query.filter(User.role != "super_admin")
     return [user_response(user, db) for user in query.order_by(User.id.desc()).all()]
 
 
@@ -1899,6 +2078,7 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
         or clean_path.startswith("/favicon")
         or clean_path.startswith("/manifest")
         or clean_path.startswith("/public-live-chat")
+        or clean_path.startswith("/website-analytics")
         or clean_path.startswith("/sw.js")
         or clean_path.startswith("/health")
         or clean_path.startswith("/app-install-info")
@@ -1919,12 +2099,12 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
 async def upload_database_sync_file(file: UploadFile = File(...)):
     db_file_path = APP_DATA_DIR / "hisbenew_industries.db"
     backup_file_path = APP_DATA_DIR / "hisbenew_industries.db.bak"
-    
+
     try:
         engine.dispose()
     except Exception:
         pass
-        
+
     if db_file_path.exists():
         import shutil
         try:
@@ -1955,6 +2135,21 @@ async def upload_database_sync_file(file: UploadFile = File(...)):
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
+    if request.url.path.startswith("/integrations/muse/"):
+        from .muse_api import authenticate
+        try:
+            scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+            if scheme.lower() != "bearer" or not token.startswith("muse_"):
+                raise HTTPException(401, "Muse API key required")
+            with SessionLocal() as key_db:
+                user, tenant_id = authenticate(key_db, token)
+                request.state.user_id = user.id
+                request.state.user_name = user.username or user.name
+                request.state.authenticated_user = user
+                request.state.tenant_id = tenant_id
+            return await call_next(request)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     if is_auth_exempt_path(request.url.path, request.method):
         return await call_next(request)
 
@@ -1983,7 +2178,14 @@ async def auth_middleware(request: Request, call_next):
             headers=exc.headers or {"WWW-Authenticate": "Bearer"},
         )
 
-    user_id = int(payload.get("sub", "0"))
+    try:
+        user_id = int(payload.get("sub", "0"))
+    except (ValueError, TypeError):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid authentication token subject"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     db = SessionLocal()
     request_tenant_id = None
     request_tenant_slug = None
@@ -2085,15 +2287,26 @@ async def auth_middleware(request: Request, call_next):
 
 
 @app.get("/user-access-options")
-def get_user_access_options():
+def get_user_access_options(request: Request, db: Session = Depends(get_db)):
+    user = get_authenticated_user(request, db)
+    tenant_id = tenant_scope_id_for_request(request, user)
+    platform_super_admin = is_platform_super_admin_request(request, user)
+    pages = tenant_filtered_allowed_pages(db, tenant_id, ALL_ERP_PAGES)
+    if not platform_super_admin:
+        pages = [page for page in pages if page not in {"Add Company", "Companies"}]
+    role_defaults = {}
+    for role, defaults in ROLE_PAGE_DEFAULTS.items():
+        if role == "super_admin" and not platform_super_admin:
+            continue
+        role_defaults[role] = tenant_filtered_allowed_pages(db, tenant_id, defaults)
     return {
-        "pages": ALL_ERP_PAGES,
-        "role_defaults": ROLE_PAGE_DEFAULTS,
+        "pages": pages,
+        "role_defaults": role_defaults,
         "parent_map": PAGE_PARENT_MAP,
         "privacy_settings": DEFAULT_ACCESS_PRIVACY_SETTINGS,
         "privacy_role_defaults": {
             role: default_access_privacy_settings_for_role(role)
-            for role in ROLE_PAGE_DEFAULTS
+            for role in role_defaults
         },
     }
 
@@ -3424,7 +3637,19 @@ def erase_data(payload: DataEraseRequest, request: Request, db: Session = Depend
                 {WorkerPayment.accounting_transaction_id: None},
                 synchronize_session=False,
             )
+            delete_query_rows(db.query(AccountingBankTransaction), counts, "accounting_bank_transactions")
+            delete_query_rows(db.query(AccountingBankRule), counts, "accounting_bank_rules")
+            delete_query_rows(db.query(AccountingRecurringTemplate), counts, "accounting_recurring_templates")
+            delete_query_rows(db.query(AccountingDocumentPayment), counts, "accounting_document_payments")
+            delete_query_rows(db.query(AccountingDocumentLine), counts, "accounting_document_lines")
+            delete_query_rows(db.query(AccountingDocument), counts, "accounting_documents")
+            delete_query_rows(db.query(AccountingJournalLine), counts, "accounting_journal_lines")
+            delete_query_rows(db.query(AccountingJournalEntry), counts, "accounting_journal_entries")
             delete_query_rows(db.query(AccountingTransaction), counts, "accounting_transactions")
+            delete_query_rows(db.query(AccountingCurrencyRate), counts, "accounting_currency_rates")
+            delete_query_rows(db.query(AccountingPeriodLock), counts, "accounting_period_locks")
+            delete_query_rows(db.query(AccountingFiscalYear), counts, "accounting_fiscal_years")
+            delete_query_rows(db.query(AccountingSettings), counts, "accounting_settings")
             delete_query_rows(db.query(AccountingAccount), counts, "accounting_accounts")
         if "inspiration" in keys:
             erase_inspiration_data(db, counts, file_urls)
@@ -4101,16 +4326,21 @@ def create_user(user: UserCreate, request: Request, db: Session = Depends(get_db
         raise HTTPException(status_code=400, detail="Username is required")
     ensure_username_available(db, clean_username)
     actor = require_page_access(request, db, "Users")
-    target_tenant_id = (
-        get_tenant_or_404(db, user.tenant_id).id
-        if actor.role == "super_admin" and user.tenant_id is not None
-        else (actor.tenant_id or get_default_tenant(db).id)
-    )
-    if actor.role == "super_admin":
+    clean_role = normalize_assignable_user_role(request, actor, user.role)
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
+    if clean_role == "super_admin":
+        target_tenant_id = None
+    else:
+        target_tenant_id = (
+            get_tenant_or_404(db, user.tenant_id).id
+            if is_platform_super_admin_request(request, actor) and user.tenant_id is not None
+            else (tenant_scope_id or actor.tenant_id or get_default_tenant(db).id)
+        )
+    if actor.role == "super_admin" and target_tenant_id is not None:
         db.info["tenant_id"] = target_tenant_id
 
     worker_id = user.worker_id
-    if user.role == "worker" and worker_id is None:
+    if clean_role == "worker" and worker_id is None:
         new_worker = Worker(
             tenant_id=target_tenant_id,
             name=clean_name,
@@ -4132,14 +4362,14 @@ def create_user(user: UserCreate, request: Request, db: Session = Depends(get_db
         username=clean_username,
         pin=hash_pin(user.pin),
         raw_pin=user.pin,
-        role=user.role,
+        role=clean_role,
         phone=user.phone,
         email=user.email,
-        allowed_pages=json.dumps(normalize_allowed_pages(user.role, user.allowed_pages)),
+        allowed_pages=json.dumps(normalize_allowed_pages(clean_role, user.allowed_pages)),
         customer_privacy_settings=json.dumps(
             normalize_access_privacy_settings(
                 user.customer_privacy_settings,
-                user.role,
+                clean_role,
             )
         ),
         session_expiry_minutes=normalize_session_expiry_minutes(
@@ -4160,25 +4390,40 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if not identifier:
         raise HTTPException(status_code=400, detail="Username is required")
 
-    query = (
+    candidates = (
         db.query(User)
         .execution_options(skip_tenant_scope=True)
         .filter(
             func.lower(func.coalesce(User.username, User.name)) == identifier.lower(),
             User.is_active == True,
         )
+        .order_by(User.id.asc())
+        .all()
     )
-    if payload.tenant_slug:
-        tenant = tenant_for_slug(db, payload.tenant_slug)
-        if not tenant:
-            raise HTTPException(status_code=401, detail="Invalid credentials or inactive user")
-        query = query.filter(User.tenant_id == tenant.id)
-    user = query.first()
-    if not user or not verify_pin(payload.pin, user.pin):
+    scoped_tenant = tenant_for_slug(db, payload.tenant_slug) if payload.tenant_slug else None
+    if scoped_tenant:
+        candidates = sorted(
+            candidates,
+            key=lambda candidate: (
+                0
+                if candidate.tenant_id == scoped_tenant.id
+                else 1
+                if candidate.role == "super_admin"
+                else 2,
+                candidate.id or 0,
+            ),
+        )
+    user = next(
+        (candidate for candidate in candidates if verify_pin(payload.pin, candidate.pin)),
+        None,
+    )
+    if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials or inactive user")
-    if user.tenant_id is None:
+    if user.role == "super_admin":
+        user.tenant_id = None
+    elif user.tenant_id is None:
         user.tenant_id = get_default_tenant(db).id
-    elif user.tenant and (user.tenant.status or "active") != "active" and user.role != "super_admin":
+    elif user.tenant and (user.tenant.status or "active") != "active":
         raise HTTPException(status_code=401, detail="Invalid credentials or inactive user")
 
     if not user.pin.startswith("pbkdf2_sha256$"):
@@ -4210,8 +4455,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session = Depends(get_db)):
     actor = require_page_access(request, db, "Users")
     query = db.query(User)
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(User.tenant_id == tenant_scope_id)
     existing = query.filter(User.id == user_id).first()
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
@@ -4222,9 +4470,14 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     if not clean_username:
         raise HTTPException(status_code=400, detail="Username is required")
     ensure_username_available(db, clean_username, existing.id)
-    if payload.tenant_id is not None:
-        if actor.role != "super_admin":
-            raise HTTPException(status_code=403, detail="Only a super admin can move users between companies.")
+    clean_role = normalize_assignable_user_role(request, actor, payload.role)
+    if existing.role == "super_admin" and not is_platform_super_admin_request(request, actor):
+        raise HTTPException(status_code=403, detail="Only platform Super Admin can manage Super admin users.")
+    if clean_role == "super_admin":
+        existing.tenant_id = None
+    elif payload.tenant_id is not None:
+        if not is_platform_super_admin_request(request, actor):
+            raise HTTPException(status_code=403, detail="Only platform Super Admin can move users between companies.")
         existing.tenant_id = get_tenant_or_404(db, payload.tenant_id).id
     elif existing.tenant_id is None:
         existing.tenant_id = actor.tenant_id or get_default_tenant(db).id
@@ -4234,16 +4487,16 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     if payload.pin is not None:
         existing.pin = hash_pin(payload.pin)
         existing.raw_pin = payload.pin
-    existing.role = payload.role
+    existing.role = clean_role
     existing.phone = payload.phone
     existing.email = payload.email
     existing.allowed_pages = json.dumps(
-        normalize_allowed_pages(payload.role, payload.allowed_pages)
+        normalize_allowed_pages(clean_role, payload.allowed_pages)
     )
     existing.customer_privacy_settings = json.dumps(
         normalize_access_privacy_settings(
             payload.customer_privacy_settings,
-            payload.role,
+            clean_role,
         )
     )
     existing.session_expiry_minutes = normalize_session_expiry_minutes(
@@ -4254,7 +4507,7 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
     if actor.role == "super_admin" and existing.tenant_id is not None:
         db.info["tenant_id"] = existing.tenant_id
 
-    if payload.role == "worker" and existing.worker_id is None:
+    if clean_role == "worker" and existing.worker_id is None:
         new_worker = Worker(
             tenant_id=existing.tenant_id,
             name=clean_name,
@@ -4278,14 +4531,15 @@ def update_user(user_id: int, payload: UserUpdate, request: Request, db: Session
 @app.patch("/users/{user_id}/pin", response_model=UserOut)
 def reset_user_pin(user_id: int, payload: UserPinReset, request: Request, db: Session = Depends(get_db)):
     actor = require_super_admin(request, db)
-    existing = (
-        db.query(User)
-        .execution_options(skip_tenant_scope=True)
-        .filter(User.id == user_id)
-        .first()
-    )
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
+    query = db.query(User).execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(User.tenant_id == tenant_scope_id)
+    existing = query.filter(User.id == user_id).first()
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
+    if existing.role == "super_admin" and not is_platform_super_admin_request(request, actor):
+        raise HTTPException(status_code=403, detail="Only platform Super Admin can reset Super admin PINs.")
     existing.pin = hash_pin(payload.pin)
     existing.raw_pin = payload.pin
     existing.updated_at = datetime.utcnow()
@@ -4317,8 +4571,11 @@ def update_user_customer_privacy_settings(
 ):
     actor = require_page_access(request, db, "Users")
     query = db.query(User)
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(User.tenant_id == tenant_scope_id)
     existing = query.filter(User.id == user_id).first()
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
@@ -4381,7 +4638,12 @@ def create_role_request(
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required.")
 
+    tenant_scope_id = tenant_scope_id_for_request(request, user)
+    if tenant_scope_id is not None:
+        db.info["tenant_id"] = tenant_scope_id
+
     role_request = UserRoleRequest(
+        tenant_id=tenant_scope_id,
         user_id=user.id,
         user_name=user.name,
         username=user.username,
@@ -4400,9 +4662,12 @@ def create_role_request(
 @app.get("/role-requests", response_model=list[RoleRequestOut])
 def get_role_requests(request: Request, db: Session = Depends(get_db)):
     actor = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     query = db.query(UserRoleRequest)
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(UserRoleRequest.tenant_id == tenant_scope_id)
     requests = (
         query
         .order_by(UserRoleRequest.created_at.desc(), UserRoleRequest.id.desc())
@@ -4420,9 +4685,12 @@ def update_role_request(
     db: Session = Depends(get_db),
 ):
     actor = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     query = db.query(UserRoleRequest)
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(UserRoleRequest.tenant_id == tenant_scope_id)
     role_request = query.filter(UserRoleRequest.id == request_id).first()
     if not role_request:
         raise HTTPException(status_code=404, detail="Role request not found")
@@ -4431,8 +4699,10 @@ def update_role_request(
     role_request.status = clean_status
     role_request.admin_note = (payload.admin_note or "").strip() or None
     role_request.reviewed_at = datetime.utcnow()
-    if actor.role == "super_admin" and role_request.tenant_id is not None:
+    if role_request.tenant_id is not None:
         db.info["tenant_id"] = role_request.tenant_id
+    elif tenant_scope_id is not None:
+        db.info["tenant_id"] = tenant_scope_id
     db.commit()
     db.refresh(role_request)
     return role_request_response(role_request)
@@ -4445,12 +4715,19 @@ def delete_role_request(
     db: Session = Depends(get_db),
 ):
     actor = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     query = db.query(UserRoleRequest)
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(UserRoleRequest.tenant_id == tenant_scope_id)
     role_request = query.filter(UserRoleRequest.id == request_id).first()
     if not role_request:
         raise HTTPException(status_code=404, detail="Role request not found")
+    if role_request.tenant_id is not None:
+        db.info["tenant_id"] = role_request.tenant_id
+    elif tenant_scope_id is not None:
+        db.info["tenant_id"] = tenant_scope_id
 
     db.delete(role_request)
     db.commit()
@@ -4603,102 +4880,396 @@ def create_public_website_order(
 
 class PublicLiveChatPayload(BaseModel):
     session_id: str
+    tenant_slug: str | None = None
     visitor_name: str | None = None
     visitor_email: str | None = None
+    visitor_contact: str | None = None
+    page_path: str | None = None
     message: str
+
+
+class WebsiteAnalyticsHeartbeatPayload(BaseModel):
+    session_id: str
+    tenant_slug: str | None = None
+    visitor_name: str | None = None
+    visitor_contact: str | None = None
+    page_path: str | None = None
+    page_title: str | None = None
+    cart_item_count: int = 0
+    cart_count: int | None = None
+    product_id: int | None = None
+    product_name: str | None = None
+
+
+class WebsiteAnalyticsCartPayload(WebsiteAnalyticsHeartbeatPayload):
+    quantity: int = 1
+
+
+class VisitorChatReplyPayload(BaseModel):
+    body: str
+
+
+def clean_public_session_id(value: str | None) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_-]", "", str(value or "").strip())[:80]
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    return cleaned
+
+
+def clean_visitor_text(value: str | None, limit: int = 255) -> str | None:
+    cleaned = str(value or "").strip()
+    return cleaned[:limit] if cleaned else None
+
+
+def iso_datetime(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+def public_tenant_for_slug(db: Session, tenant_slug: str | None = None) -> Tenant:
+    tenant = tenant_for_slug(db, tenant_slug) if tenant_slug else get_default_tenant(db)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Company website is not available")
+    if (tenant.status or "active").lower() != "active":
+        raise HTTPException(status_code=403, detail="Company website is not active")
+    return tenant
+
+
+def visitor_client_ip(request: Request) -> str | None:
+    for header_name in ("cf-connecting-ip", "x-real-ip", "x-forwarded-for"):
+        raw_value = (request.headers.get(header_name) or "").strip()
+        if raw_value:
+            return raw_value.split(",")[0].strip()[:80]
+    client_host = request.client.host if request.client else ""
+    return client_host[:80] if client_host else None
+
+
+def visitor_country_from_request(request: Request, client_ip: str | None = None) -> str | None:
+    for header_name in ("cf-ipcountry", "x-vercel-ip-country", "cloudfront-viewer-country", "x-country-code"):
+        raw_value = (request.headers.get(header_name) or "").strip()
+        if raw_value and raw_value.upper() != "XX":
+            return raw_value[:80]
+    if client_ip in {"127.0.0.1", "::1", "localhost"}:
+        return "Local"
+    return None
+
+
+def visitor_cart_count_from_payload(payload: WebsiteAnalyticsHeartbeatPayload) -> int:
+    value = payload.cart_item_count
+    if payload.cart_count is not None:
+        value = payload.cart_count
+    return max(int(value or 0), 0)
+
+
+def upsert_website_visitor_session(
+    db: Session,
+    tenant_id: int | None,
+    session_id: str,
+    *,
+    visitor_name: str | None = None,
+    visitor_contact: str | None = None,
+    page_path: str | None = None,
+    page_title: str | None = None,
+    user_agent: str | None = None,
+    client_ip: str | None = None,
+    country: str | None = None,
+    city: str | None = None,
+    cart_item_count: int | None = None,
+    added_quantity: int = 0,
+    product_id: int | None = None,
+    product_name: str | None = None,
+    event_type: str | None = None,
+    details: dict | None = None,
+) -> WebsiteVisitorSession:
+    now = datetime.utcnow()
+    visitor_session = (
+        db.query(WebsiteVisitorSession)
+        .execution_options(skip_tenant_scope=True)
+        .filter(WebsiteVisitorSession.tenant_id == tenant_id, WebsiteVisitorSession.session_id == session_id)
+        .order_by(WebsiteVisitorSession.id.asc())
+        .first()
+    )
+    is_new_session = visitor_session is None
+    if not visitor_session:
+        visitor_session = WebsiteVisitorSession(
+            tenant_id=tenant_id,
+            session_id=session_id,
+            created_at=now,
+        )
+        db.add(visitor_session)
+
+    clean_page_path = clean_visitor_text(page_path, 255)
+    page_changed = bool(clean_page_path and clean_page_path != (visitor_session.page_path or None))
+
+    clean_name = clean_visitor_text(visitor_name, 120)
+    clean_contact = clean_visitor_text(visitor_contact, 255)
+    clean_product_name = clean_visitor_text(product_name, 255)
+    if clean_name:
+        visitor_session.visitor_name = clean_name
+    if clean_contact:
+        visitor_session.visitor_contact = clean_contact
+    if client_ip:
+        visitor_session.ip_address = client_ip[:80]
+    if country:
+        visitor_session.country = country[:80]
+    if city:
+        visitor_session.city = city[:120]
+    if clean_page_path:
+        if not visitor_session.first_page_path:
+            visitor_session.first_page_path = clean_page_path
+        visitor_session.page_path = clean_page_path
+    if user_agent:
+        visitor_session.user_agent = user_agent.strip()[:500]
+    if cart_item_count is not None:
+        visitor_session.cart_item_count = max(int(cart_item_count or 0), 0)
+
+    quantity = max(int(added_quantity or 0), 0)
+    if quantity:
+        if not visitor_session.last_add_to_cart_at or visitor_session.last_add_to_cart_at.date() != now.date():
+            visitor_session.add_to_cart_count = 0
+            visitor_session.add_to_cart_units = 0
+        visitor_session.add_to_cart_count = int(visitor_session.add_to_cart_count or 0) + 1
+        visitor_session.add_to_cart_units = int(visitor_session.add_to_cart_units or 0) + quantity
+        visitor_session.last_add_to_cart_at = now
+        visitor_session.last_product_id = product_id
+        if clean_product_name:
+            visitor_session.last_product_name = clean_product_name
+    elif product_id or clean_product_name:
+        visitor_session.last_product_id = product_id
+        if clean_product_name:
+            visitor_session.last_product_name = clean_product_name
+
+    should_record_activity = False
+    clean_event_type = clean_visitor_text(event_type, 80)
+    if clean_event_type:
+        should_record_activity = clean_event_type != "page_view" or page_changed or is_new_session
+    if should_record_activity and clean_event_type == "page_view":
+        visitor_session.page_view_count = int(visitor_session.page_view_count or 0) + 1
+
+    visitor_session.last_seen_at = now
+    db.flush()
+
+    if should_record_activity:
+        detail_payload = details or {}
+        activity = WebsiteVisitorActivity(
+            tenant_id=tenant_id,
+            visitor_session_id=visitor_session.id,
+            session_id=session_id,
+            event_type=clean_event_type,
+            page_path=clean_page_path,
+            page_title=clean_visitor_text(page_title, 255),
+            product_id=product_id,
+            product_name=clean_product_name,
+            cart_item_count=max(int(cart_item_count or 0), 0),
+            details=json.dumps(detail_payload, ensure_ascii=False, separators=(",", ":")) if detail_payload else None,
+            created_at=now,
+        )
+        db.add(activity)
+    return visitor_session
+
+
+def website_visitor_session_query(db: Session, tenant_id: int | None, session_id: str):
+    query = (
+        db.query(WebsiteVisitorSession)
+        .execution_options(skip_tenant_scope=True)
+        .filter(WebsiteVisitorSession.session_id == session_id)
+    )
+    if tenant_id is not None:
+        query = query.filter(WebsiteVisitorSession.tenant_id == tenant_id)
+    return query.order_by(WebsiteVisitorSession.id.asc())
+
+
+def website_visitor_session_response(visitor_session: WebsiteVisitorSession) -> dict:
+    now = datetime.utcnow()
+    last_seen = visitor_session.last_seen_at or visitor_session.created_at
+    active = bool(last_seen and (now - last_seen) <= timedelta(minutes=5))
+    return {
+        "id": visitor_session.id,
+        "tenant_id": visitor_session.tenant_id,
+        "session_id": visitor_session.session_id,
+        "visitor_name": visitor_session.visitor_name or "Website Visitor",
+        "visitor_contact": visitor_session.visitor_contact,
+        "ip_address": visitor_session.ip_address,
+        "country": visitor_session.country,
+        "city": visitor_session.city,
+        "first_page_path": visitor_session.first_page_path,
+        "page_path": visitor_session.page_path,
+        "user_agent": visitor_session.user_agent,
+        "cart_item_count": int(visitor_session.cart_item_count or 0),
+        "page_view_count": int(visitor_session.page_view_count or 0),
+        "add_to_cart_count": int(visitor_session.add_to_cart_count or 0),
+        "add_to_cart_units": int(visitor_session.add_to_cart_units or 0),
+        "message_count": int(visitor_session.message_count or 0),
+        "unread_count": int(visitor_session.unread_count or 0),
+        "last_product_id": visitor_session.last_product_id,
+        "last_product_name": visitor_session.last_product_name,
+        "last_message_preview": visitor_session.last_message_preview,
+        "last_add_to_cart_at": iso_datetime(visitor_session.last_add_to_cart_at),
+        "last_message_at": iso_datetime(visitor_session.last_message_at),
+        "created_at": iso_datetime(visitor_session.created_at),
+        "last_seen_at": iso_datetime(visitor_session.last_seen_at),
+        "is_active": active,
+    }
+
+
+def website_visitor_message_response(message: WebsiteVisitorMessage, current_user_id: int | None = None) -> dict:
+    is_visitor = (message.sender_type or "visitor") == "visitor"
+    return {
+        "id": message.id,
+        "session_id": message.session_id,
+        "sender_type": message.sender_type,
+        "sender_name": message.sender_name or ("Website Visitor" if is_visitor else "Support"),
+        "sender_user_id": message.sender_user_id,
+        "body": message.body or "",
+        "read_at": iso_datetime(message.read_at),
+        "created_at": iso_datetime(message.created_at),
+        "from_visitor": is_visitor,
+        "is_from_visitor": is_visitor,
+        "is_mine": bool(current_user_id and message.sender_user_id == current_user_id),
+    }
+
+
+def website_visitor_activity_response(activity: WebsiteVisitorActivity) -> dict:
+    details = None
+    if activity.details:
+        try:
+            details = json.loads(activity.details)
+        except Exception:
+            details = {"raw": activity.details}
+    return {
+        "id": activity.id,
+        "session_id": activity.session_id,
+        "event_type": activity.event_type,
+        "page_path": activity.page_path,
+        "page_title": activity.page_title,
+        "product_id": activity.product_id,
+        "product_name": activity.product_name,
+        "cart_item_count": int(activity.cart_item_count or 0),
+        "details": details,
+        "created_at": iso_datetime(activity.created_at),
+    }
+
+
+def visitor_chat_scope(request: Request, db: Session) -> tuple[User, int | None]:
+    current_user = require_page_access(request, db, "Website")
+    tenant_id = tenant_scope_id_for_request(request, current_user)
+    if tenant_id is None and current_user.role != "super_admin":
+        tenant_id = current_user.tenant_id
+    return current_user, tenant_id
+
+
+@app.post("/website-analytics/heartbeat")
+def post_website_analytics_heartbeat(
+    payload: WebsiteAnalyticsHeartbeatPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    session_id = clean_public_session_id(payload.session_id)
+    tenant = public_tenant_for_slug(db, payload.tenant_slug)
+    db.info["tenant_id"] = tenant.id
+    client_ip = visitor_client_ip(request)
+    visitor_session = upsert_website_visitor_session(
+        db,
+        tenant.id,
+        session_id,
+        visitor_name=payload.visitor_name,
+        visitor_contact=payload.visitor_contact,
+        page_path=payload.page_path,
+        page_title=payload.page_title,
+        user_agent=request.headers.get("user-agent"),
+        client_ip=client_ip,
+        country=visitor_country_from_request(request, client_ip),
+        cart_item_count=visitor_cart_count_from_payload(payload),
+        product_id=payload.product_id,
+        product_name=payload.product_name,
+        event_type="page_view",
+    )
+    db.commit()
+    return {"status": "success", "visitor_session_id": visitor_session.id}
+
+
+@app.post("/website-analytics/add-to-cart")
+def post_website_analytics_add_to_cart(
+    payload: WebsiteAnalyticsCartPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    session_id = clean_public_session_id(payload.session_id)
+    tenant = public_tenant_for_slug(db, payload.tenant_slug)
+    db.info["tenant_id"] = tenant.id
+    client_ip = visitor_client_ip(request)
+    visitor_session = upsert_website_visitor_session(
+        db,
+        tenant.id,
+        session_id,
+        visitor_name=payload.visitor_name,
+        visitor_contact=payload.visitor_contact,
+        page_path=payload.page_path,
+        page_title=payload.page_title,
+        user_agent=request.headers.get("user-agent"),
+        client_ip=client_ip,
+        country=visitor_country_from_request(request, client_ip),
+        cart_item_count=visitor_cart_count_from_payload(payload),
+        added_quantity=payload.quantity,
+        product_id=payload.product_id,
+        product_name=payload.product_name,
+        event_type="add_to_cart",
+        details={"quantity": payload.quantity},
+    )
+    db.commit()
+    return {"status": "success", "visitor_session_id": visitor_session.id}
 
 
 @app.post("/public-live-chat")
 def post_public_live_chat(
     payload: PublicLiveChatPayload,
+    request: Request,
     db: Session = Depends(get_db),
 ):
-    session_id = (payload.session_id or "").strip()
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id is required")
-
+    session_id = clean_public_session_id(payload.session_id)
     clean_message = (payload.message or "").strip()
     if not clean_message:
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
+        raise HTTPException(status_code=400, detail="message is required")
 
-    tenant = get_default_tenant(db)
-    tenant_id = tenant.id if tenant else 1
-
-    visitor_username = f"visitor_{session_id[:16]}"
-    clean_name = (payload.visitor_name or "").strip() or "Website Visitor"
-    display_name = f"💬 {clean_name}"
-
-    visitor_user = (
-        db.query(User)
-        .execution_options(skip_tenant_scope=True)
-        .filter(User.username == visitor_username)
-        .first()
+    tenant = public_tenant_for_slug(db, payload.tenant_slug)
+    tenant_id = tenant.id
+    db.info["tenant_id"] = tenant_id
+    clean_name = clean_visitor_text(payload.visitor_name, 120) or "Website Visitor"
+    clean_contact = clean_visitor_text(payload.visitor_contact or payload.visitor_email, 255)
+    client_ip = visitor_client_ip(request)
+    visitor_session = upsert_website_visitor_session(
+        db,
+        tenant_id,
+        session_id,
+        visitor_name=clean_name,
+        visitor_contact=clean_contact,
+        page_path=payload.page_path or "/website-chat",
+        user_agent=request.headers.get("user-agent"),
+        client_ip=client_ip,
+        country=visitor_country_from_request(request, client_ip),
+        event_type="chat_message",
+        details={"sender": "visitor"},
     )
-
-    if not visitor_user:
-        visitor_user = User(
-            tenant_id=tenant_id,
-            name=display_name,
-            username=visitor_username,
-            email=(payload.visitor_email or "").strip() or None,
-            role="visitor",
-            is_active=True,
-        )
-        db.add(visitor_user)
-        db.flush()
-    else:
-        if payload.visitor_name and visitor_user.name != display_name:
-            visitor_user.name = display_name
-            db.flush()
-
-    admin_user = (
-        db.query(User)
-        .execution_options(skip_tenant_scope=True)
-        .filter(User.is_active == True, User.role.in_(["admin", "super_admin", "manager"]))
-        .order_by(User.id.asc())
-        .first()
-    ) or (
-        db.query(User)
-        .execution_options(skip_tenant_scope=True)
-        .filter(User.is_active == True, User.id != visitor_user.id)
-        .order_by(User.id.asc())
-        .first()
-    )
-
-    admin_id = admin_user.id if admin_user else 1
     now = datetime.utcnow()
-
-    msg = InternalMessage(
+    message = WebsiteVisitorMessage(
         tenant_id=tenant_id,
-        sender_user_id=visitor_user.id,
-        recipient_user_id=admin_id,
+        visitor_session_id=visitor_session.id,
+        session_id=session_id,
+        sender_type="visitor",
+        sender_name=clean_name,
         body=clean_message,
         created_at=now,
     )
-    db.add(msg)
+    db.add(message)
+    visitor_session.message_count = int(visitor_session.message_count or 0) + 1
+    visitor_session.unread_count = int(visitor_session.unread_count or 0) + 1
+    visitor_session.last_message_preview = clean_message[:500]
+    visitor_session.last_message_at = now
+    visitor_session.last_seen_at = now
     db.commit()
-    db.refresh(msg)
-
-    with contextlib.suppress(Exception):
-        publish_internal_message(msg)
-
-    record_activity(
-        db,
-        actor_user_id=visitor_user.id,
-        actor_user_name=visitor_user.name,
-        action="Live Chat Message",
-        entity_type="InternalMessage",
-        entity_id=str(msg.id),
-        summary=f"Live Chat message from {clean_name}: {clean_message[:60]}",
-        detail=clean_message,
-        page="Messages",
-        request_method="POST",
-        request_path="/public-live-chat",
-    )
-
+    db.refresh(message)
     return {
         "status": "success",
-        "message_id": msg.id,
+        "message_id": message.id,
         "created_at": now.isoformat(),
     }
 
@@ -4706,60 +5277,186 @@ def post_public_live_chat(
 @app.get("/public-live-chat/{session_id}")
 def get_public_live_chat(
     session_id: str,
+    tenant_slug: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
-    session_id = (session_id or "").strip()
-    if not session_id:
+    try:
+        session_id = clean_public_session_id(session_id)
+    except HTTPException:
         return []
 
-    visitor_username = f"visitor_{session_id[:16]}"
-    visitor_user = (
-        db.query(User)
-        .execution_options(skip_tenant_scope=True)
-        .filter(User.username == visitor_username)
-        .first()
-    )
-
-    if not visitor_user:
+    tenant = public_tenant_for_slug(db, tenant_slug)
+    tenant_id = tenant.id
+    visitor_session = website_visitor_session_query(db, tenant_id, session_id).first()
+    if not visitor_session:
         return []
-
     messages = (
-        db.query(InternalMessage)
+        db.query(WebsiteVisitorMessage)
         .execution_options(skip_tenant_scope=True)
-        .filter(
-            (InternalMessage.sender_user_id == visitor_user.id)
-            | (InternalMessage.recipient_user_id == visitor_user.id)
-        )
-        .order_by(InternalMessage.created_at.asc())
+        .filter(WebsiteVisitorMessage.tenant_id == tenant_id, WebsiteVisitorMessage.session_id == session_id)
+        .order_by(WebsiteVisitorMessage.created_at.asc(), WebsiteVisitorMessage.id.asc())
         .all()
     )
+    return [website_visitor_message_response(message) for message in messages]
 
-    results = []
-    for msg in messages:
-        sender_user = (
-            db.query(User)
-            .execution_options(skip_tenant_scope=True)
-            .filter(User.id == msg.sender_user_id)
-            .first()
+
+@app.get("/visitor-chat/sessions/unread-count")
+def get_visitor_chat_unread_count(request: Request, db: Session = Depends(get_db)):
+    _, tenant_id = visitor_chat_scope(request, db)
+    query = db.query(func.coalesce(func.sum(WebsiteVisitorSession.unread_count), 0)).execution_options(skip_tenant_scope=True)
+    if tenant_id is not None:
+        query = query.filter(WebsiteVisitorSession.tenant_id == tenant_id)
+    return {"unread_count": int(query.scalar() or 0)}
+
+
+@app.get("/visitor-chat/sessions")
+def list_visitor_chat_sessions(
+    request: Request,
+    q: str | None = Query(default=None),
+    limit: int = Query(default=120, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    _, tenant_id = visitor_chat_scope(request, db)
+    query = db.query(WebsiteVisitorSession).execution_options(skip_tenant_scope=True)
+    if tenant_id is not None:
+        query = query.filter(WebsiteVisitorSession.tenant_id == tenant_id)
+    clean_query = (q or "").strip().lower()
+    if clean_query:
+        like_value = f"%{clean_query}%"
+        query = query.filter(
+            or_(
+                func.lower(WebsiteVisitorSession.visitor_name).like(like_value),
+                func.lower(WebsiteVisitorSession.visitor_contact).like(like_value),
+                func.lower(WebsiteVisitorSession.session_id).like(like_value),
+                func.lower(WebsiteVisitorSession.page_path).like(like_value),
+                func.lower(WebsiteVisitorSession.last_product_name).like(like_value),
+                func.lower(WebsiteVisitorSession.ip_address).like(like_value),
+                func.lower(WebsiteVisitorSession.country).like(like_value),
+            )
         )
-        is_from_visitor = (msg.sender_user_id == visitor_user.id)
-        results.append({
-            "id": msg.id,
-            "sender_name": visitor_user.name if is_from_visitor else (sender_user.name if sender_user else "Hisbenew Factory Support"),
-            "is_from_visitor": is_from_visitor,
-            "body": msg.body,
-            "created_at": msg.created_at.isoformat() if msg.created_at else "",
-        })
+    sessions = (
+        query.order_by(
+            WebsiteVisitorSession.last_message_at.desc(),
+            WebsiteVisitorSession.last_seen_at.desc(),
+            WebsiteVisitorSession.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+    return [website_visitor_session_response(visitor_session) for visitor_session in sessions]
 
-    return results
 
+@app.get("/visitor-chat/sessions/{session_id}")
+def get_visitor_chat_session(session_id: str, request: Request, db: Session = Depends(get_db)):
+    current_user, tenant_id = visitor_chat_scope(request, db)
+    clean_session_id = clean_public_session_id(session_id)
+    visitor_session = website_visitor_session_query(db, tenant_id, clean_session_id).first()
+    if not visitor_session:
+        raise HTTPException(status_code=404, detail="Visitor session not found")
+    messages = (
+        db.query(WebsiteVisitorMessage)
+        .execution_options(skip_tenant_scope=True)
+        .filter(WebsiteVisitorMessage.session_id == clean_session_id)
+        .order_by(WebsiteVisitorMessage.created_at.asc(), WebsiteVisitorMessage.id.asc())
+    )
+    activities = (
+        db.query(WebsiteVisitorActivity)
+        .execution_options(skip_tenant_scope=True)
+        .filter(WebsiteVisitorActivity.session_id == clean_session_id)
+        .order_by(WebsiteVisitorActivity.created_at.desc(), WebsiteVisitorActivity.id.desc())
+        .limit(160)
+    )
+    if tenant_id is not None:
+        messages = messages.filter(WebsiteVisitorMessage.tenant_id == tenant_id)
+        activities = activities.filter(WebsiteVisitorActivity.tenant_id == tenant_id)
+    return {
+        "session": website_visitor_session_response(visitor_session),
+        "messages": [website_visitor_message_response(message, current_user.id) for message in messages.all()],
+        "activities": [website_visitor_activity_response(activity) for activity in activities.all()],
+    }
+
+
+@app.patch("/visitor-chat/sessions/{session_id}/read")
+def mark_visitor_chat_read(session_id: str, request: Request, db: Session = Depends(get_db)):
+    _, tenant_id = visitor_chat_scope(request, db)
+    clean_session_id = clean_public_session_id(session_id)
+    visitor_session = website_visitor_session_query(db, tenant_id, clean_session_id).first()
+    if not visitor_session:
+        raise HTTPException(status_code=404, detail="Visitor session not found")
+    message_query = (
+        db.query(WebsiteVisitorMessage)
+        .execution_options(skip_tenant_scope=True)
+        .filter(
+            WebsiteVisitorMessage.session_id == clean_session_id,
+            WebsiteVisitorMessage.sender_type == "visitor",
+            WebsiteVisitorMessage.read_at.is_(None),
+        )
+    )
+    if tenant_id is not None:
+        message_query = message_query.filter(WebsiteVisitorMessage.tenant_id == tenant_id)
+    message_query.update({WebsiteVisitorMessage.read_at: datetime.utcnow()}, synchronize_session=False)
+    visitor_session.unread_count = 0
+    db.commit()
+    return {"status": "success"}
+
+
+@app.post("/visitor-chat/sessions/{session_id}/messages")
+def reply_visitor_chat_session(
+    session_id: str,
+    payload: VisitorChatReplyPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    current_user, tenant_id = visitor_chat_scope(request, db)
+    clean_session_id = clean_public_session_id(session_id)
+    clean_body = (payload.body or "").strip()
+    if not clean_body:
+        raise HTTPException(status_code=400, detail="Message is required")
+    visitor_session = website_visitor_session_query(db, tenant_id, clean_session_id).first()
+    if not visitor_session:
+        raise HTTPException(status_code=404, detail="Visitor session not found")
+    now = datetime.utcnow()
+    if visitor_session.tenant_id is not None:
+        db.info["tenant_id"] = visitor_session.tenant_id
+    message = WebsiteVisitorMessage(
+        tenant_id=visitor_session.tenant_id,
+        visitor_session_id=visitor_session.id,
+        session_id=clean_session_id,
+        sender_type="agent",
+        sender_name=current_user.name or current_user.username or "Support",
+        sender_user_id=current_user.id,
+        body=clean_body,
+        created_at=now,
+    )
+    db.add(message)
+    visitor_session.message_count = int(visitor_session.message_count or 0) + 1
+    visitor_session.last_message_preview = clean_body[:500]
+    visitor_session.last_message_at = now
+    visitor_session.last_seen_at = now
+    db.add(
+        WebsiteVisitorActivity(
+            tenant_id=visitor_session.tenant_id,
+            visitor_session_id=visitor_session.id,
+            session_id=clean_session_id,
+            event_type="agent_reply",
+            page_path=visitor_session.page_path,
+            details=json.dumps({"agent_user_id": current_user.id}, separators=(",", ":")),
+            created_at=now,
+        )
+    )
+    db.commit()
+    db.refresh(message)
+    return website_visitor_message_response(message, current_user.id)
 
 @app.get("/access-requests", response_model=list[PublicAccessRequestOut])
 def list_public_access_requests(request: Request, db: Session = Depends(get_db)):
     actor = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     query = db.query(PublicAccessRequest)
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(PublicAccessRequest.tenant_id == tenant_scope_id)
     requests = (
         query
         .order_by(PublicAccessRequest.created_at.desc(), PublicAccessRequest.id.desc())
@@ -4777,9 +5474,12 @@ def approve_public_access_request(
     db: Session = Depends(get_db),
 ):
     admin_user = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, admin_user)
     query = db.query(PublicAccessRequest)
     if admin_user.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(PublicAccessRequest.tenant_id == tenant_scope_id)
     access_request = query.filter(PublicAccessRequest.id == request_id).first()
     if not access_request:
         raise HTTPException(status_code=404, detail="Access request not found")
@@ -4791,9 +5491,7 @@ def approve_public_access_request(
         payload.username or access_request.preferred_username,
         clean_name,
     )
-    clean_role = (payload.role or "unassigned").strip()
-    if clean_role not in ROLE_PAGE_DEFAULTS:
-        clean_role = "unassigned"
+    clean_role = normalize_assignable_user_role(request, admin_user, payload.role)
 
     if not clean_name:
         raise HTTPException(status_code=400, detail="Name is required")
@@ -4801,8 +5499,16 @@ def approve_public_access_request(
         raise HTTPException(status_code=400, detail="Username is required")
     ensure_username_available(db, clean_username)
 
-    target_tenant_id = access_request.tenant_id or admin_user.tenant_id or get_default_tenant(db).id
-    if admin_user.role == "super_admin":
+    if clean_role == "super_admin":
+        target_tenant_id = None
+    else:
+        target_tenant_id = (
+            access_request.tenant_id
+            or tenant_scope_id
+            or admin_user.tenant_id
+            or get_default_tenant(db).id
+        )
+    if target_tenant_id is not None:
         db.info["tenant_id"] = target_tenant_id
 
     clean_phone = (payload.phone or access_request.phone or "").strip() or None
@@ -4880,9 +5586,12 @@ def update_public_access_request(
     db: Session = Depends(get_db),
 ):
     admin_user = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, admin_user)
     query = db.query(PublicAccessRequest)
     if admin_user.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(PublicAccessRequest.tenant_id == tenant_scope_id)
     access_request = query.filter(PublicAccessRequest.id == request_id).first()
     if not access_request:
         raise HTTPException(status_code=404, detail="Access request not found")
@@ -4897,8 +5606,10 @@ def update_public_access_request(
     access_request.admin_note = (payload.admin_note or "").strip() or None
     access_request.reviewed_by_user_id = admin_user.id
     access_request.reviewed_at = datetime.utcnow()
-    if admin_user.role == "super_admin" and access_request.tenant_id is not None:
+    if access_request.tenant_id is not None:
         db.info["tenant_id"] = access_request.tenant_id
+    elif tenant_scope_id is not None:
+        db.info["tenant_id"] = tenant_scope_id
     db.commit()
     db.refresh(access_request)
     return public_access_request_response(access_request, db)
@@ -4911,106 +5622,431 @@ def delete_public_access_request(
     db: Session = Depends(get_db),
 ):
     actor = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     query = db.query(PublicAccessRequest)
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(PublicAccessRequest.tenant_id == tenant_scope_id)
     access_request = query.filter(PublicAccessRequest.id == request_id).first()
     if not access_request:
         raise HTTPException(status_code=404, detail="Access request not found")
+    if access_request.tenant_id is not None:
+        db.info["tenant_id"] = access_request.tenant_id
+    elif tenant_scope_id is not None:
+        db.info["tenant_id"] = tenant_scope_id
 
     db.delete(access_request)
     db.commit()
     return {"status": "deleted", "deleted_request_id": request_id}
 
+def messenger_contact_request_response(contact_request: InternalMessageContactRequest, current_user_id: int) -> dict:
+    requester = contact_request.requester
+    recipient = contact_request.recipient
+    return {
+        "id": contact_request.id,
+        "requester_user_id": contact_request.requester_user_id,
+        "requester_name": requester.name if requester else "User",
+        "requester_username": requester.username if requester else None,
+        "recipient_user_id": contact_request.recipient_user_id,
+        "recipient_name": recipient.name if recipient else "User",
+        "recipient_username": recipient.username if recipient else None,
+        "message": contact_request.message,
+        "status": contact_request.status or "pending",
+        "direction": "incoming" if contact_request.recipient_user_id == current_user_id else "outgoing",
+        "reviewed_at": contact_request.reviewed_at,
+        "created_at": contact_request.created_at,
+    }
+
+
+def messenger_effective_tenant_id(current_user: User, tenant_scope_id: int | None) -> int | None:
+    if tenant_scope_id is not None:
+        return tenant_scope_id
+    if current_user.role != "super_admin":
+        return current_user.tenant_id
+    return None
+
+
+def messenger_contact_status_between(
+    db: Session,
+    current_user_id: int,
+    other_user_id: int,
+    tenant_id: int | None,
+) -> str | None:
+    query = (
+        db.query(InternalMessageContactRequest)
+        .execution_options(skip_tenant_scope=True)
+        .filter(
+            (
+                (InternalMessageContactRequest.requester_user_id == current_user_id)
+                & (InternalMessageContactRequest.recipient_user_id == other_user_id)
+            )
+            | (
+                (InternalMessageContactRequest.requester_user_id == other_user_id)
+                & (InternalMessageContactRequest.recipient_user_id == current_user_id)
+            )
+        )
+        .order_by(InternalMessageContactRequest.created_at.desc())
+    )
+    if tenant_id is not None:
+        query = query.filter(InternalMessageContactRequest.tenant_id == tenant_id)
+    contact_request = query.first()
+    if not contact_request:
+        return None
+    status = (contact_request.status or "pending").lower()
+    if status == "approved":
+        return "approved"
+    if status == "pending" and contact_request.recipient_user_id == current_user_id:
+        return "incoming"
+    if status == "pending":
+        return "requested"
+    return status
+
+
+def messenger_visible_contact_ids(db: Session, current_user_id: int, tenant_id: int | None) -> set[int]:
+    visible_ids: set[int] = set()
+    requests_query = (
+        db.query(InternalMessageContactRequest)
+        .execution_options(skip_tenant_scope=True)
+        .filter(
+            InternalMessageContactRequest.status == "approved",
+            (
+                (InternalMessageContactRequest.requester_user_id == current_user_id)
+                | (InternalMessageContactRequest.recipient_user_id == current_user_id)
+            ),
+        )
+    )
+    if tenant_id is not None:
+        requests_query = requests_query.filter(InternalMessageContactRequest.tenant_id == tenant_id)
+    for contact_request in requests_query.all():
+        other_id = (
+            contact_request.recipient_user_id
+            if contact_request.requester_user_id == current_user_id
+            else contact_request.requester_user_id
+        )
+        visible_ids.add(other_id)
+
+    message_query = (
+        db.query(InternalMessage)
+        .execution_options(skip_tenant_scope=True)
+        .filter(
+            (InternalMessage.sender_user_id == current_user_id)
+            | (InternalMessage.recipient_user_id == current_user_id)
+        )
+    )
+    if tenant_id is not None:
+        message_query = message_query.filter(InternalMessage.tenant_id == tenant_id)
+    for message in message_query.all():
+        if message.sender_user_id != current_user_id:
+            visible_ids.add(message.sender_user_id)
+        if message.recipient_user_id != current_user_id:
+            visible_ids.add(message.recipient_user_id)
+    return visible_ids
+
+
+def messenger_contact_allowed(
+    db: Session,
+    current_user_id: int,
+    recipient_user_id: int,
+    tenant_id: int | None,
+) -> bool:
+    if current_user_id == recipient_user_id:
+        return False
+    return recipient_user_id in messenger_visible_contact_ids(db, current_user_id, tenant_id)
+
+
+def messenger_find_user_for_contact(
+    db: Session,
+    current_user: User,
+    tenant_id: int | None,
+    lookup: str,
+) -> User | None:
+    normalized_lookup = lookup.strip().lower()
+    if not normalized_lookup:
+        return None
+    query = (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(User.is_active.is_(True), User.id != current_user.id, User.role != "visitor")
+    )
+    if tenant_id is not None:
+        query = query.filter(User.tenant_id == tenant_id)
+    elif current_user.role != "super_admin" and current_user.tenant_id is not None:
+        query = query.filter(User.tenant_id == current_user.tenant_id)
+    return (
+        query.filter(
+            or_(
+                func.lower(User.username) == normalized_lookup,
+                func.lower(User.email) == normalized_lookup,
+            )
+        )
+        .order_by(User.id.asc())
+        .first()
+    )
+
+
+@app.get("/internal-message-contact-search", response_model=list[InternalMessageContactSearchOut])
+def search_internal_message_contacts(
+    request: Request,
+    query: str = Query(..., min_length=2),
+    db: Session = Depends(get_db),
+):
+    current_user = get_authenticated_user(request, db)
+    tenant_id = messenger_effective_tenant_id(current_user, tenant_scope_id_for_request(request, current_user))
+    search_value = f"%{query.strip().lower()}%"
+    users_query = (
+        db.query(User)
+        .execution_options(skip_tenant_scope=True)
+        .filter(User.is_active.is_(True), User.id != current_user.id, User.role != "visitor")
+    )
+    if tenant_id is not None:
+        users_query = users_query.filter(User.tenant_id == tenant_id)
+    elif current_user.role != "super_admin" and current_user.tenant_id is not None:
+        users_query = users_query.filter(User.tenant_id == current_user.tenant_id)
+    users = (
+        users_query.filter(
+            or_(
+                func.lower(User.name).like(search_value),
+                func.lower(User.username).like(search_value),
+                func.lower(User.email).like(search_value),
+            )
+        )
+        .order_by(User.name.asc())
+        .limit(12)
+        .all()
+    )
+    return [
+        InternalMessageContactSearchOut(
+            id=user.id,
+            name=user.name,
+            username=user.username,
+            email=user.email,
+            role=user.role,
+            status=messenger_contact_status_between(db, current_user.id, user.id, tenant_id),
+        )
+        for user in users
+    ]
+
+
+@app.get("/internal-message-contact-requests", response_model=list[InternalMessageContactRequestOut])
+def get_internal_message_contact_requests(request: Request, db: Session = Depends(get_db)):
+    current_user = get_authenticated_user(request, db)
+    tenant_id = messenger_effective_tenant_id(current_user, tenant_scope_id_for_request(request, current_user))
+    query = (
+        db.query(InternalMessageContactRequest)
+        .execution_options(skip_tenant_scope=True)
+        .filter(
+            (InternalMessageContactRequest.requester_user_id == current_user.id)
+            | (InternalMessageContactRequest.recipient_user_id == current_user.id)
+        )
+    )
+    if tenant_id is not None:
+        query = query.filter(InternalMessageContactRequest.tenant_id == tenant_id)
+    requests = query.order_by(InternalMessageContactRequest.created_at.desc()).limit(80).all()
+    return [messenger_contact_request_response(item, current_user.id) for item in requests]
+
+
+@app.post("/internal-message-contact-requests", response_model=InternalMessageContactRequestOut)
+def create_internal_message_contact_request(
+    payload: InternalMessageContactRequestCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    current_user = get_authenticated_user(request, db)
+    tenant_id = messenger_effective_tenant_id(current_user, tenant_scope_id_for_request(request, current_user))
+    recipient = messenger_find_user_for_contact(db, current_user, tenant_id, payload.recipient or "")
+    if not recipient:
+        raise HTTPException(status_code=404, detail="No active ERP user found for that username or email.")
+    existing_query = (
+        db.query(InternalMessageContactRequest)
+        .execution_options(skip_tenant_scope=True)
+        .filter(
+            (
+                (InternalMessageContactRequest.requester_user_id == current_user.id)
+                & (InternalMessageContactRequest.recipient_user_id == recipient.id)
+            )
+            | (
+                (InternalMessageContactRequest.requester_user_id == recipient.id)
+                & (InternalMessageContactRequest.recipient_user_id == current_user.id)
+            )
+        )
+        .order_by(InternalMessageContactRequest.created_at.desc())
+    )
+    if tenant_id is not None:
+        existing_query = existing_query.filter(InternalMessageContactRequest.tenant_id == tenant_id)
+    existing = existing_query.first()
+    if existing and (existing.status or "pending").lower() in {"pending", "approved"}:
+        return messenger_contact_request_response(existing, current_user.id)
+
+    if tenant_id is not None:
+        db.info["tenant_id"] = tenant_id
+    contact_request = InternalMessageContactRequest(
+        tenant_id=tenant_id,
+        requester_user_id=current_user.id,
+        recipient_user_id=recipient.id,
+        message=(payload.message or "").strip()[:500] or None,
+        status="pending",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    db.add(contact_request)
+    db.commit()
+    db.refresh(contact_request)
+    return messenger_contact_request_response(contact_request, current_user.id)
+
+
+@app.patch("/internal-message-contact-requests/{request_id}", response_model=InternalMessageContactRequestOut)
+def review_internal_message_contact_request(
+    request_id: int,
+    payload: InternalMessageContactRequestReview,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    current_user = get_authenticated_user(request, db)
+    tenant_id = messenger_effective_tenant_id(current_user, tenant_scope_id_for_request(request, current_user))
+    status = (payload.status or "").strip().lower()
+    if status not in {"approved", "declined", "canceled"}:
+        raise HTTPException(status_code=400, detail="Use approved, declined, or canceled.")
+
+    query = (
+        db.query(InternalMessageContactRequest)
+        .execution_options(skip_tenant_scope=True)
+        .filter(InternalMessageContactRequest.id == request_id)
+    )
+    if status == "canceled":
+        query = query.filter(
+            InternalMessageContactRequest.requester_user_id == current_user.id,
+            InternalMessageContactRequest.status == "pending",
+        )
+    else:
+        query = query.filter(
+            InternalMessageContactRequest.recipient_user_id == current_user.id,
+            InternalMessageContactRequest.status == "pending",
+        )
+    if tenant_id is not None:
+        query = query.filter(InternalMessageContactRequest.tenant_id == tenant_id)
+    contact_request = query.first()
+    if not contact_request:
+        raise HTTPException(status_code=404, detail="Pending contact request not found.")
+    contact_request.status = status
+    contact_request.reviewed_at = datetime.utcnow()
+    contact_request.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(contact_request)
+    return messenger_contact_request_response(contact_request, current_user.id)
+
+
+@app.post("/internal-message-attachments")
+async def upload_internal_message_attachment(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    get_authenticated_user(request, db)
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="Choose a file to attach.")
+    original_name = sanitize_upload_filename(file.filename)
+    url = save_uploaded_file(file)
+    file_size = None
+    try:
+        relative_path = url.replace("/static/", "", 1).lstrip("/")
+        saved_path = STATIC_DIR / relative_path
+        file_size = saved_path.stat().st_size
+    except OSError:
+        file_size = None
+    return {
+        "url": url,
+        "name": original_name,
+        "type": file.content_type or "application/octet-stream",
+        "size": file_size,
+    }
+
 @app.get("/internal-message-users", response_model=list[InternalMessageUserOut])
 def get_internal_message_users(request: Request, db: Session = Depends(get_db)):
     current_user = get_authenticated_user(request, db)
-    users = (
+    tenant_scope_id = tenant_scope_id_for_request(request, current_user)
+    users_query = (
         db.query(User)
         .execution_options(skip_tenant_scope=True)
-        .filter(User.is_active == True, User.id != current_user.id)
-        .order_by(User.name.asc())
-        .all()
+        .filter(User.is_active.is_(True), User.id != current_user.id, User.role != "visitor")
     )
-    unread_rows = (
-        db.query(InternalMessage.sender_user_id, func.count(InternalMessage.id))
-        .execution_options(skip_tenant_scope=True)
-        .filter(
-            InternalMessage.read_at.is_(None),
-        )
-        .group_by(InternalMessage.sender_user_id)
-        .all()
-    )
-    unread_by_sender = {sender_id: count for sender_id, count in unread_rows}
+    if tenant_scope_id is not None:
+        users_query = users_query.filter(User.tenant_id == tenant_scope_id)
+    elif current_user.role != "super_admin" and current_user.tenant_id is not None:
+        users_query = users_query.filter(User.tenant_id == current_user.tenant_id)
+    visible_contact_ids = messenger_visible_contact_ids(db, current_user.id, tenant_scope_id)
+    users = [user for user in users_query.order_by(User.name.asc()).all() if user.id in visible_contact_ids]
+    user_ids = [user.id for user in users]
+    unread_by_sender: dict[int, int] = {}
 
-    results = []
+    if user_ids:
+        unread_query = (
+            db.query(InternalMessage.sender_user_id, func.count(InternalMessage.id))
+            .execution_options(skip_tenant_scope=True)
+            .filter(
+                InternalMessage.sender_user_id.in_(user_ids),
+                InternalMessage.recipient_user_id == current_user.id,
+                InternalMessage.read_at.is_(None),
+            )
+        )
+        if tenant_scope_id is not None:
+            unread_query = unread_query.filter(InternalMessage.tenant_id == tenant_scope_id)
+        for sender_id, count in unread_query.group_by(InternalMessage.sender_user_id).all():
+            unread_by_sender[sender_id] = int(count or 0)
+
+    rows = []
     for user in users:
-        if user.role == "visitor":
-            last_message_at = (
-                db.query(func.max(InternalMessage.created_at))
-                .execution_options(skip_tenant_scope=True)
-                .filter(
-                    or_(
-                        InternalMessage.sender_user_id == user.id,
-                        InternalMessage.recipient_user_id == user.id,
-                    )
+        last_message_query = (
+            db.query(func.max(InternalMessage.created_at))
+            .execution_options(skip_tenant_scope=True)
+            .filter(
+                (
+                    (InternalMessage.sender_user_id == current_user.id)
+                    & (InternalMessage.recipient_user_id == user.id)
                 )
-                .scalar()
-            )
-            if not last_message_at:
-                continue
-        else:
-            last_message_at = (
-                db.query(func.max(InternalMessage.created_at))
-                .execution_options(skip_tenant_scope=True)
-                .filter(
-                    (
-                        (InternalMessage.sender_user_id == current_user.id)
-                        & (InternalMessage.recipient_user_id == user.id)
-                    )
-                    | (
-                        (InternalMessage.sender_user_id == user.id)
-                        & (InternalMessage.recipient_user_id == current_user.id)
-                    )
+                | (
+                    (InternalMessage.sender_user_id == user.id)
+                    & (InternalMessage.recipient_user_id == current_user.id)
                 )
-                .scalar()
             )
-        results.append(
-            {
-                "id": user.id,
-                "name": user.name,
-                "username": user.username or user.name,
-                "role": user.role,
-                "unread_count": int(unread_by_sender.get(user.id, 0) or 0),
-                "last_message_at": last_message_at,
-            }
         )
-
+        if tenant_scope_id is not None:
+            last_message_query = last_message_query.filter(InternalMessage.tenant_id == tenant_scope_id)
+        rows.append(
+            InternalMessageUserOut(
+                id=user.id,
+                name=user.name,
+                username=user.username,
+                role=user.role,
+                unread_count=unread_by_sender.get(user.id, 0),
+                last_message_at=last_message_query.scalar(),
+            )
+        )
     return sorted(
-        results,
-        key=lambda item: (
-            item["unread_count"] > 0,
-            item["last_message_at"] or datetime.min,
-            item["name"].lower(),
-        ),
+        rows,
+        key=lambda item: (item.unread_count > 0, item.last_message_at or datetime.min, item.name.lower()),
         reverse=True,
     )
-
-
 @app.get("/internal-messages/unread-count")
 def get_internal_message_unread_count(request: Request, db: Session = Depends(get_db)):
     current_user = get_authenticated_user(request, db)
-    unread_count = (
+    tenant_scope_id = tenant_scope_id_for_request(request, current_user)
+    if tenant_scope_id is None and current_user.role != "super_admin":
+        tenant_scope_id = current_user.tenant_id
+
+    query = (
         db.query(func.count(InternalMessage.id))
+        .execution_options(skip_tenant_scope=True)
+        .join(User, User.id == InternalMessage.sender_user_id)
         .filter(
             InternalMessage.recipient_user_id == current_user.id,
             InternalMessage.read_at.is_(None),
+            User.role != "visitor",
         )
-        .scalar()
     )
-    return {"unread_count": int(unread_count or 0)}
-
-
+    if tenant_scope_id is not None:
+        query = query.filter(InternalMessage.tenant_id == tenant_scope_id)
+    return {"unread_count": int(query.scalar() or 0)}
 @app.get("/internal-messages", response_model=list[InternalMessageOut])
 def get_internal_messages(
     request: Request,
@@ -5018,59 +6054,52 @@ def get_internal_messages(
     db: Session = Depends(get_db),
 ):
     current_user = get_authenticated_user(request, db)
-    other_user = (
+    tenant_scope_id = tenant_scope_id_for_request(request, current_user)
+    other_user_query = (
         db.query(User)
         .execution_options(skip_tenant_scope=True)
-        .filter(User.id == user_id, User.is_active == True)
-        .first()
+        .filter(User.id == user_id, User.is_active.is_(True), User.role != "visitor")
     )
+    if tenant_scope_id is not None:
+        other_user_query = other_user_query.filter(User.tenant_id == tenant_scope_id)
+    elif current_user.role != "super_admin" and current_user.tenant_id is not None:
+        other_user_query = other_user_query.filter(User.tenant_id == current_user.tenant_id)
+    other_user = other_user_query.first()
     if not other_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if other_user.role == "visitor":
-        db.query(InternalMessage).execution_options(skip_tenant_scope=True).filter(
-            InternalMessage.sender_user_id == other_user.id,
-            InternalMessage.read_at.is_(None),
-        ).update({InternalMessage.read_at: datetime.utcnow()}, synchronize_session=False)
-    else:
-        db.query(InternalMessage).execution_options(skip_tenant_scope=True).filter(
+    read_query = (
+        db.query(InternalMessage)
+        .execution_options(skip_tenant_scope=True)
+        .filter(
             InternalMessage.sender_user_id == other_user.id,
             InternalMessage.recipient_user_id == current_user.id,
             InternalMessage.read_at.is_(None),
-        ).update({InternalMessage.read_at: datetime.utcnow()}, synchronize_session=False)
+        )
+    )
+    message_query = (
+        db.query(InternalMessage)
+        .execution_options(skip_tenant_scope=True)
+        .filter(
+            (
+                (InternalMessage.sender_user_id == current_user.id)
+                & (InternalMessage.recipient_user_id == other_user.id)
+            )
+            | (
+                (InternalMessage.sender_user_id == other_user.id)
+                & (InternalMessage.recipient_user_id == current_user.id)
+            )
+        )
+    )
+    if tenant_scope_id is not None:
+        read_query = read_query.filter(InternalMessage.tenant_id == tenant_scope_id)
+        message_query = message_query.filter(InternalMessage.tenant_id == tenant_scope_id)
+
+    read_query.update({InternalMessage.read_at: datetime.utcnow()}, synchronize_session=False)
     db.commit()
 
-    if other_user.role == "visitor":
-        messages = (
-            db.query(InternalMessage)
-            .execution_options(skip_tenant_scope=True)
-            .filter(
-                (InternalMessage.sender_user_id == other_user.id)
-                | (InternalMessage.recipient_user_id == other_user.id)
-            )
-            .order_by(InternalMessage.created_at.asc(), InternalMessage.id.asc())
-            .all()
-        )
-    else:
-        messages = (
-            db.query(InternalMessage)
-            .execution_options(skip_tenant_scope=True)
-            .filter(
-                (
-                    (InternalMessage.sender_user_id == current_user.id)
-                    & (InternalMessage.recipient_user_id == other_user.id)
-                )
-                | (
-                    (InternalMessage.sender_user_id == other_user.id)
-                    & (InternalMessage.recipient_user_id == current_user.id)
-                )
-            )
-            .order_by(InternalMessage.created_at.asc(), InternalMessage.id.asc())
-            .all()
-        )
+    messages = message_query.order_by(InternalMessage.created_at.asc()).all()
     return [internal_message_response(message, current_user.id) for message in messages]
-
-
 @app.post("/internal-messages", response_model=InternalMessageOut)
 def create_internal_message(
     payload: InternalMessageCreate,
@@ -5078,25 +6107,44 @@ def create_internal_message(
     db: Session = Depends(get_db),
 ):
     current_user = get_authenticated_user(request, db)
-    recipient = (
+    tenant_scope_id = tenant_scope_id_for_request(request, current_user)
+    recipient_query = (
         db.query(User)
         .execution_options(skip_tenant_scope=True)
-        .filter(User.id == payload.recipient_user_id, User.is_active == True)
-        .first()
+        .filter(User.id == payload.recipient_user_id, User.is_active.is_(True), User.role != "visitor")
     )
+    if tenant_scope_id is not None:
+        recipient_query = recipient_query.filter(User.tenant_id == tenant_scope_id)
+    elif current_user.role != "super_admin" and current_user.tenant_id is not None:
+        recipient_query = recipient_query.filter(User.tenant_id == current_user.tenant_id)
+    recipient = recipient_query.first()
     if not recipient:
         raise HTTPException(status_code=404, detail="Recipient not found")
-    if recipient.id == current_user.id:
-        raise HTTPException(status_code=400, detail="Choose another user to message")
 
-    body = payload.body.strip()
-    if not body:
-        raise HTTPException(status_code=400, detail="Message is required")
+    body = (payload.body or "").strip()
+    attachment_url = (payload.attachment_url or "").strip() or None
+    attachment_name = (payload.attachment_name or "").strip()[:255] or None
+    attachment_type = (payload.attachment_type or "").strip()[:120] or None
+    attachment_size = payload.attachment_size if payload.attachment_size is not None else None
+    if not body and not attachment_url:
+        raise HTTPException(status_code=400, detail="Message body or attachment is required")
 
+    message_tenant_id = tenant_scope_id or recipient.tenant_id or current_user.tenant_id
+    if not messenger_contact_allowed(db, current_user.id, recipient.id, message_tenant_id):
+        raise HTTPException(status_code=403, detail="Send a contact request and wait for approval before messaging this user.")
+
+    if message_tenant_id is not None:
+        db.info["tenant_id"] = message_tenant_id
     message = InternalMessage(
+        tenant_id=message_tenant_id,
         sender_user_id=current_user.id,
         recipient_user_id=recipient.id,
         body=body,
+        attachment_url=attachment_url,
+        attachment_name=attachment_name,
+        attachment_type=attachment_type,
+        attachment_size=attachment_size,
+        created_at=datetime.utcnow(),
     )
     db.add(message)
     db.commit()
@@ -5104,8 +6152,6 @@ def create_internal_message(
     response = internal_message_response(message, current_user.id)
     publish_internal_message(message)
     return response
-
-
 @app.get("/internal-calls/active", response_model=InternalCallOut | None)
 def get_active_internal_call(request: Request, db: Session = Depends(get_db)):
     current_user = get_authenticated_user(request, db)
@@ -5444,9 +6490,12 @@ def get_user_activity_logs(
     db: Session = Depends(get_db),
 ):
     actor = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     user_query = db.query(User)
     if actor.role == "super_admin":
         user_query = user_query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        user_query = user_query.filter(User.tenant_id == tenant_scope_id)
     user = user_query.filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -5454,6 +6503,8 @@ def get_user_activity_logs(
     query = db.query(ActivityLog).filter(ActivityLog.actor_user_id == user_id)
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(ActivityLog.tenant_id == tenant_scope_id)
     if action and action != "all":
         query = query.filter(ActivityLog.action == action)
     logs = query.order_by(ActivityLog.created_at.desc()).limit(limit).all()
@@ -5463,9 +6514,12 @@ def get_user_activity_logs(
 @app.delete("/users/{user_id}/activity-logs")
 def clear_user_activity_logs(user_id: int, request: Request, db: Session = Depends(get_db)):
     actor = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     user_query = db.query(User)
     if actor.role == "super_admin":
         user_query = user_query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        user_query = user_query.filter(User.tenant_id == tenant_scope_id)
     user = user_query.filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -5473,6 +6527,8 @@ def clear_user_activity_logs(user_id: int, request: Request, db: Session = Depen
     activity_query = db.query(ActivityLog).filter(ActivityLog.actor_user_id == user_id)
     if actor.role == "super_admin":
         activity_query = activity_query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        activity_query = activity_query.filter(ActivityLog.tenant_id == tenant_scope_id)
     deleted_count = activity_query.delete(synchronize_session=False)
     db.commit()
     return {"deleted_count": deleted_count}
@@ -5487,9 +6543,12 @@ def get_activity_logs(
     db: Session = Depends(get_db),
 ):
     actor = require_page_access(request, db, "Users")
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     query = db.query(ActivityLog)
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(ActivityLog.tenant_id == tenant_scope_id)
     if user_id is not None:
         query = query.filter(ActivityLog.actor_user_id == user_id)
     if action and action != "all":
@@ -5570,8 +6629,11 @@ def delete_worker_record(
 def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
     actor = require_page_access(request, db, "Users")
     query = db.query(User)
+    tenant_scope_id = tenant_scope_id_for_request(request, actor)
     if actor.role == "super_admin":
         query = query.execution_options(skip_tenant_scope=True)
+    if tenant_scope_id is not None:
+        query = query.filter(User.tenant_id == tenant_scope_id)
     existing = query.filter(User.id == user_id).first()
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
@@ -5627,8 +6689,52 @@ def delete_inspiration(item_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "deleted"}
 
-# Mount the static directory to serve uploaded images and other static files
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Custom Fast Static Files Handler with Dynamic WebP Optimization
+class OptimizedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        raw_full_path = Path(self.directory) / path
+        ext = raw_full_path.suffix.lower()
+
+        if ext in {".png", ".jpg", ".jpeg", ".webp"} and raw_full_path.is_file():
+            # Check if optimized WebP version is available
+            opt_dir = Path(self.directory) / "optimized"
+            opt_path = opt_dir / f"{raw_full_path.stem}.webp"
+
+            try:
+                if not opt_path.exists() or opt_path.stat().st_mtime < raw_full_path.stat().st_mtime:
+                    opt_dir.mkdir(parents=True, exist_ok=True)
+                    from PIL import Image
+
+                    with Image.open(raw_full_path) as im:
+                        if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+                            im = im.convert("RGBA")
+                        else:
+                            im = im.convert("RGB")
+
+                        max_dim = 1000
+                        if max(im.size) > max_dim:
+                            im.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+
+                        im.save(str(opt_path), "WEBP", quality=80, method=6)
+
+                if opt_path.exists():
+                    return FileResponse(
+                        path=str(opt_path),
+                        media_type="image/webp",
+                        headers={
+                            "Cache-Control": "public, max-age=86400",
+                            "X-Image-Optimized": "true",
+                        },
+                    )
+            except Exception:
+                pass
+
+        return await super().get_response(path, scope)
+
+
+# Mount the static directory with high-speed WebP image optimization
+app.mount("/static", OptimizedStaticFiles(directory=str(STATIC_DIR)), name="static")
 
 INITIALIZE_DATABASE_ON_IMPORT = os.getenv(
     "SKIP_DATABASE_INITIALIZATION",
@@ -5798,16 +6904,38 @@ def ensure_default_admin():
                         article_no=item["article_no"],
                         name=item["name"],
                         category=item["category"],
-                        wholesale_price=item["wholesale_price"],
-                        retail_price=item["retail_price"],
-                        stock_quantity=item["stock_quantity"],
-                        unit="pcs",
-                        status="Active",
+                        cost_price=item["wholesale_price"],
+                        selling_price=item["retail_price"],
+                        factory_stock=item["stock_quantity"],
+                        usa_stock=0,
+                        front_room_stock=0,
+                        reserved_stock=0,
+                        low_stock_alert=10,
+                        workflow_required=True,
                     ))
                 db.commit()
 
             cuterex_o_count = db.query(Order).execution_options(skip_tenant_scope=True).filter(Order.tenant_id == scratch_tenant.id).count()
             if cuterex_o_count == 0:
+                cuterex_customer = (
+                    db.query(Customer)
+                    .execution_options(skip_tenant_scope=True)
+                    .filter(
+                        Customer.tenant_id == scratch_tenant.id,
+                        Customer.name == "Cuterex Sample Customer",
+                    )
+                    .first()
+                )
+                if not cuterex_customer:
+                    cuterex_customer = Customer(
+                        tenant_id=scratch_tenant.id,
+                        name="Cuterex Sample Customer",
+                        company_name="Cuterex Wholesale",
+                        platform="Seed",
+                    )
+                    db.add(cuterex_customer)
+                    db.flush()
+
                 sample_orders = [
                     {"order_no": "CTX-ORD-101", "platform": "Faire", "total_amount": 279.97, "status": "New", "days_ago": 1},
                     {"order_no": "CTX-ORD-102", "platform": "Wholesale Direct", "total_amount": 149.98, "status": "New", "days_ago": 3},
@@ -5818,13 +6946,13 @@ def ensure_default_admin():
                     o_date = datetime.utcnow() - timedelta(days=item["days_ago"])
                     db.add(Order(
                         tenant_id=scratch_tenant.id,
+                        customer_id=cuterex_customer.id,
                         order_no=item["order_no"],
                         platform=item["platform"],
                         total_amount=item["total_amount"],
                         order_total_usd=item["total_amount"],
                         status=item["status"],
                         order_date=o_date,
-                        created_at=o_date,
                     ))
                 db.commit()
         except Exception as seed_exc:
@@ -5850,6 +6978,7 @@ app.add_middleware(
     allow_headers=["*"],
     allow_private_network=True,
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.middleware("http")
 async def private_network_access_middleware(request: Request, call_next):
@@ -6007,12 +7136,19 @@ def product_response(product: Product):
 
 
 def public_website_product_response(product: Product):
+    img_url = product.image_url
+    if img_url and img_url.startswith("/static/uploads/"):
+        stem = Path(img_url).stem
+        opt_path = Path(STATIC_DIR) / "optimized" / f"{stem}.webp"
+        if opt_path.exists():
+            img_url = f"/static/optimized/{stem}.webp"
+
     return {
         "id": product.id,
         "article_no": product.article_no,
         "name": product.name,
         "category": product.category,
-        "image_url": product.image_url,
+        "image_url": img_url,
         "notes": product.notes,
         "available_stock": (
             (product.factory_stock or 0)
@@ -6438,13 +7574,25 @@ def workflow_step_response(step: WorkflowStep):
 def shipping_response(shipping: Shipping, privacy: dict | None = None):
     order = shipping.order
     customer = order.customer if order else None
+    customer_company_name = (
+        privacy_order_customer_labels(
+            order, customer, is_unassigned_import_customer(customer), privacy, "Shipping"
+        )[1]
+        if order else None
+    )
+    courier = shipping.courier_name or ""
+    trk = shipping.tracking_number or ""
     return {
         "id": shipping.id,
         "order_id": shipping.order_id,
         "order_no": order.order_no if order else None,
         "customer_name": customer_personal_label(customer, order) if order else None,
+        "customer_company_name": customer_company_name,
         "courier_name": shipping.courier_name,
+        "dispatch_agent": shipping.dispatch_agent,
         "tracking_number": shipping.tracking_number,
+        "carrier_url": get_carrier_tracking_url(courier, trk) if trk else None,
+        "detected_carrier": detect_carrier_by_tracking(trk) if trk else None,
         "package_weight_kg": shipping.package_weight_kg,
         "shipping_cost": shipping.shipping_cost,
         "shipping_note": shipping.shipping_note,
@@ -6454,11 +7602,48 @@ def shipping_response(shipping: Shipping, privacy: dict | None = None):
         "calculated_weight_kg": shipping.calculated_weight_kg,
         "estimated_shipping_cost": shipping.estimated_shipping_cost,
         "rate_source_version": shipping.rate_source_version,
+        "shipping_status": order.shipping_status if order else "Shipped",
         "shipped_at": shipping.shipped_at,
         "created_at": shipping.created_at,
         "updated_at": shipping.updated_at,
     }
 
+def sync_delivered_shipping_orders_from_tracking(db: Session, tracking_results: dict | None) -> int:
+    """Move orders to Delivered only when live FedEx API data confirms delivery."""
+    if not tracking_results:
+        return 0
+
+    delivered_by_tracking = {}
+    for key, result in tracking_results.items():
+        if not is_real_fedex_delivered_result(result):
+            continue
+        tracking_number = str(result.get("tracking_number") or key or "").strip()
+        if tracking_number:
+            delivered_by_tracking[tracking_number] = result
+
+    if not delivered_by_tracking:
+        return 0
+
+    records = (
+        db.query(Shipping)
+        .filter(Shipping.tracking_number.isnot(None), Shipping.tracking_number != "")
+        .all()
+    )
+    now = datetime.utcnow()
+    updated = 0
+    for record in records:
+        tracking_number = str(record.tracking_number or "").strip()
+        if tracking_number not in delivered_by_tracking or not record.order:
+            continue
+        if str(record.order.shipping_status or "").strip().lower() == "delivered":
+            continue
+        record.order.shipping_status = "Delivered"
+        record.updated_at = now
+        updated += 1
+
+    if updated:
+        db.commit()
+    return updated
 
 def order_items_summary(order: Order | None) -> list[dict]:
     if not order:
@@ -8133,7 +9318,7 @@ def regular_bill_response(bill: RegularBill):
 
 
 ACCOUNTING_DIRECTIONS = {"Money In", "Money Out"}
-ACCOUNTING_ACCOUNT_TYPES = {"Bank", "Cash", "Platform", "Wallet", "Other"}
+ACCOUNTING_ACCOUNT_TYPES = {"Bank", "Cash", "Platform", "Wallet", "Accounts Receivable", "Accounts Payable", "Inventory Asset", "Owner Equity", "Sales Revenue", "Other Income", "General Expenses", "Cost of Goods Sold", "Expense", "Income", "Other"}
 ACCOUNTING_ORDER_SOURCE = "order_payout"
 ACCOUNTING_WORKER_PAYMENT_SOURCE = "worker_payment"
 
@@ -8163,10 +9348,11 @@ def normalize_accounting_currency(currency: str | None) -> str:
 
 
 def normalize_accounting_account_type(account_type: str | None) -> str:
-    value = (account_type or "Bank").strip().title()
-    if value not in ACCOUNTING_ACCOUNT_TYPES:
-        return "Other"
-    return value
+    raw = (account_type or "Bank").strip()
+    if not raw:
+        return "Bank"
+    labels = {value.lower(): value for value in ACCOUNTING_ACCOUNT_TYPES}
+    return labels.get(raw.lower(), "Other")
 
 
 def accounting_amount_pkr(
@@ -8191,14 +9377,162 @@ def platform_label(platform: str | None) -> str | None:
     return value
 
 
-def ensure_platform_account(db: Session, platform: str | None) -> AccountingAccount | None:
+VALID_ACCOUNTING_FISCAL_STATUSES = {"Open", "Closed"}
+VALID_ACCOUNTING_JOURNAL_STATUSES = {"Draft", "Posted", "Void"}
+VALID_ACCOUNTING_DOCUMENT_TYPES = {"Invoice", "Bill"}
+VALID_ACCOUNTING_DOCUMENT_STATUSES = {"Draft", "Open", "Partially Paid", "Paid", "Void"}
+VALID_ACCOUNTING_BANK_TRANSACTION_STATUSES = {"Unmatched", "Matched", "Ignored"}
+VALID_ACCOUNTING_BANK_RULE_MATCH_FIELDS = {"Any", "Description", "Reference", "Counterparty"}
+VALID_ACCOUNTING_BANK_RULE_MATCH_TYPES = {"Contains", "Equals", "Starts With", "Ends With"}
+VALID_ACCOUNTING_BANK_RULE_ACTIONS = {"Create Money Entry", "Ignore"}
+VALID_ACCOUNTING_RECURRING_TEMPLATE_TYPES = {"Money Entry", "Invoice", "Bill"}
+VALID_ACCOUNTING_RECURRING_STATUSES = {"Active", "Paused"}
+VALID_ACCOUNTING_RECURRING_FREQUENCIES = {"Daily", "Weekly", "Monthly", "Quarterly", "Yearly"}
+ACCOUNTING_TRANSACTION_SOURCE = "accounting_transaction"
+ACCOUNTING_DOCUMENT_SOURCE = "accounting_document"
+ACCOUNTING_DOCUMENT_PAYMENT_SOURCE = "accounting_document_payment"
+ACCOUNTING_RECURRING_SOURCE = "accounting_recurring_template"
+ACCOUNTING_ASSET_TYPES = {"asset", "cash", "bank", "platform", "accounts receivable", "inventory", "inventory asset"}
+ACCOUNTING_LIABILITY_TYPES = {"liability", "accounts payable", "credit card", "loan"}
+ACCOUNTING_EQUITY_TYPES = {"equity", "owner equity", "retained earnings"}
+ACCOUNTING_INCOME_TYPES = {"income", "revenue", "sales", "sales revenue", "service revenue", "other income"}
+ACCOUNTING_EXPENSE_TYPES = {"expense", "expenses", "cost of goods sold", "cogs", "general expenses"}
+
+
+def positive_int_env(name: str, default: int, minimum: int = 1) -> int:
+    try:
+        value = int(os.getenv(name, str(default)) or default)
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, value)
+
+
+ACCOUNTING_RECURRING_AUTOMATION_ENABLED = (os.getenv("ACCOUNTING_RECURRING_AUTOMATION_ENABLED", "1") or "1").strip().lower() not in {"0", "false", "off", "no"}
+ACCOUNTING_RECURRING_AUTOMATION_INITIAL_DELAY_SECONDS = positive_int_env("ACCOUNTING_RECURRING_AUTOMATION_INITIAL_DELAY_SECONDS", 20, 1)
+ACCOUNTING_RECURRING_AUTOMATION_CHECK_SECONDS = positive_int_env("ACCOUNTING_RECURRING_AUTOMATION_CHECK_SECONDS", 300, 60)
+ACCOUNTING_RECURRING_AUTOMATION_LIMIT_PER_TENANT = positive_int_env("ACCOUNTING_RECURRING_AUTOMATION_LIMIT_PER_TENANT", 100, 1)
+
+
+def accounting_tenant_id(db: Session, tenant_id: int | None = None) -> int:
+    target_tenant_id = tenant_id or db.info.get("tenant_id")
+    if target_tenant_id is None:
+        target_tenant_id = get_default_tenant(db).id
+    db.info["tenant_id"] = int(target_tenant_id)
+    return int(target_tenant_id)
+
+
+def accounting_tenant_id_for_request(request: Request, db: Session) -> int:
+    user = require_page_access(request, db, "Accounting")
+    target_tenant_id = getattr(request.state, "tenant_id", None) or user.tenant_id
+    if target_tenant_id is None:
+        target_tenant_id = get_default_tenant(db).id
+    db.info["tenant_id"] = int(target_tenant_id)
+    return int(target_tenant_id)
+
+
+def normalize_accounting_fiscal_status(value: str | None) -> str:
+    clean = (value or "Open").strip().title()
+    if clean not in VALID_ACCOUNTING_FISCAL_STATUSES:
+        raise HTTPException(status_code=400, detail="Unsupported fiscal year status")
+    return clean
+
+
+def validate_accounting_date_range(start_date: datetime, end_date: datetime) -> None:
+    if end_date < start_date:
+        raise HTTPException(status_code=400, detail="End date must be after start date")
+
+
+def validate_accounting_fiscal_start(month: int, day: int) -> None:
+    if day > calendar.monthrange(2024, month)[1]:
+        raise HTTPException(status_code=400, detail="Fiscal year start day is invalid for that month")
+
+
+def ensure_accounting_settings(db: Session, tenant_id: int) -> AccountingSettings:
+    settings = (
+        db.query(AccountingSettings)
+        .filter(AccountingSettings.tenant_id == tenant_id)
+        .first()
+    )
+    if settings:
+        return settings
+    settings = AccountingSettings(
+        tenant_id=tenant_id,
+        base_currency="PKR",
+        reporting_currency="PKR",
+        fiscal_year_start_month=1,
+        fiscal_year_start_day=1,
+        allow_multi_currency=True,
+    )
+    db.add(settings)
+    db.flush()
+    return settings
+
+
+def ensure_accounting_period_is_open(db: Session, tenant_id: int, transaction_date: datetime | None) -> None:
+    effective_date = transaction_date or datetime.utcnow()
+    settings = ensure_accounting_settings(db, tenant_id)
+    if settings.lock_date and effective_date <= settings.lock_date:
+        raise HTTPException(status_code=400, detail="This accounting date is locked")
+
+    closed_year = (
+        db.query(AccountingFiscalYear)
+        .filter(
+            AccountingFiscalYear.tenant_id == tenant_id,
+            AccountingFiscalYear.status == "Closed",
+            AccountingFiscalYear.start_date <= effective_date,
+            AccountingFiscalYear.end_date >= effective_date,
+        )
+        .first()
+    )
+    if closed_year:
+        raise HTTPException(status_code=400, detail="This fiscal year is closed")
+
+    locked_period = (
+        db.query(AccountingPeriodLock)
+        .filter(
+            AccountingPeriodLock.tenant_id == tenant_id,
+            AccountingPeriodLock.locked == True,
+            AccountingPeriodLock.period_start <= effective_date,
+            AccountingPeriodLock.period_end >= effective_date,
+        )
+        .first()
+    )
+    if locked_period:
+        raise HTTPException(status_code=400, detail="This accounting period is locked")
+
+
+def get_accounting_account_or_404(db: Session, account_id: int, tenant_id: int) -> AccountingAccount:
+    account = (
+        db.query(AccountingAccount)
+        .filter(AccountingAccount.id == account_id, AccountingAccount.tenant_id == tenant_id)
+        .first()
+    )
+    if not account:
+        raise HTTPException(status_code=404, detail="Accounting account not found")
+    return account
+
+
+def get_accounting_transaction_or_404(db: Session, transaction_id: int, tenant_id: int) -> AccountingTransaction:
+    transaction = (
+        db.query(AccountingTransaction)
+        .filter(AccountingTransaction.id == transaction_id, AccountingTransaction.tenant_id == tenant_id)
+        .first()
+    )
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Accounting transaction not found")
+    return transaction
+
+
+def ensure_platform_account(db: Session, platform: str | None, tenant_id: int | None = None) -> AccountingAccount | None:
     label = platform_label(platform)
     if not label:
         return None
+    tenant_id = accounting_tenant_id(db, tenant_id)
 
     account = (
         db.query(AccountingAccount)
         .filter(
+            AccountingAccount.tenant_id == tenant_id,
             func.lower(AccountingAccount.platform) == label.lower(),
             AccountingAccount.account_type == "Platform",
         )
@@ -8210,7 +9544,10 @@ def ensure_platform_account(db: Session, platform: str | None) -> AccountingAcco
     account_name = f"{label} Payouts"
     account = (
         db.query(AccountingAccount)
-        .filter(func.lower(AccountingAccount.name) == account_name.lower())
+        .filter(
+            AccountingAccount.tenant_id == tenant_id,
+            func.lower(AccountingAccount.name) == account_name.lower(),
+        )
         .first()
     )
     if account:
@@ -8223,6 +9560,7 @@ def ensure_platform_account(db: Session, platform: str | None) -> AccountingAcco
         return account
 
     account = AccountingAccount(
+        tenant_id=tenant_id,
         name=account_name,
         account_type="Platform",
         platform=label,
@@ -8236,7 +9574,8 @@ def ensure_platform_account(db: Session, platform: str | None) -> AccountingAcco
     return account
 
 
-def ensure_default_accounting_accounts(db: Session) -> bool:
+def ensure_default_accounting_accounts(db: Session, tenant_id: int | None = None) -> bool:
+    tenant_id = accounting_tenant_id(db, tenant_id)
     changed = False
     default_accounts = [
         {
@@ -8251,41 +9590,109 @@ def ensure_default_accounting_accounts(db: Session) -> bool:
             "currency": "PKR",
             "notes": "Default bank account.",
         },
+        {
+            "name": "Accounts Receivable",
+            "account_type": "Accounts Receivable",
+            "currency": "PKR",
+            "notes": "Customer invoices and unpaid sales.",
+        },
+        {
+            "name": "Inventory Asset",
+            "account_type": "Inventory Asset",
+            "currency": "PKR",
+            "notes": "Stock value on hand.",
+        },
+        {
+            "name": "Accounts Payable",
+            "account_type": "Accounts Payable",
+            "currency": "PKR",
+            "notes": "Supplier bills and unpaid expenses.",
+        },
+        {
+            "name": "Owner Equity",
+            "account_type": "Owner Equity",
+            "currency": "PKR",
+            "notes": "Capital, retained earnings, and owner equity.",
+        },
+        {
+            "name": "Sales Revenue",
+            "account_type": "Sales Revenue",
+            "currency": "PKR",
+            "notes": "Default income account for sales and payouts.",
+        },
+        {
+            "name": "Other Income",
+            "account_type": "Other Income",
+            "currency": "PKR",
+            "notes": "Other operating income.",
+        },
+        {
+            "name": "General Expenses",
+            "account_type": "General Expenses",
+            "currency": "PKR",
+            "notes": "Default expense account.",
+        },
+        {
+            "name": "Cost of Goods Sold",
+            "account_type": "Cost of Goods Sold",
+            "currency": "PKR",
+            "notes": "Direct product and production costs.",
+        },
     ]
     for account_data in default_accounts:
         exists = (
             db.query(AccountingAccount)
-            .filter(func.lower(AccountingAccount.name) == account_data["name"].lower())
+            .filter(
+                AccountingAccount.tenant_id == tenant_id,
+                func.lower(AccountingAccount.name) == account_data["name"].lower(),
+            )
             .first()
         )
         if not exists:
-            db.add(AccountingAccount(opening_balance=0, is_active=True, **account_data))
+            db.add(AccountingAccount(tenant_id=tenant_id, opening_balance=0, is_active=True, **account_data))
             changed = True
 
-    for (platform,) in db.query(Order.platform).distinct().all():
+    for (platform,) in db.query(Order.platform).filter(Order.tenant_id == tenant_id).distinct().all():
         if platform_label(platform):
-            before_count = db.query(AccountingAccount).count()
-            ensure_platform_account(db, platform)
-            changed = changed or db.query(AccountingAccount).count() != before_count
+            before_count = db.query(AccountingAccount).filter(AccountingAccount.tenant_id == tenant_id).count()
+            ensure_platform_account(db, platform, tenant_id)
+            changed = changed or db.query(AccountingAccount).filter(AccountingAccount.tenant_id == tenant_id).count() != before_count
 
+    ensure_accounting_settings(db, tenant_id)
     if changed:
         db.flush()
     return changed
 
 
-def accounting_account_response(account: AccountingAccount) -> dict:
-    balance = float(account.opening_balance or 0)
-    balance_pkr = balance if normalize_accounting_currency(account.currency) == "PKR" else 0
+def accounting_account_response(account: AccountingAccount, journal_sums: dict[int, dict] | None = None) -> dict:
+    opening = float(account.opening_balance or 0)
+    balance = opening
+    balance_pkr = opening if normalize_accounting_currency(account.currency) == "PKR" else 0
+    debit_total = 0.0
+    credit_total = 0.0
 
-    for transaction in account.transactions or []:
-        sign = 1 if transaction.direction == "Money In" else -1
-        balance += sign * float(transaction.amount or 0)
-        balance_pkr += sign * float(transaction.amount_pkr or 0)
+    if journal_sums is not None:
+        row = journal_sums.get(account.id, {"debit": 0.0, "credit": 0.0})
+        debit_total = float(row.get("debit") or 0)
+        credit_total = float(row.get("credit") or 0)
+        if accounting_account_normal_balance(account.account_type) == "credit":
+            balance = opening + credit_total - debit_total
+        else:
+            balance = opening + debit_total - credit_total
+        balance_pkr = balance
+    else:
+        for transaction in account.transactions or []:
+            sign = 1 if transaction.direction == "Money In" else -1
+            balance += sign * float(transaction.amount or 0)
+            balance_pkr += sign * float(transaction.amount_pkr or 0)
 
     return {
         "id": account.id,
+        "tenant_id": account.tenant_id,
         "name": account.name,
         "account_type": account.account_type,
+        "account_class": accounting_account_class(account.account_type),
+        "normal_balance": accounting_account_normal_balance(account.account_type),
         "platform": account.platform,
         "currency": account.currency,
         "opening_balance": account.opening_balance,
@@ -8293,6 +9700,8 @@ def accounting_account_response(account: AccountingAccount) -> dict:
         "is_active": account.is_active,
         "balance": round(balance, 2),
         "balance_pkr": round(balance_pkr, 2),
+        "debit_total": round(debit_total, 2),
+        "credit_total": round(credit_total, 2),
         "created_at": account.created_at,
         "updated_at": account.updated_at,
     }
@@ -8301,6 +9710,7 @@ def accounting_account_response(account: AccountingAccount) -> dict:
 def accounting_transaction_response(transaction: AccountingTransaction) -> dict:
     return {
         "id": transaction.id,
+        "tenant_id": transaction.tenant_id,
         "account_id": transaction.account_id,
         "account_name": transaction.account.name if transaction.account else None,
         "direction": transaction.direction,
@@ -8318,6 +9728,1692 @@ def accounting_transaction_response(transaction: AccountingTransaction) -> dict:
         "transaction_date": transaction.transaction_date,
         "created_at": transaction.created_at,
         "updated_at": transaction.updated_at,
+    }
+
+
+def normalize_accounting_journal_status(value: str | None) -> str:
+    clean = (value or "Posted").strip().title()
+    if clean not in VALID_ACCOUNTING_JOURNAL_STATUSES:
+        raise HTTPException(status_code=400, detail="Unsupported journal status")
+    return clean
+
+
+def accounting_account_class(account_type: str | None) -> str:
+    clean = str(account_type or "").strip().lower()
+    if clean in ACCOUNTING_ASSET_TYPES or "asset" in clean or "receivable" in clean:
+        return "asset"
+    if clean in ACCOUNTING_LIABILITY_TYPES or "payable" in clean or "liability" in clean:
+        return "liability"
+    if clean in ACCOUNTING_EQUITY_TYPES or "equity" in clean:
+        return "equity"
+    if clean in ACCOUNTING_INCOME_TYPES or "income" in clean or "revenue" in clean or "sales" in clean:
+        return "income"
+    if clean in ACCOUNTING_EXPENSE_TYPES or "expense" in clean or "cost" in clean or clean == "cogs":
+        return "expense"
+    return "asset"
+
+
+def accounting_account_normal_balance(account_type: str | None) -> str:
+    return "credit" if accounting_account_class(account_type) in {"liability", "equity", "income"} else "debit"
+
+
+def accounting_line_amount_pkr(debit: float, credit: float, currency: str, exchange_rate: float, amount_pkr: float | None) -> float:
+    raw_amount = max(float(debit or 0), float(credit or 0))
+    return accounting_amount_pkr(
+        amount=raw_amount,
+        currency=currency,
+        exchange_rate=exchange_rate,
+        amount_pkr=amount_pkr,
+    )
+
+
+def ensure_accounting_system_account(
+    db: Session,
+    tenant_id: int,
+    name: str,
+    account_type: str,
+    currency: str = "PKR",
+    notes: str | None = None,
+) -> AccountingAccount:
+    ensure_default_accounting_accounts(db, tenant_id)
+    account = (
+        db.query(AccountingAccount)
+        .filter(
+            AccountingAccount.tenant_id == tenant_id,
+            func.lower(AccountingAccount.name) == name.lower(),
+        )
+        .first()
+    )
+    if account:
+        return account
+    account = AccountingAccount(
+        tenant_id=tenant_id,
+        name=name,
+        account_type=account_type,
+        currency=currency,
+        opening_balance=0,
+        notes=notes,
+        is_active=True,
+    )
+    db.add(account)
+    db.flush()
+    return account
+
+
+def next_accounting_journal_entry_no(db: Session, tenant_id: int) -> str:
+    count = db.query(AccountingJournalEntry).filter(AccountingJournalEntry.tenant_id == tenant_id).count()
+    return f"JE-{count + 1:06d}"
+
+
+def accounting_journal_line_response(line: AccountingJournalLine) -> dict:
+    return {
+        "id": line.id,
+        "tenant_id": line.tenant_id,
+        "journal_entry_id": line.journal_entry_id,
+        "account_id": line.account_id,
+        "account_name": line.account.name if line.account else None,
+        "account_type": line.account.account_type if line.account else None,
+        "description": line.description,
+        "debit": round(float(line.debit or 0), 2),
+        "credit": round(float(line.credit or 0), 2),
+        "currency": line.currency,
+        "exchange_rate": line.exchange_rate,
+        "amount_pkr": round(float(line.amount_pkr or 0), 2),
+        "created_at": line.created_at,
+        "updated_at": line.updated_at,
+    }
+
+
+def accounting_journal_entry_response(entry: AccountingJournalEntry) -> dict:
+    lines = sorted(entry.lines or [], key=lambda item: item.id or 0)
+    return {
+        "id": entry.id,
+        "tenant_id": entry.tenant_id,
+        "entry_no": entry.entry_no,
+        "entry_date": entry.entry_date,
+        "memo": entry.memo,
+        "source_type": entry.source_type,
+        "source_id": entry.source_id,
+        "status": entry.status,
+        "total_debit": round(sum(float(line.debit or 0) for line in lines), 2),
+        "total_credit": round(sum(float(line.credit or 0) for line in lines), 2),
+        "created_at": entry.created_at,
+        "updated_at": entry.updated_at,
+        "lines": [accounting_journal_line_response(line) for line in lines],
+    }
+
+
+def validate_accounting_journal_lines(
+    db: Session,
+    tenant_id: int,
+    lines: list[AccountingJournalLineCreate],
+) -> list[dict]:
+    if len(lines or []) < 2:
+        raise HTTPException(status_code=400, detail="A journal entry needs at least two lines")
+
+    normalized: list[dict] = []
+    total_debit = 0.0
+    total_credit = 0.0
+    for line in lines:
+        account = get_accounting_account_or_404(db, line.account_id, tenant_id)
+        debit = round(float(line.debit or 0), 2)
+        credit = round(float(line.credit or 0), 2)
+        if debit <= 0 and credit <= 0:
+            raise HTTPException(status_code=400, detail="Each journal line needs a debit or credit amount")
+        if debit > 0 and credit > 0:
+            raise HTTPException(status_code=400, detail="A journal line cannot have both debit and credit")
+        currency = normalize_accounting_currency(line.currency or account.currency or "PKR")
+        exchange_rate = float(line.exchange_rate or 0)
+        normalized.append({
+            "account": account,
+            "description": line.description,
+            "debit": debit,
+            "credit": credit,
+            "currency": currency,
+            "exchange_rate": exchange_rate,
+            "amount_pkr": accounting_line_amount_pkr(debit, credit, currency, exchange_rate, line.amount_pkr),
+        })
+        total_debit += debit
+        total_credit += credit
+
+    if round(total_debit, 2) != round(total_credit, 2):
+        raise HTTPException(status_code=400, detail="Journal entry debits and credits must match")
+    if round(total_debit, 2) <= 0:
+        raise HTTPException(status_code=400, detail="Journal entry amount must be greater than zero")
+    return normalized
+
+
+def replace_accounting_journal_lines(
+    db: Session,
+    entry: AccountingJournalEntry,
+    tenant_id: int,
+    lines: list[AccountingJournalLineCreate],
+) -> None:
+    normalized_lines = validate_accounting_journal_lines(db, tenant_id, lines)
+    entry.lines = []
+    db.flush()
+    for line in normalized_lines:
+        entry.lines.append(AccountingJournalLine(
+            tenant_id=tenant_id,
+            journal_entry_id=entry.id,
+            account_id=line["account"].id,
+            description=line["description"],
+            debit=line["debit"],
+            credit=line["credit"],
+            currency=line["currency"],
+            exchange_rate=line["exchange_rate"],
+            amount_pkr=line["amount_pkr"],
+        ))
+    db.flush()
+
+
+def delete_accounting_journal_for_source(db: Session, tenant_id: int, source_type: str, source_id: int | None) -> None:
+    if source_id is None:
+        return
+    entries = (
+        db.query(AccountingJournalEntry)
+        .filter(
+            AccountingJournalEntry.tenant_id == tenant_id,
+            AccountingJournalEntry.source_type == source_type,
+            AccountingJournalEntry.source_id == source_id,
+        )
+        .all()
+    )
+    for entry in entries:
+        db.delete(entry)
+
+
+def normalize_accounting_document_type(value: str | None) -> str:
+    clean = (value or "Invoice").strip().title()
+    if clean not in VALID_ACCOUNTING_DOCUMENT_TYPES:
+        raise HTTPException(status_code=400, detail="Document type must be Invoice or Bill")
+    return clean
+
+
+def normalize_accounting_document_status(value: str | None) -> str:
+    clean = (value or "Open").strip().title()
+    if clean in {"Partial", "Partiallypaid", "Partially Paid"}:
+        clean = "Partially Paid"
+    if clean not in VALID_ACCOUNTING_DOCUMENT_STATUSES:
+        raise HTTPException(status_code=400, detail="Unsupported document status")
+    return clean
+
+
+def next_accounting_document_no(db: Session, tenant_id: int, document_type: str) -> str:
+    prefix = "INV" if document_type == "Invoice" else "BILL"
+    count = (
+        db.query(AccountingDocument)
+        .filter(AccountingDocument.tenant_id == tenant_id, AccountingDocument.document_type == document_type)
+        .count()
+    )
+    return f"{prefix}-{count + 1:06d}"
+
+
+def accounting_document_receivable_account(db: Session, tenant_id: int) -> AccountingAccount:
+    return ensure_accounting_system_account(db, tenant_id, "Accounts Receivable", "Accounts Receivable", notes="Money owed by customers for invoices.")
+
+
+def accounting_document_payable_account(db: Session, tenant_id: int) -> AccountingAccount:
+    return ensure_accounting_system_account(db, tenant_id, "Accounts Payable", "Accounts Payable", notes="Money owed to suppliers/vendors for bills.")
+
+
+def get_accounting_document_or_404(db: Session, document_id: int, tenant_id: int) -> AccountingDocument:
+    document = db.query(AccountingDocument).filter(AccountingDocument.id == document_id, AccountingDocument.tenant_id == tenant_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Accounting document not found")
+    return document
+
+
+def get_accounting_document_payment_or_404(db: Session, payment_id: int, tenant_id: int) -> AccountingDocumentPayment:
+    payment = db.query(AccountingDocumentPayment).filter(AccountingDocumentPayment.id == payment_id, AccountingDocumentPayment.tenant_id == tenant_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Accounting document payment not found")
+    return payment
+
+
+def accounting_document_line_amount(line: AccountingDocumentLineCreate) -> tuple[float, float, float]:
+    quantity = max(float(line.quantity or 0), 0)
+    unit_price = max(float(line.unit_price or 0), 0)
+    amount = line.amount
+    if amount is None:
+        amount = quantity * unit_price
+    amount = round(max(float(amount or 0), 0), 2)
+    tax_amount = round(max(float(line.tax_amount or 0), 0), 2)
+    total = round(amount + tax_amount, 2)
+    return amount, tax_amount, total
+
+
+def replace_accounting_document_lines(db: Session, document: AccountingDocument, tenant_id: int, lines: list[AccountingDocumentLineCreate]) -> None:
+    if not lines:
+        raise HTTPException(status_code=400, detail="Document needs at least one line")
+    normalized = []
+    subtotal = 0.0
+    tax_total = 0.0
+    grand_total = 0.0
+    for line in lines:
+        account = get_accounting_account_or_404(db, line.account_id, tenant_id)
+        amount, tax_amount, total = accounting_document_line_amount(line)
+        if total <= 0:
+            raise HTTPException(status_code=400, detail="Each document line needs an amount")
+        normalized.append({"account": account, "description": line.description, "quantity": max(float(line.quantity or 0), 0), "unit_price": max(float(line.unit_price or 0), 0), "amount": amount, "tax_amount": tax_amount, "total": total})
+        subtotal += amount
+        tax_total += tax_amount
+        grand_total += total
+    document.lines = []
+    db.flush()
+    for line in normalized:
+        document.lines.append(AccountingDocumentLine(tenant_id=tenant_id, document_id=document.id, account_id=line["account"].id, description=line["description"], quantity=line["quantity"], unit_price=line["unit_price"], amount=line["amount"], tax_amount=line["tax_amount"], total=line["total"]))
+    document.subtotal = round(subtotal, 2)
+    document.tax_total = round(tax_total, 2)
+    document.total = round(grand_total, 2)
+    db.flush()
+
+
+def accounting_document_paid_total(document: AccountingDocument) -> float:
+    return round(sum(float(payment.amount or 0) for payment in document.payments or []), 2)
+
+
+def accounting_document_balance(document: AccountingDocument) -> float:
+    return round(max(float(document.total or 0) - accounting_document_paid_total(document), 0), 2)
+
+
+def accounting_document_payment_status(document: AccountingDocument, today: datetime | None = None) -> tuple[str, int]:
+    status = normalize_accounting_document_status(document.status)
+    if status in {"Draft", "Void"}:
+        return status, 0
+    paid = accounting_document_paid_total(document)
+    total = round(float(document.total or 0), 2)
+    balance = round(max(total - paid, 0), 2)
+    if total > 0 and balance <= 0.01:
+        return "Paid", 0
+    days_past_due = 0
+    if document.due_date:
+        basis = today or datetime.utcnow()
+        days_past_due = max((basis.date() - document.due_date.date()).days, 0)
+    if paid > 0:
+        return "Partially Paid", days_past_due
+    if days_past_due > 0:
+        return "Overdue", days_past_due
+    return "Open", 0
+
+
+def sync_accounting_document_status(document: AccountingDocument) -> None:
+    if normalize_accounting_document_status(document.status) in {"Draft", "Void"}:
+        return
+    payment_status, _ = accounting_document_payment_status(document)
+    document.status = "Open" if payment_status == "Overdue" else payment_status
+
+
+def accounting_document_line_response(line: AccountingDocumentLine) -> dict:
+    return {
+        "id": line.id,
+        "tenant_id": line.tenant_id,
+        "document_id": line.document_id,
+        "account_id": line.account_id,
+        "account_name": line.account.name if line.account else None,
+        "account_type": line.account.account_type if line.account else None,
+        "description": line.description,
+        "quantity": line.quantity,
+        "unit_price": line.unit_price,
+        "amount": round(float(line.amount or 0), 2),
+        "tax_amount": round(float(line.tax_amount or 0), 2),
+        "total": round(float(line.total or 0), 2),
+        "created_at": line.created_at,
+        "updated_at": line.updated_at,
+    }
+
+
+def accounting_document_payment_response(payment: AccountingDocumentPayment) -> dict:
+    return {
+        "id": payment.id,
+        "tenant_id": payment.tenant_id,
+        "document_id": payment.document_id,
+        "account_id": payment.account_id,
+        "account_name": payment.account.name if payment.account else None,
+        "amount": round(float(payment.amount or 0), 2),
+        "currency": payment.currency,
+        "exchange_rate": payment.exchange_rate,
+        "amount_pkr": round(float(payment.amount_pkr or 0), 2),
+        "payment_date": payment.payment_date,
+        "reference": payment.reference,
+        "notes": payment.notes,
+        "created_at": payment.created_at,
+        "updated_at": payment.updated_at,
+    }
+
+
+def accounting_document_response(document: AccountingDocument) -> dict:
+    payment_status, days_past_due = accounting_document_payment_status(document)
+    return {
+        "id": document.id,
+        "tenant_id": document.tenant_id,
+        "document_type": document.document_type,
+        "document_no": document.document_no,
+        "contact_name": document.contact_name,
+        "contact_email": document.contact_email,
+        "issue_date": document.issue_date,
+        "due_date": document.due_date,
+        "status": document.status,
+        "payment_status": payment_status,
+        "currency": document.currency,
+        "exchange_rate": document.exchange_rate,
+        "subtotal": round(float(document.subtotal or 0), 2),
+        "tax_total": round(float(document.tax_total or 0), 2),
+        "total": round(float(document.total or 0), 2),
+        "paid_total": accounting_document_paid_total(document),
+        "balance_due": accounting_document_balance(document),
+        "days_past_due": days_past_due,
+        "notes": document.notes,
+        "source_type": document.source_type,
+        "source_id": document.source_id,
+        "created_at": document.created_at,
+        "updated_at": document.updated_at,
+        "lines": [accounting_document_line_response(line) for line in sorted(document.lines or [], key=lambda item: item.id or 0)],
+        "payments": [accounting_document_payment_response(payment) for payment in sorted(document.payments or [], key=lambda item: item.payment_date or datetime.min)],
+    }
+
+
+def upsert_accounting_document_journal_entry(db: Session, document: AccountingDocument, tenant_id: int | None = None, enforce_lock: bool = False) -> AccountingJournalEntry | None:
+    tenant_id = accounting_tenant_id(db, tenant_id or document.tenant_id)
+    document_type = normalize_accounting_document_type(document.document_type)
+    status = normalize_accounting_document_status(document.status)
+    if status in {"Draft", "Void"} or float(document.total or 0) <= 0:
+        delete_accounting_journal_for_source(db, tenant_id, ACCOUNTING_DOCUMENT_SOURCE, document.id)
+        return None
+    if enforce_lock:
+        ensure_accounting_period_is_open(db, tenant_id, document.issue_date or datetime.utcnow())
+    entry = db.query(AccountingJournalEntry).filter(AccountingJournalEntry.tenant_id == tenant_id, AccountingJournalEntry.source_type == ACCOUNTING_DOCUMENT_SOURCE, AccountingJournalEntry.source_id == document.id).first()
+    if not entry:
+        entry = AccountingJournalEntry(tenant_id=tenant_id, entry_no=next_accounting_journal_entry_no(db, tenant_id), source_type=ACCOUNTING_DOCUMENT_SOURCE, source_id=document.id)
+        db.add(entry)
+        db.flush()
+    entry.entry_date = document.issue_date or datetime.utcnow()
+    entry.memo = f"{document_type} {document.document_no} - {document.contact_name}"
+    entry.status = "Posted"
+    currency = normalize_accounting_currency(document.currency)
+    exchange_rate = float(document.exchange_rate or 1)
+    total = round(float(document.total or 0), 2)
+    total_pkr = accounting_amount_pkr(amount=total, currency=currency, exchange_rate=exchange_rate, amount_pkr=None)
+    if document_type == "Invoice":
+        control_account = accounting_document_receivable_account(db, tenant_id)
+        lines = [AccountingJournalLineCreate(account_id=control_account.id, debit=total, credit=0, currency=currency, exchange_rate=exchange_rate, amount_pkr=total_pkr, description=entry.memo)]
+        for item in document.lines or []:
+            amount = round(float(item.total or 0), 2)
+            amount_pkr = accounting_amount_pkr(amount=amount, currency=currency, exchange_rate=exchange_rate, amount_pkr=None)
+            lines.append(AccountingJournalLineCreate(account_id=item.account_id, debit=0, credit=amount, currency=currency, exchange_rate=exchange_rate, amount_pkr=amount_pkr, description=item.description or entry.memo))
+    else:
+        control_account = accounting_document_payable_account(db, tenant_id)
+        lines = []
+        for item in document.lines or []:
+            amount = round(float(item.total or 0), 2)
+            amount_pkr = accounting_amount_pkr(amount=amount, currency=currency, exchange_rate=exchange_rate, amount_pkr=None)
+            lines.append(AccountingJournalLineCreate(account_id=item.account_id, debit=amount, credit=0, currency=currency, exchange_rate=exchange_rate, amount_pkr=amount_pkr, description=item.description or entry.memo))
+        lines.append(AccountingJournalLineCreate(account_id=control_account.id, debit=0, credit=total, currency=currency, exchange_rate=exchange_rate, amount_pkr=total_pkr, description=entry.memo))
+    replace_accounting_journal_lines(db, entry, tenant_id, lines)
+    db.add(entry)
+    db.flush()
+    return entry
+
+
+def upsert_accounting_document_payment_journal_entry(db: Session, payment: AccountingDocumentPayment, tenant_id: int | None = None, enforce_lock: bool = False) -> AccountingJournalEntry | None:
+    tenant_id = accounting_tenant_id(db, tenant_id or payment.tenant_id)
+    document = get_accounting_document_or_404(db, payment.document_id, tenant_id)
+    amount = round(float(payment.amount or 0), 2)
+    if amount <= 0:
+        delete_accounting_journal_for_source(db, tenant_id, ACCOUNTING_DOCUMENT_PAYMENT_SOURCE, payment.id)
+        return None
+    if enforce_lock:
+        ensure_accounting_period_is_open(db, tenant_id, payment.payment_date or datetime.utcnow())
+    entry = db.query(AccountingJournalEntry).filter(AccountingJournalEntry.tenant_id == tenant_id, AccountingJournalEntry.source_type == ACCOUNTING_DOCUMENT_PAYMENT_SOURCE, AccountingJournalEntry.source_id == payment.id).first()
+    if not entry:
+        entry = AccountingJournalEntry(tenant_id=tenant_id, entry_no=next_accounting_journal_entry_no(db, tenant_id), source_type=ACCOUNTING_DOCUMENT_PAYMENT_SOURCE, source_id=payment.id)
+        db.add(entry)
+        db.flush()
+    document_type = normalize_accounting_document_type(document.document_type)
+    control_account = accounting_document_receivable_account(db, tenant_id) if document_type == "Invoice" else accounting_document_payable_account(db, tenant_id)
+    currency = normalize_accounting_currency(payment.currency)
+    exchange_rate = float(payment.exchange_rate or 1)
+    amount_pkr = accounting_amount_pkr(amount=amount, currency=currency, exchange_rate=exchange_rate, amount_pkr=payment.amount_pkr)
+    entry.entry_date = payment.payment_date or datetime.utcnow()
+    entry.memo = f"Payment for {document.document_no} - {document.contact_name}"
+    entry.status = "Posted"
+    if document_type == "Invoice":
+        lines = [AccountingJournalLineCreate(account_id=payment.account_id, debit=amount, credit=0, currency=currency, exchange_rate=exchange_rate, amount_pkr=amount_pkr, description=entry.memo), AccountingJournalLineCreate(account_id=control_account.id, debit=0, credit=amount, currency=currency, exchange_rate=exchange_rate, amount_pkr=amount_pkr, description=entry.memo)]
+    else:
+        lines = [AccountingJournalLineCreate(account_id=control_account.id, debit=amount, credit=0, currency=currency, exchange_rate=exchange_rate, amount_pkr=amount_pkr, description=entry.memo), AccountingJournalLineCreate(account_id=payment.account_id, debit=0, credit=amount, currency=currency, exchange_rate=exchange_rate, amount_pkr=amount_pkr, description=entry.memo)]
+    replace_accounting_journal_lines(db, entry, tenant_id, lines)
+    db.add(entry)
+    db.flush()
+    return entry
+
+
+def accounting_aging_report(db: Session, tenant_id: int, document_type: str) -> dict:
+    document_type = normalize_accounting_document_type(document_type)
+    documents = db.query(AccountingDocument).filter(AccountingDocument.tenant_id == tenant_id, AccountingDocument.document_type == document_type, AccountingDocument.status.notin_(["Draft", "Void"])).order_by(AccountingDocument.due_date.asc().nullslast(), AccountingDocument.issue_date.asc()).all()
+    buckets = {"current": 0.0, "days_1_30": 0.0, "days_31_60": 0.0, "days_61_90": 0.0, "days_over_90": 0.0}
+    rows = []
+    today = datetime.utcnow()
+    for document in documents:
+        balance = accounting_document_balance(document)
+        if balance <= 0.01:
+            continue
+        payment_status, days_past_due = accounting_document_payment_status(document, today)
+        if days_past_due <= 0:
+            bucket = "current"
+        elif days_past_due <= 30:
+            bucket = "days_1_30"
+        elif days_past_due <= 60:
+            bucket = "days_31_60"
+        elif days_past_due <= 90:
+            bucket = "days_61_90"
+        else:
+            bucket = "days_over_90"
+        buckets[bucket] += balance
+        rows.append({"document_id": document.id, "document_no": document.document_no, "document_type": document.document_type, "contact_name": document.contact_name, "issue_date": document.issue_date, "due_date": document.due_date, "payment_status": payment_status, "days_past_due": days_past_due, "total": round(float(document.total or 0), 2), "paid_total": accounting_document_paid_total(document), "balance_due": balance, "bucket": bucket})
+    return {"document_type": document_type, "total_balance": round(sum(buckets.values()), 2), "buckets": {key: round(value, 2) for key, value in buckets.items()}, "rows": rows}
+
+
+def normalize_accounting_bank_transaction_status(value: str | None) -> str:
+    clean = (value or "Unmatched").strip().title()
+    if clean not in VALID_ACCOUNTING_BANK_TRANSACTION_STATUSES:
+        raise HTTPException(status_code=400, detail="Unsupported bank transaction status")
+    return clean
+
+
+def accounting_bank_transaction_amounts(money_in: float | None, money_out: float | None) -> tuple[float, float, float]:
+    incoming = round(max(float(money_in or 0), 0), 2)
+    outgoing = round(max(float(money_out or 0), 0), 2)
+    if incoming > 0 and outgoing > 0:
+        raise HTTPException(status_code=400, detail="A bank transaction cannot have both money in and money out")
+    if incoming <= 0 and outgoing <= 0:
+        raise HTTPException(status_code=400, detail="Bank transaction needs money in or money out")
+    return incoming, outgoing, incoming - outgoing
+
+
+def get_accounting_bank_transaction_or_404(db: Session, bank_transaction_id: int, tenant_id: int) -> AccountingBankTransaction:
+    transaction = db.query(AccountingBankTransaction).filter(AccountingBankTransaction.id == bank_transaction_id, AccountingBankTransaction.tenant_id == tenant_id).first()
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Bank transaction not found")
+    return transaction
+
+
+def accounting_bank_match_source(db: Session, tenant_id: int, source_type: str | None, source_id: int | None) -> dict | None:
+    if not source_type or source_id is None:
+        return None
+    if source_type == ACCOUNTING_TRANSACTION_SOURCE:
+        transaction = get_accounting_transaction_or_404(db, int(source_id), tenant_id)
+        direction = normalize_accounting_direction(transaction.direction)
+        amount = round(float(transaction.amount or 0), 2)
+        return {
+            "source_type": source_type,
+            "source_id": transaction.id,
+            "account_id": transaction.account_id,
+            "money_in": amount if direction == "Money In" else 0,
+            "money_out": amount if direction == "Money Out" else 0,
+            "label": f"Money entry {transaction.reference or transaction.category or transaction.id}",
+        }
+    if source_type == ACCOUNTING_DOCUMENT_PAYMENT_SOURCE:
+        payment = get_accounting_document_payment_or_404(db, int(source_id), tenant_id)
+        document = payment.document
+        if not document:
+            raise HTTPException(status_code=404, detail="Payment document not found")
+        document_type = normalize_accounting_document_type(document.document_type)
+        amount = round(float(payment.amount or 0), 2)
+        return {
+            "source_type": source_type,
+            "source_id": payment.id,
+            "account_id": payment.account_id,
+            "money_in": amount if document_type == "Invoice" else 0,
+            "money_out": amount if document_type == "Bill" else 0,
+            "label": f"{document.document_no} payment",
+        }
+    raise HTTPException(status_code=400, detail="Unsupported match source")
+
+
+def accounting_bank_transaction_response(transaction: AccountingBankTransaction, db: Session | None = None) -> dict:
+    source = None
+    if db is not None and transaction.matched_source_type and transaction.matched_source_id is not None:
+        try:
+            source = accounting_bank_match_source(db, transaction.tenant_id, transaction.matched_source_type, transaction.matched_source_id)
+        except HTTPException:
+            source = None
+    return {
+        "id": transaction.id,
+        "tenant_id": transaction.tenant_id,
+        "account_id": transaction.account_id,
+        "account_name": transaction.account.name if transaction.account else None,
+        "transaction_date": transaction.transaction_date,
+        "description": transaction.description,
+        "reference": transaction.reference,
+        "counterparty": transaction.counterparty,
+        "money_in": round(float(transaction.money_in or 0), 2),
+        "money_out": round(float(transaction.money_out or 0), 2),
+        "currency": transaction.currency,
+        "exchange_rate": transaction.exchange_rate,
+        "amount_pkr": round(float(transaction.amount_pkr or 0), 2),
+        "status": transaction.status,
+        "matched_source_type": transaction.matched_source_type,
+        "matched_source_id": transaction.matched_source_id,
+        "matched_label": source.get("label") if source else None,
+        "matched_at": transaction.matched_at,
+        "notes": transaction.notes,
+        "created_at": transaction.created_at,
+        "updated_at": transaction.updated_at,
+    }
+
+def accounting_bank_source_key(source_type: str | None, source_id: int | None) -> str | None:
+    if not source_type or source_id is None:
+        return None
+    return f"{source_type}:{int(source_id)}"
+
+
+def accounting_bank_used_match_keys(db: Session, tenant_id: int, exclude_bank_transaction_id: int | None = None) -> set[str]:
+    query = db.query(
+        AccountingBankTransaction.matched_source_type,
+        AccountingBankTransaction.matched_source_id,
+    ).filter(
+        AccountingBankTransaction.tenant_id == tenant_id,
+        AccountingBankTransaction.status == "Matched",
+        AccountingBankTransaction.matched_source_type.isnot(None),
+        AccountingBankTransaction.matched_source_id.isnot(None),
+    )
+    if exclude_bank_transaction_id is not None:
+        query = query.filter(AccountingBankTransaction.id != exclude_bank_transaction_id)
+    keys = set()
+    for source_type, source_id in query.all():
+        key = accounting_bank_source_key(source_type, source_id)
+        if key:
+            keys.add(key)
+    return keys
+
+
+def accounting_bank_match_candidates(
+    db: Session,
+    tenant_id: int,
+    account_id: int,
+    money_in: float | None,
+    money_out: float | None,
+    *,
+    exclude_bank_transaction_id: int | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    incoming = round(float(money_in or 0), 2)
+    outgoing = round(float(money_out or 0), 2)
+    used_keys = accounting_bank_used_match_keys(db, tenant_id, exclude_bank_transaction_id)
+    candidates: list[dict] = []
+    money_entries = db.query(AccountingTransaction).filter(
+        AccountingTransaction.tenant_id == tenant_id,
+        AccountingTransaction.account_id == account_id,
+    ).order_by(AccountingTransaction.transaction_date.desc(), AccountingTransaction.id.desc()).limit(500).all()
+    for transaction in money_entries:
+        direction = normalize_accounting_direction(transaction.direction)
+        amount = round(float(transaction.amount or 0), 2)
+        candidate_in = amount if direction == "Money In" else 0
+        candidate_out = amount if direction == "Money Out" else 0
+        key = accounting_bank_source_key(ACCOUNTING_TRANSACTION_SOURCE, transaction.id)
+        if key in used_keys or candidate_in != incoming or candidate_out != outgoing:
+            continue
+        candidates.append({"key": key, "source_type": ACCOUNTING_TRANSACTION_SOURCE, "source_id": transaction.id, "account_id": transaction.account_id, "money_in": candidate_in, "money_out": candidate_out, "label": f"Money entry / {transaction.reference or transaction.category or transaction.id}"})
+        if len(candidates) >= limit:
+            return candidates
+    payments = db.query(AccountingDocumentPayment).join(AccountingDocument, AccountingDocumentPayment.document_id == AccountingDocument.id).filter(
+        AccountingDocumentPayment.tenant_id == tenant_id,
+        AccountingDocumentPayment.account_id == account_id,
+        AccountingDocument.tenant_id == tenant_id,
+    ).order_by(AccountingDocumentPayment.payment_date.desc(), AccountingDocumentPayment.id.desc()).limit(500).all()
+    for payment in payments:
+        document = payment.document
+        if not document:
+            continue
+        document_type = normalize_accounting_document_type(document.document_type)
+        amount = round(float(payment.amount or 0), 2)
+        candidate_in = amount if document_type == "Invoice" else 0
+        candidate_out = amount if document_type == "Bill" else 0
+        key = accounting_bank_source_key(ACCOUNTING_DOCUMENT_PAYMENT_SOURCE, payment.id)
+        if key in used_keys or candidate_in != incoming or candidate_out != outgoing:
+            continue
+        candidates.append({"key": key, "source_type": ACCOUNTING_DOCUMENT_PAYMENT_SOURCE, "source_id": payment.id, "account_id": payment.account_id, "money_in": candidate_in, "money_out": candidate_out, "label": f"{document.document_no} payment / {document.contact_name}"})
+        if len(candidates) >= limit:
+            return candidates
+    return candidates
+
+
+def accounting_csv_header_key(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value or "").lstrip("\ufeff").strip().lower()).strip("_")
+
+
+def accounting_csv_cell(row: dict, column: str | None) -> str:
+    if not column:
+        return ""
+    target = accounting_csv_header_key(column)
+    for key, value in row.items():
+        if accounting_csv_header_key(key) == target:
+            return str(value or "").strip()
+    return ""
+
+
+def accounting_parse_bank_number(value: str | float | int | None) -> float:
+    text = str(value or "").strip()
+    if not text:
+        return 0.0
+    negative_parentheses = text.startswith("(") and text.endswith(")")
+    clean = re.sub(r"[^0-9.\-]", "", text)
+    if clean in {"", "-", ".", "-."}:
+        return 0.0
+    number = float(clean)
+    if negative_parentheses and number > 0:
+        number = -number
+    return round(number, 2)
+
+
+def accounting_parse_bank_import_date(value: str | None, row_number: int) -> datetime:
+    clean = str(value or "").strip()
+    if not clean:
+        raise ValueError("Missing transaction date")
+    try:
+        serial_value = float(clean)
+        if 20000 <= serial_value <= 80000:
+            return datetime(1899, 12, 30) + timedelta(days=serial_value)
+    except ValueError:
+        pass
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%m-%d-%Y", "%Y/%m/%d", "%d %b %Y", "%d %B %Y"):
+        try:
+            return datetime.strptime(clean, fmt)
+        except ValueError:
+            pass
+    try:
+        parsed = datetime.fromisoformat(clean.replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=None)
+    except ValueError as exc:
+        raise ValueError(f"Row {row_number}: unsupported date '{clean}'") from exc
+
+
+def accounting_bank_duplicate_exists(db: Session, tenant_id: int, account_id: int, transaction_date: datetime, reference: str | None, description: str | None, money_in: float, money_out: float) -> bool:
+    query = db.query(AccountingBankTransaction).filter(
+        AccountingBankTransaction.tenant_id == tenant_id,
+        AccountingBankTransaction.account_id == account_id,
+        AccountingBankTransaction.transaction_date == transaction_date,
+        AccountingBankTransaction.money_in == money_in,
+        AccountingBankTransaction.money_out == money_out,
+    )
+    if reference:
+        query = query.filter(func.lower(func.coalesce(AccountingBankTransaction.reference, "")) == reference.strip().lower())
+    else:
+        query = query.filter(func.coalesce(AccountingBankTransaction.reference, "") == "")
+    if description:
+        query = query.filter(func.lower(func.coalesce(AccountingBankTransaction.description, "")) == description.strip().lower())
+    return query.first() is not None
+
+
+def import_accounting_bank_transactions(db: Session, tenant_id: int, payload: AccountingBankTransactionImportRequest) -> dict:
+    account = get_accounting_account_or_404(db, payload.account_id, tenant_id)
+    csv_text = str(payload.csv_text or "").strip()
+    if not csv_text:
+        raise HTTPException(status_code=400, detail="CSV text is required")
+    reader = csv.DictReader(io.StringIO(csv_text))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="CSV header row is required")
+    currency = normalize_accounting_currency(payload.currency)
+    exchange_rate = float(payload.exchange_rate or 1)
+    created_transactions: list[AccountingBankTransaction] = []
+    errors: list[dict] = []
+    skipped = 0
+    for row_number, row in enumerate(reader, start=2):
+        if not any(str(value or "").strip() for value in row.values()):
+            continue
+        try:
+            transaction_date = accounting_parse_bank_import_date(accounting_csv_cell(row, payload.date_column), row_number)
+            description = accounting_csv_cell(row, payload.description_column) or None
+            reference = accounting_csv_cell(row, payload.reference_column) or None
+            counterparty = accounting_csv_cell(row, payload.counterparty_column) or None
+            money_in = accounting_parse_bank_number(accounting_csv_cell(row, payload.money_in_column))
+            money_out = accounting_parse_bank_number(accounting_csv_cell(row, payload.money_out_column))
+            signed_amount_text = accounting_csv_cell(row, payload.amount_column)
+            if money_in <= 0 and money_out <= 0 and signed_amount_text:
+                signed_amount = accounting_parse_bank_number(signed_amount_text)
+                if signed_amount >= 0:
+                    money_in = signed_amount
+                else:
+                    money_out = abs(signed_amount)
+            money_in, money_out, signed_amount = accounting_bank_transaction_amounts(money_in, money_out)
+            if payload.skip_duplicates and accounting_bank_duplicate_exists(db, tenant_id, account.id, transaction_date, reference, description, money_in, money_out):
+                skipped += 1
+                continue
+            amount_pkr = accounting_amount_pkr(amount=abs(signed_amount), currency=currency, exchange_rate=exchange_rate, amount_pkr=None)
+            transaction = AccountingBankTransaction(
+                tenant_id=tenant_id,
+                account_id=account.id,
+                transaction_date=transaction_date,
+                description=description,
+                reference=reference,
+                counterparty=counterparty,
+                money_in=money_in,
+                money_out=money_out,
+                currency=currency,
+                exchange_rate=exchange_rate,
+                amount_pkr=amount_pkr,
+                status="Unmatched",
+                notes="Imported from bank CSV",
+            )
+            db.add(transaction)
+            db.flush()
+            created_transactions.append(transaction)
+        except HTTPException as exc:
+            errors.append({"row": row_number, "error": str(exc.detail)})
+        except Exception as exc:
+            errors.append({"row": row_number, "error": str(exc)})
+    suggestions = []
+    for transaction in created_transactions:
+        candidates = accounting_bank_match_candidates(db, tenant_id, transaction.account_id, transaction.money_in, transaction.money_out, exclude_bank_transaction_id=transaction.id, limit=3)
+        if candidates:
+            suggestions.append({"bank_transaction_id": transaction.id, "description": transaction.description, "reference": transaction.reference, "candidates": candidates})
+    return {
+        "created": len(created_transactions),
+        "skipped": skipped,
+        "errors": errors[:25],
+        "suggestions": suggestions,
+        "rows": [accounting_bank_transaction_response(transaction, db) for transaction in created_transactions],
+    }
+
+
+def normalize_accounting_bank_rule_match_field(value: str | None) -> str:
+    clean = (value or "Any").strip().title()
+    if clean not in VALID_ACCOUNTING_BANK_RULE_MATCH_FIELDS:
+        raise HTTPException(status_code=400, detail="Unsupported bank rule match field")
+    return clean
+
+
+def normalize_accounting_bank_rule_match_type(value: str | None) -> str:
+    clean = (value or "Contains").strip().title()
+    if clean == "Startswith":
+        clean = "Starts With"
+    if clean == "Endswith":
+        clean = "Ends With"
+    if clean not in VALID_ACCOUNTING_BANK_RULE_MATCH_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported bank rule match type")
+    return clean
+
+
+def normalize_accounting_bank_rule_action(value: str | None) -> str:
+    clean = (value or "Create Money Entry").strip().title()
+    if clean in {"Create", "Create Transaction", "Money Entry"}:
+        clean = "Create Money Entry"
+    if clean not in VALID_ACCOUNTING_BANK_RULE_ACTIONS:
+        raise HTTPException(status_code=400, detail="Unsupported bank rule action")
+    return clean
+
+
+def get_accounting_bank_rule_or_404(db: Session, rule_id: int, tenant_id: int) -> AccountingBankRule:
+    rule = db.query(AccountingBankRule).filter(AccountingBankRule.id == rule_id, AccountingBankRule.tenant_id == tenant_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Bank rule not found")
+    return rule
+
+
+def accounting_bank_rule_response(rule: AccountingBankRule) -> dict:
+    return {
+        "id": rule.id,
+        "tenant_id": rule.tenant_id,
+        "name": rule.name,
+        "account_id": rule.account_id,
+        "account_name": rule.account.name if rule.account else None,
+        "match_field": rule.match_field,
+        "match_type": rule.match_type,
+        "match_value": rule.match_value,
+        "action": rule.action,
+        "direction": rule.direction,
+        "category": rule.category,
+        "counterparty": rule.counterparty,
+        "platform": rule.platform,
+        "description_template": rule.description_template,
+        "priority": rule.priority,
+        "is_active": bool(rule.is_active),
+        "auto_match": bool(rule.auto_match),
+        "created_at": rule.created_at,
+        "updated_at": rule.updated_at,
+    }
+
+
+def accounting_bank_rule_text(transaction: AccountingBankTransaction, field: str) -> str:
+    if field == "Description":
+        return transaction.description or ""
+    if field == "Reference":
+        return transaction.reference or ""
+    if field == "Counterparty":
+        return transaction.counterparty or ""
+    return " ".join(part for part in [transaction.description, transaction.reference, transaction.counterparty] if part)
+
+
+def accounting_bank_rule_matches(rule: AccountingBankRule, transaction: AccountingBankTransaction) -> bool:
+    if not rule.is_active:
+        return False
+    if rule.account_id and int(rule.account_id) != int(transaction.account_id):
+        return False
+    haystack = accounting_bank_rule_text(transaction, normalize_accounting_bank_rule_match_field(rule.match_field)).strip().lower()
+    needle = str(rule.match_value or "").strip().lower()
+    if not needle:
+        return False
+    match_type = normalize_accounting_bank_rule_match_type(rule.match_type)
+    if match_type == "Equals":
+        return haystack == needle
+    if match_type == "Starts With":
+        return haystack.startswith(needle)
+    if match_type == "Ends With":
+        return haystack.endswith(needle)
+    return needle in haystack
+
+
+def accounting_bank_rule_description(rule: AccountingBankRule, transaction: AccountingBankTransaction) -> str:
+    template = rule.description_template or transaction.description or f"Bank rule: {rule.name}"
+    replacements = {
+        "description": transaction.description or "",
+        "reference": transaction.reference or "",
+        "counterparty": transaction.counterparty or "",
+        "rule": rule.name or "",
+    }
+    for key, value in replacements.items():
+        template = template.replace("{" + key + "}", value)
+    return template
+
+
+def apply_accounting_bank_rule_to_transaction(db: Session, tenant_id: int, rule: AccountingBankRule, transaction: AccountingBankTransaction) -> dict:
+    if transaction.status == "Matched":
+        return {"status": "skipped", "reason": "already matched", "bank_transaction_id": transaction.id, "rule_id": rule.id}
+    action = normalize_accounting_bank_rule_action(rule.action)
+    if action == "Ignore":
+        transaction.status = "Ignored"
+        transaction.matched_source_type = None
+        transaction.matched_source_id = None
+        transaction.matched_at = None
+        db.add(transaction)
+        return {"status": "ignored", "bank_transaction_id": transaction.id, "rule_id": rule.id}
+
+    amount = round(float(transaction.money_in or 0) if float(transaction.money_in or 0) > 0 else float(transaction.money_out or 0), 2)
+    if amount <= 0:
+        return {"status": "skipped", "reason": "no amount", "bank_transaction_id": transaction.id, "rule_id": rule.id}
+    inferred_direction = "Money In" if float(transaction.money_in or 0) > 0 else "Money Out"
+    direction = normalize_accounting_direction(rule.direction) if rule.direction else inferred_direction
+    transaction_date = transaction.transaction_date or datetime.utcnow()
+    ensure_accounting_period_is_open(db, tenant_id, transaction_date)
+    ledger_transaction = AccountingTransaction(
+        tenant_id=tenant_id,
+        account_id=transaction.account_id,
+        direction=direction,
+        category=rule.category or ("Sales" if direction == "Money In" else "Expense"),
+        amount=amount,
+        currency=normalize_accounting_currency(transaction.currency),
+        exchange_rate=float(transaction.exchange_rate or 1),
+        amount_pkr=accounting_amount_pkr(amount=amount, currency=transaction.currency, exchange_rate=float(transaction.exchange_rate or 1), amount_pkr=transaction.amount_pkr),
+        counterparty=rule.counterparty or transaction.counterparty,
+        platform=rule.platform or None,
+        reference=transaction.reference,
+        source_type="accounting_bank_rule",
+        source_id=rule.id,
+        description=accounting_bank_rule_description(rule, transaction),
+        transaction_date=transaction_date,
+    )
+    db.add(ledger_transaction)
+    db.flush()
+    upsert_transaction_journal_entry(db, ledger_transaction, tenant_id, enforce_lock=False)
+    auto_matched = False
+    if rule.auto_match and direction == inferred_direction:
+        transaction.status = "Matched"
+        transaction.matched_source_type = ACCOUNTING_TRANSACTION_SOURCE
+        transaction.matched_source_id = ledger_transaction.id
+        transaction.matched_at = datetime.utcnow()
+        db.add(transaction)
+        auto_matched = True
+    return {"status": "created", "bank_transaction_id": transaction.id, "rule_id": rule.id, "accounting_transaction_id": ledger_transaction.id, "auto_matched": auto_matched}
+
+
+def apply_accounting_bank_rules(db: Session, tenant_id: int, payload: AccountingBankRuleApplyRequest) -> dict:
+    rules_query = db.query(AccountingBankRule).filter(AccountingBankRule.tenant_id == tenant_id, AccountingBankRule.is_active == True)
+    if payload.rule_id is not None:
+        rules_query = rules_query.filter(AccountingBankRule.id == payload.rule_id)
+    rules = rules_query.order_by(AccountingBankRule.priority.asc(), AccountingBankRule.id.asc()).all()
+    if payload.rule_id is not None and not rules:
+        raise HTTPException(status_code=404, detail="Bank rule not found")
+    tx_query = db.query(AccountingBankTransaction).filter(AccountingBankTransaction.tenant_id == tenant_id)
+    if payload.bank_transaction_id is not None:
+        tx_query = tx_query.filter(AccountingBankTransaction.id == payload.bank_transaction_id)
+    else:
+        tx_query = tx_query.filter(AccountingBankTransaction.status == "Unmatched")
+    bank_transactions = tx_query.order_by(AccountingBankTransaction.transaction_date.desc(), AccountingBankTransaction.id.desc()).limit(payload.limit).all()
+    if payload.bank_transaction_id is not None and not bank_transactions:
+        raise HTTPException(status_code=404, detail="Bank transaction not found")
+    results = []
+    for transaction in bank_transactions:
+        matched_rule = next((rule for rule in rules if accounting_bank_rule_matches(rule, transaction)), None)
+        if not matched_rule:
+            results.append({"status": "skipped", "reason": "no matching rule", "bank_transaction_id": transaction.id})
+            continue
+        results.append(apply_accounting_bank_rule_to_transaction(db, tenant_id, matched_rule, transaction))
+    return {
+        "created": sum(1 for item in results if item.get("status") == "created"),
+        "ignored": sum(1 for item in results if item.get("status") == "ignored"),
+        "skipped": sum(1 for item in results if item.get("status") == "skipped"),
+        "results": results,
+    }
+
+
+def normalize_accounting_recurring_template_type(value: str | None) -> str:
+    clean = (value or "Money Entry").strip().title()
+    if clean in {"Money", "Transaction", "Money Transaction"}:
+        clean = "Money Entry"
+    if clean not in VALID_ACCOUNTING_RECURRING_TEMPLATE_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported recurring template type")
+    return clean
+
+
+def normalize_accounting_recurring_status(value: str | None) -> str:
+    clean = (value or "Active").strip().title()
+    if clean not in VALID_ACCOUNTING_RECURRING_STATUSES:
+        raise HTTPException(status_code=400, detail="Unsupported recurring template status")
+    return clean
+
+
+def normalize_accounting_recurring_frequency(value: str | None) -> str:
+    clean = (value or "Monthly").strip().title()
+    if clean not in VALID_ACCOUNTING_RECURRING_FREQUENCIES:
+        raise HTTPException(status_code=400, detail="Unsupported recurring frequency")
+    return clean
+
+
+def get_accounting_recurring_template_or_404(db: Session, template_id: int, tenant_id: int) -> AccountingRecurringTemplate:
+    template = db.query(AccountingRecurringTemplate).filter(AccountingRecurringTemplate.id == template_id, AccountingRecurringTemplate.tenant_id == tenant_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Recurring template not found")
+    return template
+
+
+def accounting_recurring_template_response(template: AccountingRecurringTemplate) -> dict:
+    return {
+        "id": template.id,
+        "tenant_id": template.tenant_id,
+        "name": template.name,
+        "template_type": template.template_type,
+        "status": template.status,
+        "frequency": template.frequency,
+        "interval_count": template.interval_count,
+        "next_run_date": template.next_run_date,
+        "end_date": template.end_date,
+        "last_run_at": template.last_run_at,
+        "occurrences_generated": int(template.occurrences_generated or 0),
+        "max_occurrences": template.max_occurrences,
+        "account_id": template.account_id,
+        "account_name": template.account.name if template.account else None,
+        "line_account_id": template.line_account_id,
+        "line_account_name": template.line_account.name if template.line_account else None,
+        "direction": template.direction,
+        "category": template.category,
+        "amount": round(float(template.amount or 0), 2),
+        "tax_amount": round(float(template.tax_amount or 0), 2),
+        "currency": template.currency,
+        "exchange_rate": template.exchange_rate,
+        "contact_name": template.contact_name,
+        "contact_email": template.contact_email,
+        "document_status": template.document_status,
+        "line_description": template.line_description,
+        "notes": template.notes,
+        "created_at": template.created_at,
+        "updated_at": template.updated_at,
+    }
+
+
+def accounting_add_months(base: datetime, months: int) -> datetime:
+    month_index = base.month - 1 + months
+    year = base.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(base.day, calendar.monthrange(year, month)[1])
+    return base.replace(year=year, month=month, day=day)
+
+
+def accounting_next_recurring_date(current: datetime, frequency: str, interval_count: int) -> datetime:
+    interval = max(int(interval_count or 1), 1)
+    frequency = normalize_accounting_recurring_frequency(frequency)
+    if frequency == "Daily":
+        return current + timedelta(days=interval)
+    if frequency == "Weekly":
+        return current + timedelta(weeks=interval)
+    if frequency == "Quarterly":
+        return accounting_add_months(current, 3 * interval)
+    if frequency == "Yearly":
+        return accounting_add_months(current, 12 * interval)
+    return accounting_add_months(current, interval)
+
+
+def validate_accounting_recurring_template_payload(db: Session, tenant_id: int, payload: AccountingRecurringTemplateCreate | AccountingRecurringTemplateUpdate, existing: AccountingRecurringTemplate | None = None) -> dict:
+    data = payload.model_dump(exclude_unset=True)
+    if existing is None:
+        data = {**payload.model_dump(), **data}
+    name = str(data.get("name", existing.name if existing else "") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Recurring template name is required")
+    template_type = normalize_accounting_recurring_template_type(data.get("template_type", existing.template_type if existing else "Money Entry"))
+    status = normalize_accounting_recurring_status(data.get("status", existing.status if existing else "Active"))
+    frequency = normalize_accounting_recurring_frequency(data.get("frequency", existing.frequency if existing else "Monthly"))
+    interval_count = max(int(data.get("interval_count", existing.interval_count if existing else 1) or 1), 1)
+    amount = round(float(data.get("amount", existing.amount if existing else 0) or 0), 2)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Recurring amount must be greater than zero")
+    currency = normalize_accounting_currency(data.get("currency", existing.currency if existing else "PKR"))
+    exchange_rate = float(data.get("exchange_rate", existing.exchange_rate if existing else 1) or 1)
+    account_id = data.get("account_id", existing.account_id if existing else None)
+    line_account_id = data.get("line_account_id", existing.line_account_id if existing else None)
+    if account_id is not None:
+        account_id = get_accounting_account_or_404(db, int(account_id), tenant_id).id
+    if line_account_id is not None:
+        line_account_id = get_accounting_account_or_404(db, int(line_account_id), tenant_id).id
+    if template_type == "Money Entry" and account_id is None:
+        raise HTTPException(status_code=400, detail="Money entry templates need an account")
+    if template_type in {"Invoice", "Bill"}:
+        if line_account_id is None:
+            raise HTTPException(status_code=400, detail="Invoice and bill templates need a line account")
+        contact_name = str(data.get("contact_name", existing.contact_name if existing else "") or "").strip()
+        if not contact_name:
+            raise HTTPException(status_code=400, detail="Invoice and bill templates need a contact name")
+    direction = data.get("direction", existing.direction if existing else None)
+    if template_type == "Money Entry":
+        direction = normalize_accounting_direction(direction or "Money Out")
+    elif direction:
+        direction = normalize_accounting_direction(direction)
+    document_status = normalize_accounting_document_status(data.get("document_status", existing.document_status if existing else "Open"))
+    if document_status == "Paid":
+        document_status = "Open"
+    next_run_date = data.get("next_run_date", existing.next_run_date if existing else None) or datetime.utcnow()
+    return {
+        "name": name,
+        "template_type": template_type,
+        "status": status,
+        "frequency": frequency,
+        "interval_count": interval_count,
+        "next_run_date": next_run_date,
+        "end_date": data.get("end_date", existing.end_date if existing else None),
+        "max_occurrences": data.get("max_occurrences", existing.max_occurrences if existing else None),
+        "account_id": account_id,
+        "line_account_id": line_account_id,
+        "direction": direction,
+        "category": data.get("category", existing.category if existing else "Other") or "Other",
+        "amount": amount,
+        "tax_amount": round(float(data.get("tax_amount", existing.tax_amount if existing else 0) or 0), 2),
+        "currency": currency,
+        "exchange_rate": exchange_rate,
+        "contact_name": data.get("contact_name", existing.contact_name if existing else None),
+        "contact_email": data.get("contact_email", existing.contact_email if existing else None),
+        "document_status": document_status,
+        "line_description": data.get("line_description", existing.line_description if existing else None),
+        "notes": data.get("notes", existing.notes if existing else None),
+    }
+
+
+def create_accounting_recurring_occurrence(db: Session, tenant_id: int, template: AccountingRecurringTemplate, run_date: datetime) -> dict:
+    ensure_accounting_period_is_open(db, tenant_id, run_date)
+    amount = round(float(template.amount or 0), 2)
+    currency = normalize_accounting_currency(template.currency)
+    exchange_rate = float(template.exchange_rate or 1)
+    amount_pkr = accounting_amount_pkr(amount=amount + (float(template.tax_amount or 0) if template.template_type in {"Invoice", "Bill"} else 0), currency=currency, exchange_rate=exchange_rate, amount_pkr=None)
+    if template.template_type == "Money Entry":
+        existing_transaction = (
+            db.query(AccountingTransaction)
+            .filter(
+                AccountingTransaction.tenant_id == tenant_id,
+                AccountingTransaction.source_type == ACCOUNTING_RECURRING_SOURCE,
+                AccountingTransaction.source_id == template.id,
+                AccountingTransaction.transaction_date == run_date,
+            )
+            .first()
+        )
+        if existing_transaction:
+            return {"type": "Money Entry", "id": existing_transaction.id, "label": existing_transaction.reference}
+        account = get_accounting_account_or_404(db, int(template.account_id), tenant_id)
+        transaction = AccountingTransaction(
+            tenant_id=tenant_id,
+            account_id=account.id,
+            direction=normalize_accounting_direction(template.direction or "Money Out"),
+            category=template.category or "Other",
+            amount=amount,
+            currency=currency,
+            exchange_rate=exchange_rate,
+            amount_pkr=accounting_amount_pkr(amount=amount, currency=currency, exchange_rate=exchange_rate, amount_pkr=None),
+            counterparty=template.contact_name,
+            platform=None,
+            reference=f"REC-{template.id}-{int(template.occurrences_generated or 0) + 1}",
+            source_type=ACCOUNTING_RECURRING_SOURCE,
+            source_id=template.id,
+            description=template.notes or template.name,
+            transaction_date=run_date,
+        )
+        db.add(transaction)
+        db.flush()
+        upsert_transaction_journal_entry(db, transaction, tenant_id, enforce_lock=False)
+        return {"type": "Money Entry", "id": transaction.id, "label": transaction.reference}
+
+    document_type = normalize_accounting_document_type(template.template_type)
+    existing_document = (
+        db.query(AccountingDocument)
+        .filter(
+            AccountingDocument.tenant_id == tenant_id,
+            AccountingDocument.source_type == ACCOUNTING_RECURRING_SOURCE,
+            AccountingDocument.source_id == template.id,
+            AccountingDocument.issue_date == run_date,
+        )
+        .first()
+    )
+    if existing_document:
+        return {"type": document_type, "id": existing_document.id, "label": existing_document.document_no}
+    line_account = get_accounting_account_or_404(db, int(template.line_account_id), tenant_id)
+    document = AccountingDocument(
+        tenant_id=tenant_id,
+        document_type=document_type,
+        document_no=next_accounting_document_no(db, tenant_id, document_type),
+        contact_name=template.contact_name or "Recurring Contact",
+        contact_email=template.contact_email,
+        issue_date=run_date,
+        due_date=run_date,
+        status=normalize_accounting_document_status(template.document_status or "Open"),
+        currency=currency,
+        exchange_rate=exchange_rate,
+        notes=template.notes,
+        source_type=ACCOUNTING_RECURRING_SOURCE,
+        source_id=template.id,
+    )
+    db.add(document)
+    db.flush()
+    line = AccountingDocumentLineCreate(
+        account_id=line_account.id,
+        description=template.line_description or template.name,
+        quantity=1,
+        unit_price=amount,
+        amount=amount,
+        tax_amount=float(template.tax_amount or 0),
+    )
+    replace_accounting_document_lines(db, document, tenant_id, [line])
+    sync_accounting_document_status(document)
+    upsert_accounting_document_journal_entry(db, document, tenant_id, enforce_lock=False)
+    db.add(document)
+    return {"type": document_type, "id": document.id, "label": document.document_no}
+
+
+def generate_accounting_recurring_templates(db: Session, tenant_id: int, payload: AccountingRecurringRunRequest) -> dict:
+    through_date = payload.through_date or datetime.utcnow()
+    query = db.query(AccountingRecurringTemplate).filter(AccountingRecurringTemplate.tenant_id == tenant_id, AccountingRecurringTemplate.status == "Active")
+    if payload.template_id is not None:
+        query = query.filter(AccountingRecurringTemplate.id == payload.template_id)
+    templates = query.order_by(AccountingRecurringTemplate.next_run_date.asc(), AccountingRecurringTemplate.id.asc()).all()
+    if payload.template_id is not None and not templates:
+        raise HTTPException(status_code=404, detail="Recurring template not found")
+    generated = []
+    skipped = []
+    limit = int(payload.limit or 100)
+    for template in templates:
+        while template.next_run_date and template.next_run_date <= through_date and len(generated) < limit:
+            if template.end_date and template.next_run_date > template.end_date:
+                template.status = "Paused"
+                skipped.append({"template_id": template.id, "reason": "past end date"})
+                break
+            if template.max_occurrences is not None and int(template.occurrences_generated or 0) >= int(template.max_occurrences):
+                template.status = "Paused"
+                skipped.append({"template_id": template.id, "reason": "max occurrences reached"})
+                break
+            run_date = template.next_run_date
+            result = create_accounting_recurring_occurrence(db, tenant_id, template, run_date)
+            generated.append({"template_id": template.id, "template_name": template.name, "run_date": run_date, **result})
+            template.occurrences_generated = int(template.occurrences_generated or 0) + 1
+            template.last_run_at = datetime.utcnow()
+            template.next_run_date = accounting_next_recurring_date(run_date, template.frequency, template.interval_count)
+            db.add(template)
+        if len(generated) >= limit:
+            break
+    return {"generated": len(generated), "skipped": skipped, "items": generated}
+
+
+def accounting_recurring_automation_summary(db: Session, tenant_id: int, now: datetime | None = None) -> dict:
+    now = now or datetime.utcnow()
+    active_query = db.query(AccountingRecurringTemplate).filter(
+        AccountingRecurringTemplate.tenant_id == tenant_id,
+        AccountingRecurringTemplate.status == "Active",
+    )
+    active_count = active_query.count()
+    due_query = active_query.filter(AccountingRecurringTemplate.next_run_date <= now)
+    oldest_due = due_query.order_by(AccountingRecurringTemplate.next_run_date.asc(), AccountingRecurringTemplate.id.asc()).first()
+    next_template = active_query.order_by(AccountingRecurringTemplate.next_run_date.asc(), AccountingRecurringTemplate.id.asc()).first()
+    last_generated = (
+        db.query(AccountingRecurringTemplate)
+        .filter(
+            AccountingRecurringTemplate.tenant_id == tenant_id,
+            AccountingRecurringTemplate.last_run_at.isnot(None),
+        )
+        .order_by(AccountingRecurringTemplate.last_run_at.desc())
+        .first()
+    )
+    generated_total = db.query(func.coalesce(func.sum(AccountingRecurringTemplate.occurrences_generated), 0)).filter(AccountingRecurringTemplate.tenant_id == tenant_id).scalar() or 0
+    return {
+        "active_count": int(active_count or 0),
+        "due_count": int(due_query.count() or 0),
+        "overdue_count": int(active_query.filter(AccountingRecurringTemplate.next_run_date < now - timedelta(days=1)).count() or 0),
+        "generated_total": int(generated_total or 0),
+        "oldest_due_date": oldest_due.next_run_date if oldest_due else None,
+        "next_run_date": next_template.next_run_date if next_template else None,
+        "last_generated_at": last_generated.last_run_at if last_generated else None,
+    }
+
+
+def run_due_accounting_recurring_automation(through_date: datetime | None = None, limit_per_tenant: int | None = None) -> dict:
+    through_date = through_date or datetime.utcnow()
+    limit = int(limit_per_tenant or ACCOUNTING_RECURRING_AUTOMATION_LIMIT_PER_TENANT)
+    db = SessionLocal()
+    summary = {
+        "through_date": through_date,
+        "generated": 0,
+        "skipped": 0,
+        "tenants_checked": 0,
+        "tenants_with_due": 0,
+        "tenant_results": [],
+        "errors": [],
+    }
+    try:
+        tenants = (
+            db.query(Tenant)
+            .execution_options(skip_tenant_scope=True)
+            .filter(func.lower(func.coalesce(Tenant.status, "active")) == "active")
+            .order_by(Tenant.id.asc())
+            .all()
+        )
+        for tenant in tenants:
+            summary["tenants_checked"] += 1
+            try:
+                enabled_pages, _ = tenant_enabled_page_set(db, tenant.id)
+                if "Accounting" not in enabled_pages:
+                    continue
+                due_count = (
+                    db.query(AccountingRecurringTemplate)
+                    .filter(
+                        AccountingRecurringTemplate.tenant_id == tenant.id,
+                        AccountingRecurringTemplate.status == "Active",
+                        AccountingRecurringTemplate.next_run_date <= through_date,
+                    )
+                    .count()
+                )
+                if due_count <= 0:
+                    continue
+                db.info["tenant_id"] = int(tenant.id)
+                result = generate_accounting_recurring_templates(
+                    db,
+                    int(tenant.id),
+                    AccountingRecurringRunRequest(through_date=through_date, limit=limit),
+                )
+                db.commit()
+                generated = int(result.get("generated") or 0)
+                skipped_count = len(result.get("skipped") or [])
+                summary["generated"] += generated
+                summary["skipped"] += skipped_count
+                summary["tenants_with_due"] += 1
+                summary["tenant_results"].append({
+                    "tenant_id": tenant.id,
+                    "tenant_slug": tenant.slug,
+                    "tenant_name": tenant.company_name,
+                    "due_count": due_count,
+                    "generated": generated,
+                    "skipped": skipped_count,
+                })
+            except Exception as exc:
+                db.rollback()
+                summary["errors"].append({
+                    "tenant_id": tenant.id,
+                    "tenant_slug": tenant.slug,
+                    "tenant_name": tenant.company_name,
+                    "error": str(exc)[:300],
+                })
+            finally:
+                db.info.pop("tenant_id", None)
+        return summary
+    finally:
+        db.close()
+
+
+class AccountingRecurringAutomationService:
+    def __init__(self) -> None:
+        self._task: asyncio.Task | None = None
+        self.started_at: datetime | None = None
+        self.last_checked_at: datetime | None = None
+        self.last_finished_at: datetime | None = None
+        self.last_error: str | None = None
+        self.last_result: dict | None = None
+
+    async def start(self) -> None:
+        if not ACCOUNTING_RECURRING_AUTOMATION_ENABLED:
+            return
+        if self._task and not self._task.done():
+            return
+        self.started_at = datetime.utcnow()
+        self._task = asyncio.create_task(self._run())
+
+    async def stop(self) -> None:
+        if not self._task:
+            return
+        self._task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._task
+        self._task = None
+
+    def status(self) -> dict:
+        return {
+            "enabled": ACCOUNTING_RECURRING_AUTOMATION_ENABLED,
+            "running": bool(self._task and not self._task.done()),
+            "started_at": self.started_at,
+            "last_checked_at": self.last_checked_at,
+            "last_finished_at": self.last_finished_at,
+            "last_error": self.last_error,
+            "last_result": self.last_result,
+            "check_seconds": ACCOUNTING_RECURRING_AUTOMATION_CHECK_SECONDS,
+            "limit_per_tenant": ACCOUNTING_RECURRING_AUTOMATION_LIMIT_PER_TENANT,
+        }
+
+    async def _run(self) -> None:
+        await asyncio.sleep(ACCOUNTING_RECURRING_AUTOMATION_INITIAL_DELAY_SECONDS)
+        while True:
+            self.last_checked_at = datetime.utcnow()
+            try:
+                result = await asyncio.to_thread(run_due_accounting_recurring_automation)
+                self.last_finished_at = datetime.utcnow()
+                self.last_error = None
+                self.last_result = {
+                    "generated": result.get("generated", 0),
+                    "skipped": result.get("skipped", 0),
+                    "tenants_checked": result.get("tenants_checked", 0),
+                    "tenants_with_due": result.get("tenants_with_due", 0),
+                    "errors": (result.get("errors") or [])[:5],
+                }
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.last_finished_at = datetime.utcnow()
+                self.last_error = str(exc)[:300] or "Recurring accounting automation failed."
+                print(f"Accounting recurring automation recovered from an error: {self.last_error}")
+            await asyncio.sleep(ACCOUNTING_RECURRING_AUTOMATION_CHECK_SECONDS)
+
+
+accounting_recurring_automation_service = AccountingRecurringAutomationService()
+app.router.add_event_handler("startup", accounting_recurring_automation_service.start)
+app.router.add_event_handler("shutdown", accounting_recurring_automation_service.stop)
+
+
+def accounting_banking_summary(db: Session, tenant_id: int) -> dict:
+    accounts = db.query(AccountingAccount).filter(AccountingAccount.tenant_id == tenant_id, AccountingAccount.account_type.in_(["Bank", "Cash", "Wallet", "Platform"])).order_by(AccountingAccount.name).all()
+    rows = []
+    total_unmatched = 0
+    total_unmatched_amount = 0.0
+    for account in accounts:
+        bank_transactions = db.query(AccountingBankTransaction).filter(AccountingBankTransaction.tenant_id == tenant_id, AccountingBankTransaction.account_id == account.id).all()
+        money_in = sum(float(item.money_in or 0) for item in bank_transactions)
+        money_out = sum(float(item.money_out or 0) for item in bank_transactions)
+        unmatched = [item for item in bank_transactions if item.status == "Unmatched"]
+        matched = [item for item in bank_transactions if item.status == "Matched"]
+        ignored = [item for item in bank_transactions if item.status == "Ignored"]
+        unmatched_amount = sum(abs(float(item.money_in or 0) - float(item.money_out or 0)) for item in unmatched)
+        total_unmatched += len(unmatched)
+        total_unmatched_amount += unmatched_amount
+        rows.append({
+            "account_id": account.id,
+            "account_name": account.name,
+            "account_type": account.account_type,
+            "currency": account.currency,
+            "statement_money_in": round(money_in, 2),
+            "statement_money_out": round(money_out, 2),
+            "statement_net": round(money_in - money_out, 2),
+            "matched_count": len(matched),
+            "unmatched_count": len(unmatched),
+            "ignored_count": len(ignored),
+            "unmatched_amount": round(unmatched_amount, 2),
+        })
+    return {"rows": rows, "unmatched_count": total_unmatched, "unmatched_amount": round(total_unmatched_amount, 2)}
+
+
+def transaction_offset_account(db: Session, tenant_id: int, transaction: AccountingTransaction) -> AccountingAccount:
+    category = str(transaction.category or "").strip().lower()
+    direction = normalize_accounting_direction(transaction.direction)
+    if direction == "Money In":
+        if any(token in category for token in ("capital", "owner", "equity")):
+            return ensure_accounting_system_account(db, tenant_id, "Owner Equity", "Owner Equity")
+        if any(token in category for token in ("other", "interest", "refund")):
+            return ensure_accounting_system_account(db, tenant_id, "Other Income", "Other Income")
+        return ensure_accounting_system_account(db, tenant_id, "Sales Revenue", "Sales Revenue")
+    if any(token in category for token in ("cost", "cogs", "inventory", "stock", "production")):
+        return ensure_accounting_system_account(db, tenant_id, "Cost of Goods Sold", "Cost of Goods Sold")
+    return ensure_accounting_system_account(db, tenant_id, "General Expenses", "General Expenses")
+
+
+def upsert_transaction_journal_entry(
+    db: Session,
+    transaction: AccountingTransaction,
+    tenant_id: int | None = None,
+    enforce_lock: bool = False,
+) -> AccountingJournalEntry | None:
+    tenant_id = accounting_tenant_id(db, tenant_id or transaction.tenant_id)
+    account = get_accounting_account_or_404(db, transaction.account_id, tenant_id)
+    offset_account = transaction_offset_account(db, tenant_id, transaction)
+    amount = round(float(transaction.amount_pkr or transaction.amount or 0), 2)
+    if amount <= 0:
+        delete_accounting_journal_for_source(db, tenant_id, ACCOUNTING_TRANSACTION_SOURCE, transaction.id)
+        return None
+    if enforce_lock:
+        ensure_accounting_period_is_open(db, tenant_id, transaction.transaction_date)
+
+    entry = (
+        db.query(AccountingJournalEntry)
+        .filter(
+            AccountingJournalEntry.tenant_id == tenant_id,
+            AccountingJournalEntry.source_type == ACCOUNTING_TRANSACTION_SOURCE,
+            AccountingJournalEntry.source_id == transaction.id,
+        )
+        .first()
+    )
+    if not entry:
+        entry = AccountingJournalEntry(
+            tenant_id=tenant_id,
+            entry_no=next_accounting_journal_entry_no(db, tenant_id),
+            source_type=ACCOUNTING_TRANSACTION_SOURCE,
+            source_id=transaction.id,
+        )
+        db.add(entry)
+        db.flush()
+
+    entry.entry_date = transaction.transaction_date or datetime.utcnow()
+    entry.memo = transaction.description or transaction.reference or transaction.category or "Accounting transaction"
+    entry.status = "Posted"
+    if normalize_accounting_direction(transaction.direction) == "Money In":
+        lines = [
+            AccountingJournalLineCreate(account_id=account.id, debit=amount, credit=0, currency="PKR", amount_pkr=amount, description=entry.memo),
+            AccountingJournalLineCreate(account_id=offset_account.id, debit=0, credit=amount, currency="PKR", amount_pkr=amount, description=entry.memo),
+        ]
+    else:
+        lines = [
+            AccountingJournalLineCreate(account_id=offset_account.id, debit=amount, credit=0, currency="PKR", amount_pkr=amount, description=entry.memo),
+            AccountingJournalLineCreate(account_id=account.id, debit=0, credit=amount, currency="PKR", amount_pkr=amount, description=entry.memo),
+        ]
+    replace_accounting_journal_lines(db, entry, tenant_id, lines)
+    db.add(entry)
+    db.flush()
+    return entry
+
+
+def sync_accounting_transactions_to_journal(db: Session, tenant_id: int) -> int:
+    ensure_default_accounting_accounts(db, tenant_id)
+    synced = 0
+    transactions = (
+        db.query(AccountingTransaction)
+        .filter(AccountingTransaction.tenant_id == tenant_id)
+        .order_by(AccountingTransaction.transaction_date, AccountingTransaction.id)
+        .all()
+    )
+    for transaction in transactions:
+        entry = upsert_transaction_journal_entry(db, transaction, tenant_id, enforce_lock=False)
+        if entry:
+            synced += 1
+    return synced
+
+
+def accounting_journal_sums(
+    db: Session,
+    tenant_id: int,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+) -> dict[int, dict]:
+    query = (
+        db.query(AccountingJournalEntry)
+        .filter(
+            AccountingJournalEntry.tenant_id == tenant_id,
+            AccountingJournalEntry.status == "Posted",
+        )
+        .order_by(AccountingJournalEntry.entry_date, AccountingJournalEntry.id)
+    )
+    if start_date is not None:
+        query = query.filter(AccountingJournalEntry.entry_date >= start_date)
+    if end_date is not None:
+        query = query.filter(AccountingJournalEntry.entry_date <= end_date)
+
+    sums: dict[int, dict] = {}
+    for entry in query.all():
+        for line in entry.lines or []:
+            account = line.account
+            if not account:
+                continue
+            row = sums.setdefault(account.id, {
+                "account": account,
+                "debit": 0.0,
+                "credit": 0.0,
+            })
+            row["debit"] += float(line.debit or 0)
+            row["credit"] += float(line.credit or 0)
+    return sums
+
+
+def accounting_trial_balance_report(
+    db: Session,
+    tenant_id: int,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+) -> dict:
+    sums = accounting_journal_sums(db, tenant_id, start_date, end_date)
+    accounts = (
+        db.query(AccountingAccount)
+        .filter(AccountingAccount.tenant_id == tenant_id)
+        .order_by(AccountingAccount.account_type, AccountingAccount.name)
+        .all()
+    )
+    rows = []
+    total_debit = 0.0
+    total_credit = 0.0
+    for account in accounts:
+        row = sums.get(account.id, {"debit": 0.0, "credit": 0.0})
+        net = float(row["debit"] or 0) - float(row["credit"] or 0)
+        opening = float(account.opening_balance or 0)
+        if accounting_account_normal_balance(account.account_type) == "debit":
+            net += opening
+        else:
+            net -= opening
+        debit = round(max(net, 0), 2)
+        credit = round(max(-net, 0), 2)
+        if debit == 0 and credit == 0 and not account.is_active:
+            continue
+        rows.append({
+            "account_id": account.id,
+            "account_name": account.name,
+            "account_type": account.account_type,
+            "account_class": accounting_account_class(account.account_type),
+            "debit": debit,
+            "credit": credit,
+        })
+        total_debit += debit
+        total_credit += credit
+    return {
+        "rows": rows,
+        "total_debit": round(total_debit, 2),
+        "total_credit": round(total_credit, 2),
+        "is_balanced": round(total_debit, 2) == round(total_credit, 2),
+        "difference": round(total_debit - total_credit, 2),
+    }
+
+
+def accounting_profit_loss_report(
+    db: Session,
+    tenant_id: int,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+) -> dict:
+    sums = accounting_journal_sums(db, tenant_id, start_date, end_date)
+    income_rows = []
+    expense_rows = []
+    total_income = 0.0
+    total_expenses = 0.0
+    for row in sums.values():
+        account = row["account"]
+        account_class = accounting_account_class(account.account_type)
+        if account_class == "income":
+            amount = round(float(row["credit"] or 0) - float(row["debit"] or 0), 2)
+            income_rows.append({"account_id": account.id, "account_name": account.name, "amount": amount})
+            total_income += amount
+        elif account_class == "expense":
+            amount = round(float(row["debit"] or 0) - float(row["credit"] or 0), 2)
+            expense_rows.append({"account_id": account.id, "account_name": account.name, "amount": amount})
+            total_expenses += amount
+    return {
+        "income": income_rows,
+        "expenses": expense_rows,
+        "total_income": round(total_income, 2),
+        "total_expenses": round(total_expenses, 2),
+        "net_income": round(total_income - total_expenses, 2),
+    }
+
+
+def accounting_balance_sheet_report(
+    db: Session,
+    tenant_id: int,
+    end_date: datetime | None = None,
+) -> dict:
+    sums = accounting_journal_sums(db, tenant_id, None, end_date)
+    assets = []
+    liabilities = []
+    equity = []
+    total_assets = 0.0
+    total_liabilities = 0.0
+    total_equity = 0.0
+    total_income = 0.0
+    total_expenses = 0.0
+    for row in sums.values():
+        account = row["account"]
+        account_class = accounting_account_class(account.account_type)
+        debit = float(row["debit"] or 0)
+        credit = float(row["credit"] or 0)
+        if account_class == "asset":
+            amount = round(debit - credit + float(account.opening_balance or 0), 2)
+            assets.append({"account_id": account.id, "account_name": account.name, "amount": amount})
+            total_assets += amount
+        elif account_class == "liability":
+            amount = round(credit - debit + float(account.opening_balance or 0), 2)
+            liabilities.append({"account_id": account.id, "account_name": account.name, "amount": amount})
+            total_liabilities += amount
+        elif account_class == "equity":
+            amount = round(credit - debit + float(account.opening_balance or 0), 2)
+            equity.append({"account_id": account.id, "account_name": account.name, "amount": amount})
+            total_equity += amount
+        elif account_class == "income":
+            total_income += credit - debit
+        elif account_class == "expense":
+            total_expenses += debit - credit
+    current_earnings = round(total_income - total_expenses, 2)
+    total_liabilities_equity = round(total_liabilities + total_equity + current_earnings, 2)
+    return {
+        "assets": assets,
+        "liabilities": liabilities,
+        "equity": equity,
+        "current_earnings": current_earnings,
+        "total_assets": round(total_assets, 2),
+        "total_liabilities": round(total_liabilities, 2),
+        "total_equity": round(total_equity, 2),
+        "total_liabilities_equity": total_liabilities_equity,
+        "is_balanced": round(total_assets, 2) == total_liabilities_equity,
+        "difference": round(total_assets - total_liabilities_equity, 2),
     }
 
 
@@ -8359,6 +11455,8 @@ def calculate_faire_payout_breakdown(order_total_usd: float | int | None) -> dic
 
 def expected_order_payout(order: Order) -> float:
     expected = float(order.expected_payout_usd or 0)
+    if order.import_batch_key == "muse-api":
+        return expected
     if expected > 0:
         return expected
     order_total = float(order.order_total_usd or 0)
@@ -8368,21 +11466,23 @@ def expected_order_payout(order: Order) -> float:
     return max(order_total - deductions, 0)
 
 
-def platform_payout_summary(db: Session) -> list[dict]:
+def platform_payout_summary(db: Session, tenant_id: int | None = None) -> list[dict]:
+    tenant_id = accounting_tenant_id(db, tenant_id)
     platforms: dict[str, dict] = {}
-    for order in db.query(Order).all():
+    for order in db.query(Order).filter(Order.tenant_id == tenant_id).all():
         label = platform_label(order.platform)
         if not label:
             continue
 
         expected = expected_order_payout(order)
         received = float(order.received_payout_usd or 0)
-        pending = max(expected - received, 0)
+        pending = 0 if order.payout_status == "Received" else max(expected - received, 0)
 
         if label not in platforms:
             account = (
                 db.query(AccountingAccount)
                 .filter(
+                    AccountingAccount.tenant_id == tenant_id,
                     func.lower(AccountingAccount.platform) == label.lower(),
                     AccountingAccount.account_type == "Platform",
                 )
@@ -8414,13 +11514,38 @@ def platform_payout_summary(db: Session) -> list[dict]:
     ]
 
 
-def accounting_overview_response(db: Session) -> dict:
-    accounts = db.query(AccountingAccount).order_by(AccountingAccount.account_type, AccountingAccount.name).all()
+def accounting_overview_response(db: Session, tenant_id: int | None = None) -> dict:
+    tenant_id = accounting_tenant_id(db, tenant_id)
+    settings = ensure_accounting_settings(db, tenant_id)
+    sync_accounting_transactions_to_journal(db, tenant_id)
+    journal_sums = accounting_journal_sums(db, tenant_id)
+    trial_balance = accounting_trial_balance_report(db, tenant_id)
+    profit_loss = accounting_profit_loss_report(db, tenant_id)
+    balance_sheet = accounting_balance_sheet_report(db, tenant_id)
+    receivables_aging = accounting_aging_report(db, tenant_id, "Invoice")
+    payables_aging = accounting_aging_report(db, tenant_id, "Bill")
+    banking_summary = accounting_banking_summary(db, tenant_id)
+    recurring_summary = accounting_recurring_automation_summary(db, tenant_id)
+    scheduler_status = accounting_recurring_automation_service.status()
+    documents_count = db.query(AccountingDocument).filter(AccountingDocument.tenant_id == tenant_id).count()
+    open_documents_count = (
+        db.query(AccountingDocument)
+        .filter(AccountingDocument.tenant_id == tenant_id, AccountingDocument.status.notin_(["Draft", "Paid", "Void"]))
+        .count()
+    )
+    accounts = (
+        db.query(AccountingAccount)
+        .filter(AccountingAccount.tenant_id == tenant_id)
+        .order_by(AccountingAccount.account_type, AccountingAccount.name)
+        .all()
+    )
     transactions = (
         db.query(AccountingTransaction)
+        .filter(AccountingTransaction.tenant_id == tenant_id)
         .order_by(AccountingTransaction.transaction_date.desc(), AccountingTransaction.id.desc())
         .all()
     )
+    entries_count = db.query(AccountingJournalEntry).filter(AccountingJournalEntry.tenant_id == tenant_id).count()
     money_in_pkr = sum(float(t.amount_pkr or 0) for t in transactions if t.direction == "Money In")
     money_out_pkr = sum(float(t.amount_pkr or 0) for t in transactions if t.direction == "Money Out")
     expenses_pkr = sum(
@@ -8428,9 +11553,17 @@ def accounting_overview_response(db: Session) -> dict:
         for t in transactions
         if t.direction == "Money Out" or (t.category or "").lower() == "expense"
     )
-    platforms = platform_payout_summary(db)
+    platforms = platform_payout_summary(db, tenant_id)
 
     return {
+        "settings": {
+            "base_currency": settings.base_currency,
+            "reporting_currency": settings.reporting_currency,
+            "fiscal_year_start_month": settings.fiscal_year_start_month,
+            "fiscal_year_start_day": settings.fiscal_year_start_day,
+            "lock_date": settings.lock_date,
+            "allow_multi_currency": settings.allow_multi_currency,
+        },
         "summary": {
             "money_in_pkr": round(money_in_pkr, 2),
             "money_out_pkr": round(money_out_pkr, 2),
@@ -8439,8 +11572,32 @@ def accounting_overview_response(db: Session) -> dict:
             "pending_platform_payout_usd": round(sum(p["pending_usd"] for p in platforms), 2),
             "accounts_count": len(accounts),
             "transactions_count": len(transactions),
+            "journal_entries_count": entries_count,
+            "trial_balance_difference": trial_balance["difference"],
+            "net_income_pkr": profit_loss["net_income"],
+            "balance_sheet_difference": balance_sheet["difference"],
+            "recurring_active_count": recurring_summary["active_count"],
+            "recurring_due_count": recurring_summary["due_count"],
+            "recurring_overdue_count": recurring_summary["overdue_count"],
+            "recurring_generated_total": recurring_summary["generated_total"],
+            "recurring_next_run_date": recurring_summary["next_run_date"],
+            "recurring_last_generated_at": recurring_summary["last_generated_at"],
+            "recurring_scheduler_enabled": scheduler_status["enabled"],
+            "recurring_scheduler_running": scheduler_status["running"],
+            "recurring_scheduler_last_checked_at": scheduler_status["last_checked_at"],
+            "recurring_scheduler_last_error": scheduler_status["last_error"],
+            "recurring_scheduler_interval_seconds": scheduler_status["check_seconds"],
         },
-        "accounts": [accounting_account_response(account) for account in accounts],
+        "accounts": [accounting_account_response(account, journal_sums) for account in accounts],
+        "reports": {
+            "trial_balance": trial_balance,
+            "profit_loss": profit_loss,
+            "balance_sheet": balance_sheet,
+            "receivables_aging": receivables_aging,
+            "payables_aging": payables_aging,
+            "banking_summary": banking_summary,
+            "recurring_automation": recurring_summary,
+        },
         "platforms": platforms,
         "recent_transactions": [
             accounting_transaction_response(transaction)
@@ -8450,9 +11607,11 @@ def accounting_overview_response(db: Session) -> dict:
 
 
 def sync_order_payout_accounting(db: Session, order: Order) -> AccountingTransaction | None:
+    tenant_id = accounting_tenant_id(db, order.tenant_id)
     existing = (
         db.query(AccountingTransaction)
         .filter(
+            AccountingTransaction.tenant_id == tenant_id,
             AccountingTransaction.source_type == ACCOUNTING_ORDER_SOURCE,
             AccountingTransaction.source_id == order.id,
         )
@@ -8463,10 +11622,11 @@ def sync_order_payout_accounting(db: Session, order: Order) -> AccountingTransac
 
     if not platform or received_amount <= 0:
         if existing:
+            delete_accounting_journal_for_source(db, tenant_id, ACCOUNTING_TRANSACTION_SOURCE, existing.id)
             db.delete(existing)
         return None
 
-    account = ensure_platform_account(db, platform)
+    account = ensure_platform_account(db, platform, tenant_id)
     if not account:
         return None
 
@@ -8486,6 +11646,7 @@ def sync_order_payout_accounting(db: Session, order: Order) -> AccountingTransac
         description = f"{description}. {order.payout_notes}"
 
     data = {
+        "tenant_id": tenant_id,
         "account_id": account.id,
         "direction": "Money In",
         "category": "Order Payout",
@@ -8507,23 +11668,25 @@ def sync_order_payout_accounting(db: Session, order: Order) -> AccountingTransac
             setattr(existing, key, value)
         db.add(existing)
         db.flush()
+        upsert_transaction_journal_entry(db, existing, tenant_id, enforce_lock=False)
         return existing
 
     transaction = AccountingTransaction(**data)
     db.add(transaction)
     db.flush()
+    upsert_transaction_journal_entry(db, transaction, tenant_id, enforce_lock=False)
     return transaction
 
 
-def remove_order_payout_accounting(db: Session, order_id: int) -> None:
-    transactions = (
-        db.query(AccountingTransaction)
-        .filter(
-            AccountingTransaction.source_type == ACCOUNTING_ORDER_SOURCE,
-            AccountingTransaction.source_id == order_id,
-        )
-        .all()
+def remove_order_payout_accounting(db: Session, order_id: int, tenant_id: int | None = None) -> None:
+    query = db.query(AccountingTransaction).filter(
+        AccountingTransaction.source_type == ACCOUNTING_ORDER_SOURCE,
+        AccountingTransaction.source_id == order_id,
     )
+    tenant_id = tenant_id or db.info.get("tenant_id")
+    if tenant_id is not None:
+        query = query.filter(AccountingTransaction.tenant_id == tenant_id)
+    transactions = query.all()
     for transaction in transactions:
         db.delete(transaction)
 
@@ -8976,6 +12139,74 @@ def amazon_dashboard_summary(db: Session, privacy: dict) -> dict:
     }
 
 
+
+def website_dashboard_summary(db: Session, tenant_id: int | None) -> dict:
+    empty = {
+        "enabled": False,
+        "active_visitors": 0,
+        "visitors_today": 0,
+        "add_to_cart_today": 0,
+        "add_to_cart_units_today": 0,
+        "active_cart_items": 0,
+        "unread_chat_messages": 0,
+    }
+    if tenant_id is None:
+        return empty
+    if "Website" not in tenant_filtered_allowed_pages(db, tenant_id, ["Website"]):
+        return empty
+
+    now_utc = datetime.utcnow()
+    active_cutoff = now_utc - timedelta(minutes=5)
+    today_start = datetime.combine(now_utc.date(), datetime.min.time())
+    base_query = (
+        db.query(WebsiteVisitorSession)
+        .execution_options(skip_tenant_scope=True)
+        .filter(WebsiteVisitorSession.tenant_id == tenant_id)
+    )
+    active_sessions = base_query.filter(
+        WebsiteVisitorSession.last_seen_at >= active_cutoff
+    ).all()
+    today_sessions = base_query.filter(
+        WebsiteVisitorSession.last_seen_at >= today_start
+    ).count()
+    cart_today_sessions = base_query.filter(
+        WebsiteVisitorSession.last_add_to_cart_at >= today_start
+    ).all()
+
+    visitor_ids = [
+        row[0]
+        for row in (
+            db.query(User.id)
+            .execution_options(skip_tenant_scope=True)
+            .filter(User.tenant_id == tenant_id, User.role == "visitor", User.is_active.is_(True))
+            .all()
+        )
+    ]
+    unread_chat_messages = 0
+    if visitor_ids:
+        unread_chat_messages = int(
+            (
+                db.query(func.count(InternalMessage.id))
+                .execution_options(skip_tenant_scope=True)
+                .filter(
+                    InternalMessage.tenant_id == tenant_id,
+                    InternalMessage.sender_user_id.in_(visitor_ids),
+                    InternalMessage.read_at.is_(None),
+                )
+                .scalar()
+            )
+            or 0
+        )
+
+    return {
+        "enabled": True,
+        "active_visitors": len(active_sessions),
+        "visitors_today": int(today_sessions or 0),
+        "add_to_cart_today": sum(int(session.add_to_cart_count or 0) for session in cart_today_sessions),
+        "add_to_cart_units_today": sum(int(session.add_to_cart_units or 0) for session in cart_today_sessions),
+        "active_cart_items": sum(int(session.cart_item_count or 0) for session in active_sessions),
+        "unread_chat_messages": unread_chat_messages,
+    }
 @app.get("/dashboard-stats")
 def dashboard_stats(
     request: Request,
@@ -8987,12 +12218,18 @@ def dashboard_stats(
     )
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    dashboard_user = get_authenticated_user(request, db)
+    tenant_scope_id = tenant_scope_id_for_request(request, dashboard_user)
     privacy = access_privacy_context(request, db)
     now = datetime.now()
     today = now.date()
 
     products = db.query(Product).all()
-    orders = db.query(Order).all()
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.items).joinedload(OrderItem.product))
+        .all()
+    )
     workflow_steps = db.query(WorkflowStep).all()
     workers = db.query(Worker).all()
     shipping_records = db.query(Shipping).all()
@@ -9026,7 +12263,7 @@ def dashboard_stats(
             + (p.usa_stock or 0)
             + (p.front_room_stock or 0)
             - (p.reserved_stock or 0)
-        ) <= p.low_stock_alert
+        ) <= (p.low_stock_alert if p.low_stock_alert is not None else 10)
     )
 
     new_orders_today = sum(
@@ -9079,9 +12316,11 @@ def dashboard_stats(
         key=lambda item: item["days_until_due"],
     )[:6]
 
-    manufacturing_required_items = sum(
-        1 for o in orders for i in o.items
-        if i.manufacturing_required
+    manufacturing_required_items = (
+        db.query(func.count(OrderItem.id))
+        .filter(OrderItem.manufacturing_required == True)
+        .scalar()
+        or 0
     )
 
     if now.hour < 12:
@@ -9623,6 +12862,7 @@ def dashboard_stats(
         "active_production_tasks": active_production_tasks[:8],
         "tasks_completing_today": tasks_completing_today[:8],
         "late_production_tasks": late_production_tasks[:8],
+        "website": website_dashboard_summary(db, tenant_scope_id),
         "amazon": amazon_dashboard_summary(db, privacy),
     }
 
@@ -9652,7 +12892,7 @@ def require_local_printer_bridge(request: Request) -> None:
 
 @app.get("/label-printers")
 async def get_label_printers(db: Session = Depends(get_db)):
-    from .print_agent import get_print_agent_printers
+    from .routers.print_agent_router import get_print_agent_printers
     try:
         return await get_print_agent_printers(db)
     except Exception:
@@ -9665,7 +12905,7 @@ async def get_label_printers(db: Session = Depends(get_db)):
 
 @app.post("/label-printers/print")
 async def print_labels_directly(payload: dict, db: Session = Depends(get_db)):
-    from .print_agent import print_labels_via_agent
+    from .routers.print_agent_router import print_labels_via_agent
     try:
         return await print_labels_via_agent(payload, db)
     except Exception as exc:
@@ -9729,13 +12969,13 @@ async def import_faire_product_catalog(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="The Faire catalog could not be imported.") from exc
 
 
-def product_catalog_pdf_response(db: Session, product_ids: list[int] | None = None) -> Response:
+def product_catalog_pdf_response(db: Session, product_ids: list[int] | None = None, discount_percent=0) -> Response:
     query = db.query(Product)
     if product_ids is not None:
         query = query.filter(Product.id.in_(product_ids))
     products = query.order_by(Product.category, Product.name, Product.article_no).all()
     try:
-        pdf_content = build_product_catalog_pdf(products, UPLOAD_DIR)
+        pdf_content = build_product_catalog_pdf(products, UPLOAD_DIR, discount_percent=discount_percent)
     except ProductCatalogError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -9773,7 +13013,11 @@ def create_product_catalog_download(
     }
     if len(existing_ids) != len(product_ids):
         raise HTTPException(status_code=400, detail="One or more selected products no longer exist.")
-    token = create_catalog_download_token(user.id, product_ids=product_ids)
+    try:
+        discount = validate_catalog_discount((payload or {}).get("discount_percent", 0))
+    except ProductCatalogError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    token = create_catalog_download_token(user.id, product_ids=product_ids, discount_percent=discount)
     return {
         "download_url": f"/products/catalog-download-file?token={token}",
         "expires_in_seconds": CATALOG_DOWNLOAD_TOKEN_TTL_SECONDS,
@@ -9786,7 +13030,7 @@ def download_product_catalog_file(
     db: Session = Depends(get_db),
 ):
     try:
-        user_id, product_ids = decode_catalog_download_token(token)
+        user_id, product_ids, discount = decode_catalog_download_token(token, include_discount=True)
     except ProductCatalogError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
@@ -9809,7 +13053,7 @@ def download_product_catalog_file(
         normalize_allowed_pages(user.role, stored_pages),
     ):
         raise HTTPException(status_code=403, detail="Products access is required.")
-    return product_catalog_pdf_response(db, product_ids=product_ids)
+    return product_catalog_pdf_response(db, product_ids=product_ids, discount_percent=discount)
 
 @app.put("/products/{product_id}", response_model=ProductOut)
 def update_product(
@@ -9942,6 +13186,27 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
 
     return {"message": "Product deleted successfully", "deleted_product_id": product_id}
 
+
+class ProductWeightUpdatePayload(BaseModel):
+    unit_weight_kg: float = Field(..., ge=0)
+
+
+@app.patch("/products/{product_id}/weight")
+def update_product_weight(
+    product_id: int,
+    payload: ProductWeightUpdatePayload,
+    db: Session = Depends(get_db),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    product.unit_weight_kg = payload.unit_weight_kg
+    db.commit()
+    db.refresh(product)
+    return product_response(product)
+
+
 @app.patch("/products/{product_id}/update-stock")
 def update_product_stock(
     product_id: int,
@@ -9967,13 +13232,13 @@ def update_product_stock(
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
     supplier = None
     if supplier_id is not None:
         supplier = db.query(Supplier).filter(Supplier.id == supplier_id).first()
         if not supplier:
             raise HTTPException(status_code=404, detail="Supplier not found")
-    
+
     absolute_values = {
         "factory_stock": factory_stock,
         "usa_stock": usa_stock,
@@ -10023,7 +13288,7 @@ def update_product_stock(
     db.flush()
     db.expire(product)
     db.refresh(product)
-    
+
     def build_movement(
         type_label,
         quantity,
@@ -10044,7 +13309,7 @@ def update_product_stock(
             note=note,
             created_at=datetime.utcnow(),
         )
-    
+
     movement_type = "Manual Update"
     source_label = "Manual"
     if source_type == "supplier":
@@ -10053,7 +13318,7 @@ def update_product_stock(
     elif source_type == "factory":
         movement_type = "Factory Manufactured"
         source_label = "Factory"
-    
+
     # Record the exact signed change against the same committed product balance.
     for stock_field in STOCK_FIELD_LABELS:
         final_value = int(getattr(product, stock_field) or 0)
@@ -10077,7 +13342,7 @@ def update_product_stock(
             ),
             purchase_price if source_type == "supplier" else 0,
         ))
-    
+
     db.commit()
     db.refresh(product)
     return product_response(product)
@@ -10480,10 +13745,10 @@ def update_customer(
     db_customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not db_customer:
         raise HTTPException(status_code=404, detail="Customer not found")
-    
+
     for key, value in customer.model_dump().items():
         setattr(db_customer, key, value)
-    
+
     db.commit()
     db.refresh(db_customer)
     return customer_response(db_customer, privacy)
@@ -10493,18 +13758,18 @@ def delete_customer(customer_id: int, db: Session = Depends(get_db)):
     db_customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not db_customer:
         raise HTTPException(status_code=404, detail="Customer not found")
-    
+
     # Delete related orders and their items
     orders = db.query(Order).filter(Order.customer_id == customer_id).all()
     for order in orders:
         db.query(OrderItem).filter(OrderItem.order_id == order.id).delete()
         db.query(Shipping).filter(Shipping.order_id == order.id).delete()
         db.query(SharedData).filter(SharedData.order_id == order.id).delete()
-    
+
     db.query(Order).filter(Order.customer_id == customer_id).delete()
     db.delete(db_customer)
     db.commit()
-    
+
     return {"detail": "Customer and related orders deleted successfully"}
 
 
@@ -12275,7 +15540,13 @@ def build_order_payload_from_import_review(order_review: dict, first_row: dict) 
 
 
 # Orders API
-STOCK_DEDUCTED_SHIPPING_STATUSES = {"shipped", "dispatched", "in transit", "delivered"}
+STOCK_DEDUCTED_SHIPPING_STATUSES = {
+    "shipped",
+    "dispatched",
+    "in transit",
+    "waiting",
+    "delivered",
+}
 ORDER_WORKFLOW_TASK_TYPES = {"preparation": "Preparation", "shipping": "Shipping"}
 ORDER_WORKFLOW_OPEN_STATUSES = {"New", "Ready", "In Progress", "Pending Verification"}
 FOLLOW_UP_STATUSES = {"Pending", "Followed Up", "Review Provided", "No Review", "Closed"}
@@ -13660,6 +16931,10 @@ def get_orders(request: Request, db: Session = Depends(get_db)):
     privacy = access_privacy_context(request, db)
     orders = (
         db.query(Order)
+        .options(
+            joinedload(Order.customer),
+            selectinload(Order.items).joinedload(OrderItem.product),
+        )
         .order_by(Order.order_date.desc(), Order.id.desc())
         .all()
     )
@@ -14113,6 +17388,7 @@ async def import_orders_csv(
         batch.status = "Imported"
         db.add(batch)
         db.commit()
+        prune_order_import_batches(db, keep_count=ORDER_IMPORT_BATCH_STORAGE_LIMIT)
     else:
         db.delete(batch)
         db.commit()
@@ -14129,15 +17405,39 @@ async def import_orders_csv(
     }
 
 
-@app.get("/orders/import-batches")
-def get_order_import_batches(
-    limit: int = Query(20, ge=1, le=100),
-    db: Session = Depends(get_db),
-):
+ORDER_IMPORT_BATCH_STORAGE_LIMIT = 3
+
+
+def prune_order_import_batches(db: Session, keep_count: int = ORDER_IMPORT_BATCH_STORAGE_LIMIT) -> int:
+    """
+    Permanently deletes older order import batch metadata and files from storage,
+    strictly retaining only the latest N batches.
+    """
     batches = (
         db.query(OrderImportBatch)
         .order_by(OrderImportBatch.created_at.desc(), OrderImportBatch.id.desc())
-        .limit(limit)
+        .all()
+    )
+    if len(batches) <= keep_count:
+        return 0
+
+    batches_to_delete = batches[keep_count:]
+    for batch in batches_to_delete:
+        db.delete(batch)
+    db.commit()
+    return len(batches_to_delete)
+
+
+@app.get("/orders/import-batches")
+def get_order_import_batches(
+    limit: int = Query(ORDER_IMPORT_BATCH_STORAGE_LIMIT, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    prune_order_import_batches(db, keep_count=ORDER_IMPORT_BATCH_STORAGE_LIMIT)
+    batches = (
+        db.query(OrderImportBatch)
+        .order_by(OrderImportBatch.created_at.desc(), OrderImportBatch.id.desc())
+        .limit(min(limit, ORDER_IMPORT_BATCH_STORAGE_LIMIT))
         .all()
     )
     if not batches:
@@ -14392,9 +17692,7 @@ def update_order_payout(
         )
 
     payout_status = requested_status
-    if requested_status == "Received" and expected_payout > received_payout:
-        payout_status = "Partially Received"
-    elif requested_status == "Not Received" and received_payout > 0:
+    if requested_status == "Not Received" and received_payout > 0:
         payout_status = (
             "Partially Received"
             if expected_payout > received_payout
@@ -14409,7 +17707,7 @@ def update_order_payout(
     existing_order.payment_source = payout.payment_source
     existing_order.payout_status = payout_status
     existing_order.received_payout_usd = received_payout
-    existing_order.remaining_payout_usd = max(expected_payout - received_payout, 0)
+    existing_order.remaining_payout_usd = 0 if payout_status == "Received" else max(expected_payout - received_payout, 0)
     existing_order.exchange_rate = payout.exchange_rate
     existing_order.received_pkr = payout.received_pkr
     existing_order.bank_charges_pkr = payout.bank_charges_pkr
@@ -14483,7 +17781,7 @@ def delete_order(order_id: int, db: Session = Depends(get_db)):
                     ).order_by(CourierPayment.id.desc()).limit(1).all()
                 else:
                     courier_payments = []
-            
+
             for payment in courier_payments:
                 db.delete(payment)
 
@@ -14498,7 +17796,16 @@ def delete_order(order_id: int, db: Session = Depends(get_db)):
 # Stock Movements API
 @app.get("/stock-movements", response_model=list[StockMovementOut])
 def get_stock_movements(db: Session = Depends(get_db)):
-    return [stock_movement_response(m) for m in db.query(StockMovement).order_by(StockMovement.id.desc()).all()]
+    movements = (
+        db.query(StockMovement)
+        .options(
+            joinedload(StockMovement.product),
+            joinedload(StockMovement.supplier),
+        )
+        .order_by(StockMovement.id.desc())
+        .all()
+    )
+    return [stock_movement_response(m) for m in movements]
 
 # Workflow Steps API
 @app.post("/workflow-steps", response_model=WorkflowStepOut)
@@ -14705,7 +18012,15 @@ def update_pending_order_shipping_weight(
 @app.get("/shipping", response_model=list[ShippingOut])
 def get_shipping_records(request: Request, db: Session = Depends(get_db)):
     privacy = access_privacy_context(request, db)
-    records = db.query(Shipping).order_by(Shipping.id.desc()).all()
+    records = (
+        db.query(Shipping)
+        .options(
+            joinedload(Shipping.order).joinedload(Order.customer),
+            joinedload(Shipping.order).selectinload(Order.items).joinedload(OrderItem.product),
+        )
+        .order_by(Shipping.id.desc())
+        .all()
+    )
     return [shipping_response(s, privacy) for s in records]
 
 
@@ -14714,6 +18029,10 @@ def get_pending_shipping_orders(request: Request, db: Session = Depends(get_db))
     privacy = access_privacy_context(request, db)
     orders = (
         db.query(Order)
+        .options(
+            joinedload(Order.customer),
+            selectinload(Order.items).joinedload(OrderItem.product),
+        )
         .filter(
             ~func.lower(func.coalesce(Order.shipping_status, "")).in_(
                 list(STOCK_DEDUCTED_SHIPPING_STATUSES)
@@ -14834,6 +18153,8 @@ def upsert_shipping_for_order(db: Session, order: Order, shipping):
 
     if existing_shipping:
         existing_shipping.courier_name = shipping.courier_name
+        if hasattr(shipping, "dispatch_agent"):
+            existing_shipping.dispatch_agent = shipping.dispatch_agent
         existing_shipping.tracking_number = shipping.tracking_number
         existing_shipping.package_weight_kg = package_weight
         existing_shipping.shipping_cost = shipping_cost
@@ -14841,12 +18162,16 @@ def upsert_shipping_for_order(db: Session, order: Order, shipping):
         for field_name, value in rate_snapshot.items():
             setattr(existing_shipping, field_name, value)
         existing_shipping.updated_at = datetime.utcnow()
-        order.shipping_status = "Shipped"
+        # Never wipe a manual/live progress status when only editing shipment details.
+        current_status = str(order.shipping_status or "").strip().lower()
+        if current_status not in {"delivered", "in transit", "waiting"}:
+            order.shipping_status = "Shipped"
         return existing_shipping
 
     new_shipping = Shipping(
         order_id=shipping.order_id,
         courier_name=shipping.courier_name,
+        dispatch_agent=getattr(shipping, "dispatch_agent", None),
         tracking_number=shipping.tracking_number,
         package_weight_kg=package_weight,
         shipping_cost=shipping_cost,
@@ -14856,7 +18181,9 @@ def upsert_shipping_for_order(db: Session, order: Order, shipping):
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
-    order.shipping_status = "Shipped"
+    current_status = str(order.shipping_status or "").strip().lower()
+    if current_status not in {"delivered", "in transit", "waiting"}:
+        order.shipping_status = "Shipped"
     db.add(new_shipping)
     return new_shipping
 
@@ -15242,6 +18569,9 @@ def update_shipping_record(
     if shipping_update.courier_name is not None:
         record.courier_name = shipping_update.courier_name
 
+    if shipping_update.dispatch_agent is not None:
+        record.dispatch_agent = shipping_update.dispatch_agent
+
     if shipping_update.tracking_number is not None:
         record.tracking_number = shipping_update.tracking_number
 
@@ -15288,7 +18618,7 @@ def delete_shipping_record(shipping_id: int, db: Session = Depends(get_db)):
                 ).order_by(CourierPayment.id.desc()).limit(1).all()
             else:
                 courier_payments = []
-        
+
         for payment in courier_payments:
             db.delete(payment)
 
@@ -15296,6 +18626,267 @@ def delete_shipping_record(shipping_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Shipping record deleted successfully. Courier payment reversed.", "deleted_shipping_id": shipping_id}
+
+
+class ManualTrackingStatusPayload(BaseModel):
+    status_stage: str
+    carrier_name: str | None = None
+    note: str | None = None
+
+
+@app.patch("/shipping/{shipping_id}/status")
+@app.put("/shipping/{shipping_id}/status")
+@app.post("/shipping/{shipping_id}/status")
+def update_shipping_record_status(
+    shipping_id: int,
+    payload: ManualTrackingStatusPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    privacy = access_privacy_context(request, db)
+    record = (
+        db.query(Shipping)
+        .options(joinedload(Shipping.order).joinedload(Order.customer))
+        .filter(Shipping.id == shipping_id)
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Shipping record not found")
+
+    stage = str(payload.status_stage or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if stage in {"intransit", "transit"}:
+        stage = "in_transit"
+    if stage in {"wait", "label_created", "waiting_for_shipment"}:
+        stage = "waiting"
+    if stage not in {"delivered", "in_transit", "waiting", "exception"}:
+        raise HTTPException(
+            status_code=400,
+            detail="status_stage must be delivered, in_transit, waiting, or exception.",
+        )
+
+    carrier = payload.carrier_name or record.courier_name or "Carrier"
+    tn = str(record.tracking_number or "").strip()
+
+    # Persist exact stage on the order so Shipping UI survives restart/reload.
+    status_by_stage = {
+        "delivered": "Delivered",
+        "in_transit": "In Transit",
+        "waiting": "Waiting",
+        "exception": "Exception",
+    }
+    if record.order:
+        record.order.shipping_status = status_by_stage[stage]
+        db.add(record.order)
+
+    record.updated_at = datetime.utcnow()
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    if record.order:
+        db.refresh(record.order)
+
+    # Keep a durable manual tracking override so live/sandbox refresh cannot wipe it.
+    tracking_result = None
+    if tn:
+        tracking_result = set_manual_tracking_status(
+            tn,
+            stage,
+            carrier_name=carrier,
+            note=payload.note,
+        )
+
+    return {
+        "shipping": shipping_response(record, privacy),
+        "tracking": tracking_result,
+        "status_stage": stage,
+    }
+
+
+# --- FedEx & Multi-Carrier Tracking API ---
+
+@app.get("/shipping/fedex/settings")
+def get_fedex_tracking_settings(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    get_authenticated_user(request, db)
+    return get_public_fedex_settings()
+
+
+@app.post("/shipping/fedex/settings")
+def update_fedex_tracking_settings(
+    payload: dict,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    current_user = get_authenticated_user(request, db)
+    if current_user.role not in ("admin", "manager", "super_admin"):
+        raise HTTPException(status_code=403, detail="Admin permissions required to modify FedEx settings.")
+    save_fedex_settings(payload)
+    return get_public_fedex_settings()
+
+
+@app.post("/shipping/fedex/test-connection")
+def test_fedex_api_connection(
+    request: Request,
+    payload: dict = None,
+    db: Session = Depends(get_db),
+):
+    get_authenticated_user(request, db)
+    return test_fedex_connection(payload or None)
+
+
+@app.get("/shipping/fedex/track/{tracking_number}")
+def track_single_fedex_shipment(
+    tracking_number: str,
+    request: Request,
+    bypass_cache: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    get_authenticated_user(request, db)
+    clean_tn = str(tracking_number or "").strip()
+    if not clean_tn:
+        raise HTTPException(status_code=400, detail="Tracking number cannot be empty.")
+    
+    results = fetch_fedex_tracking_batch([clean_tn], bypass_cache=bypass_cache)
+    if clean_tn in results:
+        sync_delivered_shipping_orders_from_tracking(db, results)
+        return results[clean_tn]
+    
+    return tracking_unavailable_response(
+        clean_tn,
+        "no_record",
+        "FedEx returned no tracking result for this number yet.",
+        status_code="NO_RECORD",
+    )
+
+
+@app.post("/shipping/fedex/track-batch")
+def track_multiple_fedex_shipments(
+    payload: dict,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    try:
+        get_authenticated_user(request, db)
+    except Exception:
+        pass
+    tracking_numbers = payload.get("tracking_numbers", [])
+    bypass_cache = bool(payload.get("bypass_cache", False))
+    if not isinstance(tracking_numbers, list):
+        raise HTTPException(status_code=400, detail="tracking_numbers must be a list")
+    
+    results = fetch_fedex_tracking_batch(tracking_numbers, bypass_cache=bypass_cache)
+    sync_delivered_shipping_orders_from_tracking(db, results)
+    return results
+
+
+@app.get("/shipping/tracking-overview")
+def get_all_shipping_tracking_overview(
+    request: Request,
+    bypass_cache: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """Fetch tracking statuses for all shipped orders with tracking numbers."""
+    try:
+        get_authenticated_user(request, db)
+    except Exception:
+        pass
+    records = (
+        db.query(Shipping)
+        .filter(Shipping.tracking_number.isnot(None), Shipping.tracking_number != "")
+        .order_by(Shipping.id.desc())
+        .limit(150)
+        .all()
+    )
+    
+    fedex_numbers = []
+    other_tracking = {}
+    order_status_by_tracking = {}
+    for r in records:
+        tn = str(r.tracking_number or "").strip()
+        c = str(r.courier_name or "").strip().lower()
+        if not tn:
+            continue
+        order_status = str(
+            getattr(getattr(r, "order", None), "shipping_status", "") or ""
+        ).strip().lower()
+        order_status_by_tracking[tn] = order_status
+        detected = detect_carrier_by_tracking(tn)
+        if "fedex" in c or detected == "FedEx" or len(tn) == 12 or not c or any(agent in c for agent in ["on track", "mehran", "a line", "anh", "duty"]):
+            fedex_numbers.append(tn)
+        else:
+            is_delivered = order_status == "delivered"
+            if order_status == "waiting":
+                stage = "waiting"
+                status_label = "Waiting"
+                status_code = "OC"
+                status_desc = f"Awaiting carrier pickup via {r.courier_name or detected}"
+            elif is_delivered:
+                stage = "delivered"
+                status_label = "Delivered"
+                status_code = "DL"
+                status_desc = f"Delivered via {r.courier_name or detected}"
+            else:
+                stage = "in_transit"
+                status_label = "In Transit"
+                status_code = "IT"
+                status_desc = f"Shipped via {r.courier_name or detected}"
+            other_tracking[tn] = {
+                "tracking_number": tn,
+                "carrier": r.courier_name or detected,
+                "service_name": r.courier_name or detected,
+                "status": status_label,
+                "status_code": status_code,
+                "status_description": status_desc,
+                "status_stage": stage,
+                "estimated_delivery": None,
+                "estimated_delivery_formatted": "Check carrier portal",
+                "tracking_url": get_carrier_tracking_url(r.courier_name, tn),
+                "is_delivered": is_delivered,
+                "is_exception": False,
+                "source": "carrier_link",
+            }
+            
+    fedex_results = fetch_fedex_tracking_batch(fedex_numbers, bypass_cache=bypass_cache) if fedex_numbers else {}
+    sync_delivered_shipping_orders_from_tracking(db, fedex_results)
+
+    # Prefer saved order status when live provider returns setup/sandbox stubs.
+    for tn, order_status in order_status_by_tracking.items():
+        current = fedex_results.get(tn) or other_tracking.get(tn)
+        if not isinstance(current, dict):
+            continue
+        source = str(current.get("source") or "")
+        if source == "manual_override":
+            continue
+        if current.get("is_delivered") or str(current.get("status_stage") or "").lower() == "delivered":
+            continue
+        if order_status == "delivered":
+            fedex_results[tn] = set_manual_tracking_status(
+                tn,
+                "delivered",
+                carrier_name=str(current.get("carrier") or "Carrier"),
+                note="Restored from saved order status",
+            )
+        elif order_status == "in transit":
+            if source.startswith("fedex_") or source.startswith("17track_"):
+                fedex_results[tn] = set_manual_tracking_status(
+                    tn,
+                    "in_transit",
+                    carrier_name=str(current.get("carrier") or "Carrier"),
+                    note="Restored from saved order status",
+                )
+        elif order_status == "waiting":
+            if source.startswith("fedex_") or source.startswith("17track_"):
+                fedex_results[tn] = set_manual_tracking_status(
+                    tn,
+                    "waiting",
+                    carrier_name=str(current.get("carrier") or "Carrier"),
+                    note="Restored from saved order status",
+                )
+    
+    return {**other_tracking, **fedex_results}
+
 
 # Workers API
 @app.post("/workers", response_model=WorkerOut)
@@ -15705,6 +19296,7 @@ def create_production_batch(batch: ProductionBatchCreate, db: Session = Depends(
     return production_batch_response(new_batch)
 
 
+@app.post("/production/tasks")
 @app.post("/production/manual-tasks")
 def create_manual_production_task(
     manual_task: ManualProductionTaskCreate,
@@ -15721,8 +19313,6 @@ def create_manual_production_task(
         product = db.query(Product).filter(Product.id == manual_task.product_id).first()
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
-    elif not custom_product_name:
-        raise HTTPException(status_code=400, detail="Enter a custom work note or select a product")
 
     worker = db.query(Worker).filter(Worker.id == manual_task.worker_id).first()
     if not worker:
@@ -15740,9 +19330,9 @@ def create_manual_production_task(
         second=0,
         microsecond=0,
     )
-    production_product_id = product.id if product else 0
-    production_custom_name = None if product else custom_product_name
-    production_custom_article = None if product else custom_article_no or "Custom"
+    production_product_id = product.id if product else None
+    production_custom_name = None if product else custom_product_name or clean_step_name
+    production_custom_article = None if product else custom_article_no or "Manual"
 
     batch = ProductionBatch(
         batch_no=next_manual_task_number(db),
@@ -15920,6 +19510,29 @@ def get_production_tasks(
     return [production_task_response(t) for t in tasks]
 
 
+@app.delete("/production/manual-tasks/{task_id}")
+def delete_manual_production_task(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(ProductionTask).filter(ProductionTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Worker job not found")
+
+    batch = task.batch
+    if not batch or (batch.source_type or "").strip().lower() != "manual":
+        raise HTTPException(
+            status_code=400,
+            detail="Only manually recorded worker jobs can be deleted here",
+        )
+    if len(batch.tasks) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="This job belongs to a production batch and cannot be deleted here",
+        )
+
+    db.delete(batch)
+    db.commit()
+    return {"message": "Worker job deleted", "deleted_task_id": task_id}
+
+
 @app.patch("/production/tasks/{task_id}/assign")
 def assign_worker_to_task(
     task_id: int,
@@ -16012,11 +19625,11 @@ def log_shared_data(shared_data: SharedDataCreate, db: Session = Depends(get_db)
     order = db.query(Order).filter(Order.id == shared_data.order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    
+
     customer = db.query(Customer).filter(Customer.id == shared_data.customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
-    
+
     new_shared_data = SharedData(**shared_data.model_dump())
     db.add(new_shared_data)
     db.commit()
@@ -16512,36 +20125,1049 @@ def delete_regular_bill_payment(
     return regular_bill_response(bill)
 
 
+@app.get("/accounting/settings", response_model=AccountingSettingsOut)
+def get_accounting_settings(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    settings = ensure_accounting_settings(db, tenant_id)
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
+@app.put("/accounting/settings", response_model=AccountingSettingsOut)
+def update_accounting_settings(
+    payload: AccountingSettingsUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    settings = ensure_accounting_settings(db, tenant_id)
+    data = payload.model_dump(exclude_unset=True)
+
+    month = int(data.get("fiscal_year_start_month", settings.fiscal_year_start_month or 1))
+    day = int(data.get("fiscal_year_start_day", settings.fiscal_year_start_day or 1))
+    validate_accounting_fiscal_start(month, day)
+
+    if "base_currency" in data and data["base_currency"] is not None:
+        settings.base_currency = normalize_accounting_currency(data["base_currency"])
+    if "reporting_currency" in data and data["reporting_currency"] is not None:
+        settings.reporting_currency = normalize_accounting_currency(data["reporting_currency"])
+    if "fiscal_year_start_month" in data and data["fiscal_year_start_month"] is not None:
+        settings.fiscal_year_start_month = month
+    if "fiscal_year_start_day" in data and data["fiscal_year_start_day"] is not None:
+        settings.fiscal_year_start_day = day
+    if "lock_date" in data:
+        settings.lock_date = data["lock_date"]
+    if "allow_multi_currency" in data and data["allow_multi_currency"] is not None:
+        settings.allow_multi_currency = bool(data["allow_multi_currency"])
+
+    db.add(settings)
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
+@app.get("/accounting/fiscal-years", response_model=list[AccountingFiscalYearOut])
+def get_accounting_fiscal_years(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    return (
+        db.query(AccountingFiscalYear)
+        .filter(AccountingFiscalYear.tenant_id == tenant_id)
+        .order_by(AccountingFiscalYear.start_date.desc(), AccountingFiscalYear.id.desc())
+        .all()
+    )
+
+
+@app.post("/accounting/fiscal-years", response_model=AccountingFiscalYearOut)
+def create_accounting_fiscal_year(
+    payload: AccountingFiscalYearCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    clean_name = payload.name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Fiscal year name is required")
+    validate_accounting_date_range(payload.start_date, payload.end_date)
+    status = normalize_accounting_fiscal_status(payload.status)
+    duplicate = (
+        db.query(AccountingFiscalYear)
+        .filter(
+            AccountingFiscalYear.tenant_id == tenant_id,
+            func.lower(AccountingFiscalYear.name) == clean_name.lower(),
+        )
+        .first()
+    )
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Fiscal year name already exists")
+    fiscal_year = AccountingFiscalYear(
+        tenant_id=tenant_id,
+        name=clean_name,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        status=status,
+        closed_at=datetime.utcnow() if status == "Closed" else None,
+        notes=payload.notes,
+    )
+    db.add(fiscal_year)
+    db.commit()
+    db.refresh(fiscal_year)
+    return fiscal_year
+
+
+@app.put("/accounting/fiscal-years/{fiscal_year_id}", response_model=AccountingFiscalYearOut)
+def update_accounting_fiscal_year(
+    fiscal_year_id: int,
+    payload: AccountingFiscalYearUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    fiscal_year = (
+        db.query(AccountingFiscalYear)
+        .filter(AccountingFiscalYear.id == fiscal_year_id, AccountingFiscalYear.tenant_id == tenant_id)
+        .first()
+    )
+    if not fiscal_year:
+        raise HTTPException(status_code=404, detail="Fiscal year not found")
+    data = payload.model_dump(exclude_unset=True)
+    if "name" in data and data["name"] is not None:
+        clean_name = data["name"].strip()
+        if not clean_name:
+            raise HTTPException(status_code=400, detail="Fiscal year name is required")
+        duplicate = (
+            db.query(AccountingFiscalYear)
+            .filter(
+                AccountingFiscalYear.tenant_id == tenant_id,
+                func.lower(AccountingFiscalYear.name) == clean_name.lower(),
+                AccountingFiscalYear.id != fiscal_year_id,
+            )
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Fiscal year name already exists")
+        fiscal_year.name = clean_name
+    if "start_date" in data and data["start_date"] is not None:
+        fiscal_year.start_date = data["start_date"]
+    if "end_date" in data and data["end_date"] is not None:
+        fiscal_year.end_date = data["end_date"]
+    validate_accounting_date_range(fiscal_year.start_date, fiscal_year.end_date)
+    if "status" in data and data["status"] is not None:
+        status = normalize_accounting_fiscal_status(data["status"])
+        fiscal_year.status = status
+        if status == "Closed":
+            fiscal_year.closed_at = fiscal_year.closed_at or datetime.utcnow()
+        else:
+            fiscal_year.closed_at = None
+    if "notes" in data:
+        fiscal_year.notes = data["notes"]
+    db.add(fiscal_year)
+    db.commit()
+    db.refresh(fiscal_year)
+    return fiscal_year
+
+
+@app.get("/accounting/period-locks", response_model=list[AccountingPeriodLockOut])
+def get_accounting_period_locks(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    return (
+        db.query(AccountingPeriodLock)
+        .filter(AccountingPeriodLock.tenant_id == tenant_id)
+        .order_by(AccountingPeriodLock.period_start.desc(), AccountingPeriodLock.id.desc())
+        .all()
+    )
+
+
+def validate_accounting_fiscal_year_reference(db: Session, tenant_id: int, fiscal_year_id: int | None) -> None:
+    if fiscal_year_id is None:
+        return
+    exists = (
+        db.query(AccountingFiscalYear)
+        .filter(AccountingFiscalYear.id == fiscal_year_id, AccountingFiscalYear.tenant_id == tenant_id)
+        .first()
+    )
+    if not exists:
+        raise HTTPException(status_code=404, detail="Fiscal year not found")
+
+
+@app.post("/accounting/period-locks", response_model=AccountingPeriodLockOut)
+def create_accounting_period_lock(
+    payload: AccountingPeriodLockCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    validate_accounting_date_range(payload.period_start, payload.period_end)
+    validate_accounting_fiscal_year_reference(db, tenant_id, payload.fiscal_year_id)
+    existing = (
+        db.query(AccountingPeriodLock)
+        .filter(
+            AccountingPeriodLock.tenant_id == tenant_id,
+            AccountingPeriodLock.period_start == payload.period_start,
+            AccountingPeriodLock.period_end == payload.period_end,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Period lock already exists")
+    lock = AccountingPeriodLock(
+        tenant_id=tenant_id,
+        fiscal_year_id=payload.fiscal_year_id,
+        period_start=payload.period_start,
+        period_end=payload.period_end,
+        locked=payload.locked,
+        locked_at=datetime.utcnow() if payload.locked else None,
+        reason=payload.reason,
+    )
+    db.add(lock)
+    db.commit()
+    db.refresh(lock)
+    return lock
+
+
+@app.put("/accounting/period-locks/{lock_id}", response_model=AccountingPeriodLockOut)
+def update_accounting_period_lock(
+    lock_id: int,
+    payload: AccountingPeriodLockUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    lock = (
+        db.query(AccountingPeriodLock)
+        .filter(AccountingPeriodLock.id == lock_id, AccountingPeriodLock.tenant_id == tenant_id)
+        .first()
+    )
+    if not lock:
+        raise HTTPException(status_code=404, detail="Period lock not found")
+    data = payload.model_dump(exclude_unset=True)
+    if "fiscal_year_id" in data:
+        validate_accounting_fiscal_year_reference(db, tenant_id, data["fiscal_year_id"])
+        lock.fiscal_year_id = data["fiscal_year_id"]
+    if "period_start" in data and data["period_start"] is not None:
+        lock.period_start = data["period_start"]
+    if "period_end" in data and data["period_end"] is not None:
+        lock.period_end = data["period_end"]
+    validate_accounting_date_range(lock.period_start, lock.period_end)
+    if "locked" in data and data["locked"] is not None:
+        lock.locked = bool(data["locked"])
+        lock.locked_at = datetime.utcnow() if lock.locked else None
+    if "reason" in data:
+        lock.reason = data["reason"]
+    db.add(lock)
+    db.commit()
+    db.refresh(lock)
+    return lock
+
+
+@app.get("/accounting/currency-rates", response_model=list[AccountingCurrencyRateOut])
+def get_accounting_currency_rates(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    return (
+        db.query(AccountingCurrencyRate)
+        .filter(AccountingCurrencyRate.tenant_id == tenant_id)
+        .order_by(AccountingCurrencyRate.effective_date.desc(), AccountingCurrencyRate.currency)
+        .all()
+    )
+
+
+@app.post("/accounting/currency-rates", response_model=AccountingCurrencyRateOut)
+def create_accounting_currency_rate(
+    payload: AccountingCurrencyRateCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    currency = normalize_accounting_currency(payload.currency)
+    rate = AccountingCurrencyRate(
+        tenant_id=tenant_id,
+        currency=currency,
+        rate_to_base=float(payload.rate_to_base),
+        effective_date=payload.effective_date or datetime.utcnow(),
+        source=(payload.source or "Manual").strip() or "Manual",
+        is_active=payload.is_active,
+    )
+    db.add(rate)
+    db.commit()
+    db.refresh(rate)
+    return rate
+
+
+@app.put("/accounting/currency-rates/{rate_id}", response_model=AccountingCurrencyRateOut)
+def update_accounting_currency_rate(
+    rate_id: int,
+    payload: AccountingCurrencyRateUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    rate = (
+        db.query(AccountingCurrencyRate)
+        .filter(AccountingCurrencyRate.id == rate_id, AccountingCurrencyRate.tenant_id == tenant_id)
+        .first()
+    )
+    if not rate:
+        raise HTTPException(status_code=404, detail="Currency rate not found")
+    data = payload.model_dump(exclude_unset=True)
+    if "currency" in data and data["currency"] is not None:
+        rate.currency = normalize_accounting_currency(data["currency"])
+    if "rate_to_base" in data and data["rate_to_base"] is not None:
+        rate.rate_to_base = float(data["rate_to_base"])
+    if "effective_date" in data and data["effective_date"] is not None:
+        rate.effective_date = data["effective_date"]
+    if "source" in data and data["source"] is not None:
+        rate.source = data["source"].strip() or "Manual"
+    if "is_active" in data and data["is_active"] is not None:
+        rate.is_active = bool(data["is_active"])
+    db.add(rate)
+    db.commit()
+    db.refresh(rate)
+    return rate
+
+
+@app.get("/accounting/journal-entries", response_model=list[AccountingJournalEntryOut])
+def get_accounting_journal_entries(
+    request: Request,
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+    status: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    limit: int = Query(default=300, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    sync_accounting_transactions_to_journal(db, tenant_id)
+    db.commit()
+    query = db.query(AccountingJournalEntry).filter(AccountingJournalEntry.tenant_id == tenant_id)
+    if start_date is not None:
+        query = query.filter(AccountingJournalEntry.entry_date >= start_date)
+    if end_date is not None:
+        query = query.filter(AccountingJournalEntry.entry_date <= end_date)
+    if status:
+        query = query.filter(AccountingJournalEntry.status == normalize_accounting_journal_status(status))
+    if q:
+        search = f"%{q.strip().lower()}%"
+        query = query.filter(
+            func.lower(func.coalesce(AccountingJournalEntry.entry_no, "")).like(search)
+            | func.lower(func.coalesce(AccountingJournalEntry.memo, "")).like(search)
+        )
+    entries = (
+        query.order_by(AccountingJournalEntry.entry_date.desc(), AccountingJournalEntry.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [accounting_journal_entry_response(entry) for entry in entries]
+
+
+@app.post("/accounting/journal-entries", response_model=AccountingJournalEntryOut)
+def create_accounting_journal_entry(
+    payload: AccountingJournalEntryCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    ensure_default_accounting_accounts(db, tenant_id)
+    entry_date = payload.entry_date or datetime.utcnow()
+    status = normalize_accounting_journal_status(payload.status)
+    if status == "Posted":
+        ensure_accounting_period_is_open(db, tenant_id, entry_date)
+    entry_no = (payload.entry_no or next_accounting_journal_entry_no(db, tenant_id)).strip()
+    if not entry_no:
+        raise HTTPException(status_code=400, detail="Journal entry number is required")
+    duplicate = (
+        db.query(AccountingJournalEntry)
+        .filter(
+            AccountingJournalEntry.tenant_id == tenant_id,
+            func.lower(AccountingJournalEntry.entry_no) == entry_no.lower(),
+        )
+        .first()
+    )
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Journal entry number already exists")
+    entry = AccountingJournalEntry(
+        tenant_id=tenant_id,
+        entry_no=entry_no,
+        entry_date=entry_date,
+        memo=payload.memo,
+        source_type=payload.source_type,
+        source_id=payload.source_id,
+        status=status,
+    )
+    db.add(entry)
+    db.flush()
+    replace_accounting_journal_lines(db, entry, tenant_id, payload.lines)
+    db.commit()
+    db.refresh(entry)
+    return accounting_journal_entry_response(entry)
+
+
+@app.put("/accounting/journal-entries/{entry_id}", response_model=AccountingJournalEntryOut)
+def update_accounting_journal_entry(
+    entry_id: int,
+    payload: AccountingJournalEntryUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    entry = (
+        db.query(AccountingJournalEntry)
+        .filter(AccountingJournalEntry.id == entry_id, AccountingJournalEntry.tenant_id == tenant_id)
+        .first()
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    if entry.source_type:
+        raise HTTPException(status_code=400, detail="Edit the source document, payment, or accounting transaction instead")
+    data = payload.model_dump(exclude_unset=True)
+    if "entry_no" in data and data["entry_no"] is not None:
+        entry_no = data["entry_no"].strip()
+        if not entry_no:
+            raise HTTPException(status_code=400, detail="Journal entry number is required")
+        duplicate = (
+            db.query(AccountingJournalEntry)
+            .filter(
+                AccountingJournalEntry.tenant_id == tenant_id,
+                func.lower(AccountingJournalEntry.entry_no) == entry_no.lower(),
+                AccountingJournalEntry.id != entry_id,
+            )
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Journal entry number already exists")
+        entry.entry_no = entry_no
+    if "entry_date" in data and data["entry_date"] is not None:
+        entry.entry_date = data["entry_date"]
+    if "memo" in data:
+        entry.memo = data["memo"]
+    if "status" in data and data["status"] is not None:
+        entry.status = normalize_accounting_journal_status(data["status"])
+    if entry.status == "Posted":
+        ensure_accounting_period_is_open(db, tenant_id, entry.entry_date)
+    if payload.lines is not None:
+        replace_accounting_journal_lines(db, entry, tenant_id, payload.lines)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return accounting_journal_entry_response(entry)
+
+
+@app.delete("/accounting/journal-entries/{entry_id}")
+def delete_accounting_journal_entry(
+    entry_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    entry = (
+        db.query(AccountingJournalEntry)
+        .filter(AccountingJournalEntry.id == entry_id, AccountingJournalEntry.tenant_id == tenant_id)
+        .first()
+    )
+    if not entry:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    if entry.source_type:
+        raise HTTPException(status_code=400, detail="Delete the source document, payment, or accounting transaction instead")
+    if entry.status == "Posted":
+        ensure_accounting_period_is_open(db, tenant_id, entry.entry_date)
+    db.delete(entry)
+    db.commit()
+    return {"detail": "Journal entry deleted"}
+
+
+@app.get("/accounting/recurring-automation/status")
+def get_accounting_recurring_automation_status(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    return {
+        "tenant": accounting_recurring_automation_summary(db, tenant_id),
+        "scheduler": accounting_recurring_automation_service.status(),
+    }
+
+
+@app.get("/accounting/recurring-templates", response_model=list[AccountingRecurringTemplateOut])
+def get_accounting_recurring_templates(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    templates = db.query(AccountingRecurringTemplate).filter(AccountingRecurringTemplate.tenant_id == tenant_id).order_by(AccountingRecurringTemplate.next_run_date.asc(), AccountingRecurringTemplate.id.asc()).all()
+    return [accounting_recurring_template_response(template) for template in templates]
+
+
+@app.post("/accounting/recurring-templates", response_model=AccountingRecurringTemplateOut)
+def create_accounting_recurring_template(payload: AccountingRecurringTemplateCreate, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    data = validate_accounting_recurring_template_payload(db, tenant_id, payload)
+    template = AccountingRecurringTemplate(tenant_id=tenant_id, **data)
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return accounting_recurring_template_response(template)
+
+
+@app.put("/accounting/recurring-templates/{template_id}", response_model=AccountingRecurringTemplateOut)
+def update_accounting_recurring_template(template_id: int, payload: AccountingRecurringTemplateUpdate, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    template = get_accounting_recurring_template_or_404(db, template_id, tenant_id)
+    data = validate_accounting_recurring_template_payload(db, tenant_id, payload, existing=template)
+    for key, value in data.items():
+        setattr(template, key, value)
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return accounting_recurring_template_response(template)
+
+
+@app.delete("/accounting/recurring-templates/{template_id}")
+def delete_accounting_recurring_template(template_id: int, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    template = get_accounting_recurring_template_or_404(db, template_id, tenant_id)
+    db.delete(template)
+    db.commit()
+    return {"detail": "Recurring template deleted"}
+
+
+@app.post("/accounting/recurring-templates/run-due")
+def run_due_accounting_recurring_templates(payload: AccountingRecurringRunRequest, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    result = generate_accounting_recurring_templates(db, tenant_id, payload)
+    db.commit()
+    return result
+
+
+@app.get("/accounting/bank-rules", response_model=list[AccountingBankRuleOut])
+def get_accounting_bank_rules(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    rules = db.query(AccountingBankRule).filter(AccountingBankRule.tenant_id == tenant_id).order_by(AccountingBankRule.priority.asc(), AccountingBankRule.id.asc()).all()
+    return [accounting_bank_rule_response(rule) for rule in rules]
+
+
+@app.post("/accounting/bank-rules", response_model=AccountingBankRuleOut)
+def create_accounting_bank_rule(payload: AccountingBankRuleCreate, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    name = str(payload.name or "").strip()
+    match_value = str(payload.match_value or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Rule name is required")
+    if not match_value:
+        raise HTTPException(status_code=400, detail="Rule match value is required")
+    account_id = None
+    if payload.account_id is not None:
+        account_id = get_accounting_account_or_404(db, payload.account_id, tenant_id).id
+    rule = AccountingBankRule(
+        tenant_id=tenant_id,
+        name=name,
+        account_id=account_id,
+        match_field=normalize_accounting_bank_rule_match_field(payload.match_field),
+        match_type=normalize_accounting_bank_rule_match_type(payload.match_type),
+        match_value=match_value,
+        action=normalize_accounting_bank_rule_action(payload.action),
+        direction=normalize_accounting_direction(payload.direction) if payload.direction else None,
+        category=payload.category or "Other",
+        counterparty=payload.counterparty,
+        platform=payload.platform,
+        description_template=payload.description_template,
+        priority=int(payload.priority or 100),
+        is_active=bool(payload.is_active),
+        auto_match=bool(payload.auto_match),
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return accounting_bank_rule_response(rule)
+
+
+@app.put("/accounting/bank-rules/{rule_id}", response_model=AccountingBankRuleOut)
+def update_accounting_bank_rule(rule_id: int, payload: AccountingBankRuleUpdate, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    rule = get_accounting_bank_rule_or_404(db, rule_id, tenant_id)
+    data = payload.model_dump(exclude_unset=True)
+    if "name" in data:
+        name = str(data["name"] or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Rule name is required")
+        rule.name = name
+    if "account_id" in data:
+        rule.account_id = get_accounting_account_or_404(db, data["account_id"], tenant_id).id if data["account_id"] is not None else None
+    if "match_field" in data and data["match_field"] is not None:
+        rule.match_field = normalize_accounting_bank_rule_match_field(data["match_field"])
+    if "match_type" in data and data["match_type"] is not None:
+        rule.match_type = normalize_accounting_bank_rule_match_type(data["match_type"])
+    if "match_value" in data:
+        match_value = str(data["match_value"] or "").strip()
+        if not match_value:
+            raise HTTPException(status_code=400, detail="Rule match value is required")
+        rule.match_value = match_value
+    if "action" in data and data["action"] is not None:
+        rule.action = normalize_accounting_bank_rule_action(data["action"])
+    if "direction" in data:
+        rule.direction = normalize_accounting_direction(data["direction"]) if data["direction"] else None
+    if "category" in data:
+        rule.category = data["category"] or "Other"
+    if "counterparty" in data:
+        rule.counterparty = data["counterparty"]
+    if "platform" in data:
+        rule.platform = data["platform"]
+    if "description_template" in data:
+        rule.description_template = data["description_template"]
+    if "priority" in data and data["priority"] is not None:
+        rule.priority = int(data["priority"])
+    if "is_active" in data and data["is_active"] is not None:
+        rule.is_active = bool(data["is_active"])
+    if "auto_match" in data and data["auto_match"] is not None:
+        rule.auto_match = bool(data["auto_match"])
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return accounting_bank_rule_response(rule)
+
+
+@app.delete("/accounting/bank-rules/{rule_id}")
+def delete_accounting_bank_rule(rule_id: int, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    rule = get_accounting_bank_rule_or_404(db, rule_id, tenant_id)
+    db.delete(rule)
+    db.commit()
+    return {"detail": "Bank rule deleted"}
+
+
+@app.post("/accounting/bank-rules/apply")
+def apply_accounting_bank_rules_endpoint(payload: AccountingBankRuleApplyRequest, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    result = apply_accounting_bank_rules(db, tenant_id, payload)
+    db.commit()
+    return result
+
+
+@app.get("/accounting/bank-transactions", response_model=list[AccountingBankTransactionOut])
+def get_accounting_bank_transactions(
+    request: Request,
+    account_id: int | None = Query(default=None),
+    status: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    limit: int = Query(default=300, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    query = db.query(AccountingBankTransaction).filter(AccountingBankTransaction.tenant_id == tenant_id)
+    if account_id is not None:
+        query = query.filter(AccountingBankTransaction.account_id == account_id)
+    if status:
+        query = query.filter(AccountingBankTransaction.status == normalize_accounting_bank_transaction_status(status))
+    if q:
+        search = f"%{q.strip().lower()}%"
+        query = query.filter(
+            func.lower(func.coalesce(AccountingBankTransaction.description, "")).like(search)
+            | func.lower(func.coalesce(AccountingBankTransaction.reference, "")).like(search)
+            | func.lower(func.coalesce(AccountingBankTransaction.counterparty, "")).like(search)
+        )
+    transactions = query.order_by(AccountingBankTransaction.transaction_date.desc(), AccountingBankTransaction.id.desc()).limit(limit).all()
+    return [accounting_bank_transaction_response(item, db) for item in transactions]
+
+
+@app.post("/accounting/bank-transactions", response_model=AccountingBankTransactionOut)
+def create_accounting_bank_transaction(payload: AccountingBankTransactionCreate, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    account = get_accounting_account_or_404(db, payload.account_id, tenant_id)
+    money_in, money_out, signed_amount = accounting_bank_transaction_amounts(payload.money_in, payload.money_out)
+    currency = normalize_accounting_currency(payload.currency)
+    amount_pkr = accounting_amount_pkr(amount=abs(signed_amount), currency=currency, exchange_rate=float(payload.exchange_rate or 1), amount_pkr=payload.amount_pkr)
+    status = normalize_accounting_bank_transaction_status(payload.status)
+    transaction = AccountingBankTransaction(
+        tenant_id=tenant_id,
+        account_id=account.id,
+        transaction_date=payload.transaction_date or datetime.utcnow(),
+        description=payload.description,
+        reference=payload.reference,
+        counterparty=payload.counterparty,
+        money_in=money_in,
+        money_out=money_out,
+        currency=currency,
+        exchange_rate=float(payload.exchange_rate or 1),
+        amount_pkr=amount_pkr,
+        status=status,
+        notes=payload.notes,
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+    return accounting_bank_transaction_response(transaction, db)
+
+@app.post("/accounting/bank-transactions/import")
+def import_accounting_bank_transactions_endpoint(payload: AccountingBankTransactionImportRequest, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    result = import_accounting_bank_transactions(db, tenant_id, payload)
+    db.commit()
+    return result
+
+
+@app.get("/accounting/bank-transactions/{bank_transaction_id}/suggestions")
+def get_accounting_bank_transaction_suggestions(bank_transaction_id: int, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    transaction = get_accounting_bank_transaction_or_404(db, bank_transaction_id, tenant_id)
+    return {
+        "candidates": accounting_bank_match_candidates(
+            db,
+            tenant_id,
+            transaction.account_id,
+            transaction.money_in,
+            transaction.money_out,
+            exclude_bank_transaction_id=transaction.id,
+            limit=10,
+        )
+    }
+
+
+
+@app.put("/accounting/bank-transactions/{bank_transaction_id}", response_model=AccountingBankTransactionOut)
+def update_accounting_bank_transaction(bank_transaction_id: int, payload: AccountingBankTransactionUpdate, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    transaction = get_accounting_bank_transaction_or_404(db, bank_transaction_id, tenant_id)
+    data = payload.model_dump(exclude_unset=True)
+    if transaction.status == "Matched" and any(key in data for key in {"account_id", "money_in", "money_out", "currency", "exchange_rate", "amount_pkr"}):
+        raise HTTPException(status_code=400, detail="Unmatch this bank transaction before changing amount or account")
+    if "account_id" in data and data["account_id"] is not None:
+        account = get_accounting_account_or_404(db, data["account_id"], tenant_id)
+        transaction.account_id = account.id
+    money_in = data.get("money_in", transaction.money_in)
+    money_out = data.get("money_out", transaction.money_out)
+    if "money_in" in data or "money_out" in data:
+        transaction.money_in, transaction.money_out, signed_amount = accounting_bank_transaction_amounts(money_in, money_out)
+        currency = normalize_accounting_currency(data.get("currency", transaction.currency))
+        exchange_rate = float(data.get("exchange_rate", transaction.exchange_rate) or 1)
+        transaction.amount_pkr = accounting_amount_pkr(amount=abs(signed_amount), currency=currency, exchange_rate=exchange_rate, amount_pkr=data.get("amount_pkr"))
+    if "transaction_date" in data and data["transaction_date"] is not None:
+        transaction.transaction_date = data["transaction_date"]
+    if "description" in data:
+        transaction.description = data["description"]
+    if "reference" in data:
+        transaction.reference = data["reference"]
+    if "counterparty" in data:
+        transaction.counterparty = data["counterparty"]
+    if "currency" in data and data["currency"] is not None:
+        transaction.currency = normalize_accounting_currency(data["currency"])
+    if "exchange_rate" in data and data["exchange_rate"] is not None:
+        transaction.exchange_rate = float(data["exchange_rate"] or 1)
+    if "amount_pkr" in data and data["amount_pkr"] is not None:
+        transaction.amount_pkr = float(data["amount_pkr"])
+    if "status" in data and data["status"] is not None:
+        status = normalize_accounting_bank_transaction_status(data["status"])
+        if status != "Matched":
+            transaction.status = status
+            transaction.matched_source_type = None
+            transaction.matched_source_id = None
+            transaction.matched_at = None
+    if "notes" in data:
+        transaction.notes = data["notes"]
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+    return accounting_bank_transaction_response(transaction, db)
+
+
+@app.delete("/accounting/bank-transactions/{bank_transaction_id}")
+def delete_accounting_bank_transaction(bank_transaction_id: int, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    transaction = get_accounting_bank_transaction_or_404(db, bank_transaction_id, tenant_id)
+    db.delete(transaction)
+    db.commit()
+    return {"detail": "Bank transaction deleted"}
+
+
+@app.post("/accounting/bank-transactions/{bank_transaction_id}/match", response_model=AccountingBankTransactionOut)
+def match_accounting_bank_transaction(bank_transaction_id: int, payload: AccountingBankTransactionMatchRequest, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    transaction = get_accounting_bank_transaction_or_404(db, bank_transaction_id, tenant_id)
+    source = accounting_bank_match_source(db, tenant_id, payload.source_type, payload.source_id)
+    if source["account_id"] != transaction.account_id:
+        raise HTTPException(status_code=400, detail="Match source must use the same bank/cash account")
+    if round(float(source["money_in"] or 0), 2) != round(float(transaction.money_in or 0), 2) or round(float(source["money_out"] or 0), 2) != round(float(transaction.money_out or 0), 2):
+        raise HTTPException(status_code=400, detail="Match source amount must equal the bank transaction amount")
+    duplicate = db.query(AccountingBankTransaction).filter(AccountingBankTransaction.tenant_id == tenant_id, AccountingBankTransaction.id != transaction.id, AccountingBankTransaction.status == "Matched", AccountingBankTransaction.matched_source_type == payload.source_type, AccountingBankTransaction.matched_source_id == payload.source_id).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail="This source is already matched to another bank transaction")
+    transaction.status = "Matched"
+    transaction.matched_source_type = payload.source_type
+    transaction.matched_source_id = payload.source_id
+    transaction.matched_at = datetime.utcnow()
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+    return accounting_bank_transaction_response(transaction, db)
+
+
+@app.post("/accounting/bank-transactions/{bank_transaction_id}/unmatch", response_model=AccountingBankTransactionOut)
+def unmatch_accounting_bank_transaction(bank_transaction_id: int, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    transaction = get_accounting_bank_transaction_or_404(db, bank_transaction_id, tenant_id)
+    transaction.status = "Unmatched"
+    transaction.matched_source_type = None
+    transaction.matched_source_id = None
+    transaction.matched_at = None
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+    return accounting_bank_transaction_response(transaction, db)
+
+
+@app.get("/accounting/reports/banking-summary")
+def get_accounting_banking_summary(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    return accounting_banking_summary(db, tenant_id)
+
+
+@app.get("/accounting/documents", response_model=list[AccountingDocumentOut])
+def get_accounting_documents(request: Request, document_type: str | None = Query(default=None), status: str | None = Query(default=None), q: str | None = Query(default=None), limit: int = Query(default=200, ge=1, le=500), db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    ensure_default_accounting_accounts(db, tenant_id)
+    query = db.query(AccountingDocument).filter(AccountingDocument.tenant_id == tenant_id)
+    if document_type:
+        query = query.filter(AccountingDocument.document_type == normalize_accounting_document_type(document_type))
+    if status:
+        query = query.filter(AccountingDocument.status == normalize_accounting_document_status(status))
+    if q:
+        search = f"%{q.strip().lower()}%"
+        query = query.filter(func.lower(func.coalesce(AccountingDocument.document_no, "")).like(search) | func.lower(func.coalesce(AccountingDocument.contact_name, "")).like(search) | func.lower(func.coalesce(AccountingDocument.notes, "")).like(search))
+    documents = query.order_by(AccountingDocument.issue_date.desc(), AccountingDocument.id.desc()).limit(limit).all()
+    return [accounting_document_response(document) for document in documents]
+
+
+@app.post("/accounting/documents", response_model=AccountingDocumentOut)
+def create_accounting_document(payload: AccountingDocumentCreate, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    ensure_default_accounting_accounts(db, tenant_id)
+    document_type = normalize_accounting_document_type(payload.document_type)
+    status = normalize_accounting_document_status(payload.status)
+    issue_date = payload.issue_date or datetime.utcnow()
+    due_date = payload.due_date or (issue_date + timedelta(days=30))
+    if status not in {"Draft", "Void"}:
+        ensure_accounting_period_is_open(db, tenant_id, issue_date)
+    contact_name = payload.contact_name.strip()
+    if not contact_name:
+        raise HTTPException(status_code=400, detail="Contact name is required")
+    currency = normalize_accounting_currency(payload.currency)
+    document_no = (payload.document_no or next_accounting_document_no(db, tenant_id, document_type)).strip()
+    if not document_no:
+        raise HTTPException(status_code=400, detail="Document number is required")
+    duplicate = db.query(AccountingDocument).filter(AccountingDocument.tenant_id == tenant_id, AccountingDocument.document_type == document_type, func.lower(AccountingDocument.document_no) == document_no.lower()).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Document number already exists")
+    document = AccountingDocument(tenant_id=tenant_id, document_type=document_type, document_no=document_no, contact_name=contact_name, contact_email=payload.contact_email, issue_date=issue_date, due_date=due_date, status=status, currency=currency, exchange_rate=float(payload.exchange_rate or 1), notes=payload.notes, source_type=payload.source_type, source_id=payload.source_id)
+    db.add(document)
+    db.flush()
+    replace_accounting_document_lines(db, document, tenant_id, payload.lines)
+    upsert_accounting_document_journal_entry(db, document, tenant_id, enforce_lock=True)
+    db.commit()
+    db.refresh(document)
+    return accounting_document_response(document)
+
+
+@app.put("/accounting/documents/{document_id}", response_model=AccountingDocumentOut)
+def update_accounting_document(document_id: int, payload: AccountingDocumentUpdate, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    document = get_accounting_document_or_404(db, document_id, tenant_id)
+    data = payload.model_dump(exclude_unset=True)
+    if "document_no" in data and data["document_no"] is not None:
+        document_no = data["document_no"].strip()
+        if not document_no:
+            raise HTTPException(status_code=400, detail="Document number is required")
+        duplicate = db.query(AccountingDocument).filter(AccountingDocument.tenant_id == tenant_id, AccountingDocument.document_type == document.document_type, func.lower(AccountingDocument.document_no) == document_no.lower(), AccountingDocument.id != document.id).first()
+        if duplicate:
+            raise HTTPException(status_code=400, detail="Document number already exists")
+        document.document_no = document_no
+    if "contact_name" in data and data["contact_name"] is not None:
+        contact_name = data["contact_name"].strip()
+        if not contact_name:
+            raise HTTPException(status_code=400, detail="Contact name is required")
+        document.contact_name = contact_name
+    if "contact_email" in data:
+        document.contact_email = data["contact_email"]
+    if "issue_date" in data and data["issue_date"] is not None:
+        document.issue_date = data["issue_date"]
+    if "due_date" in data:
+        document.due_date = data["due_date"]
+    if "status" in data and data["status"] is not None:
+        document.status = normalize_accounting_document_status(data["status"])
+    if "currency" in data and data["currency"] is not None:
+        document.currency = normalize_accounting_currency(data["currency"])
+    if "exchange_rate" in data and data["exchange_rate"] is not None:
+        document.exchange_rate = float(data["exchange_rate"] or 1)
+    if "notes" in data:
+        document.notes = data["notes"]
+    if document.status not in {"Draft", "Void"}:
+        ensure_accounting_period_is_open(db, tenant_id, document.issue_date or datetime.utcnow())
+    if payload.lines is not None:
+        if document.payments:
+            paid_total = accounting_document_paid_total(document)
+            prospective_total = round(sum(accounting_document_line_amount(line)[2] for line in payload.lines), 2)
+            if paid_total > prospective_total + 0.01:
+                raise HTTPException(status_code=400, detail="Document total cannot be below recorded payments")
+        replace_accounting_document_lines(db, document, tenant_id, payload.lines)
+    sync_accounting_document_status(document)
+    upsert_accounting_document_journal_entry(db, document, tenant_id, enforce_lock=True)
+    db.commit()
+    db.refresh(document)
+    return accounting_document_response(document)
+
+
+@app.delete("/accounting/documents/{document_id}")
+def delete_accounting_document(document_id: int, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    document = get_accounting_document_or_404(db, document_id, tenant_id)
+    if document.payments:
+        raise HTTPException(status_code=400, detail="Delete document payments before deleting this document")
+    if document.status not in {"Draft", "Void"}:
+        ensure_accounting_period_is_open(db, tenant_id, document.issue_date or datetime.utcnow())
+    delete_accounting_journal_for_source(db, tenant_id, ACCOUNTING_DOCUMENT_SOURCE, document.id)
+    db.delete(document)
+    db.commit()
+    return {"detail": "Accounting document deleted"}
+
+
+@app.post("/accounting/documents/{document_id}/payments", response_model=AccountingDocumentPaymentOut)
+def create_accounting_document_payment(document_id: int, payload: AccountingDocumentPaymentCreate, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    document = get_accounting_document_or_404(db, document_id, tenant_id)
+    if document.status in {"Draft", "Void"}:
+        raise HTTPException(status_code=400, detail="Payments can only be recorded against open documents")
+    account = get_accounting_account_or_404(db, payload.account_id, tenant_id)
+    payment_date = payload.payment_date or datetime.utcnow()
+    ensure_accounting_period_is_open(db, tenant_id, payment_date)
+    amount = round(float(payload.amount or 0), 2)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")
+    if accounting_document_paid_total(document) + amount > round(float(document.total or 0), 2) + 0.01:
+        raise HTTPException(status_code=400, detail="Payment exceeds document balance")
+    currency = normalize_accounting_currency(payload.currency or document.currency)
+    exchange_rate = float(payload.exchange_rate or document.exchange_rate or 1)
+    amount_pkr = accounting_amount_pkr(amount=amount, currency=currency, exchange_rate=exchange_rate, amount_pkr=payload.amount_pkr)
+    payment = AccountingDocumentPayment(tenant_id=tenant_id, document_id=document.id, account_id=account.id, amount=amount, currency=currency, exchange_rate=exchange_rate, amount_pkr=amount_pkr, payment_date=payment_date, reference=payload.reference, notes=payload.notes)
+    db.add(payment)
+    db.flush()
+    upsert_accounting_document_payment_journal_entry(db, payment, tenant_id, enforce_lock=True)
+    sync_accounting_document_status(document)
+    db.add(document)
+    db.commit()
+    db.refresh(payment)
+    return accounting_document_payment_response(payment)
+
+
+@app.delete("/accounting/document-payments/{payment_id}")
+def delete_accounting_document_payment(payment_id: int, request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    payment = get_accounting_document_payment_or_404(db, payment_id, tenant_id)
+    document = payment.document
+    ensure_accounting_period_is_open(db, tenant_id, payment.payment_date or datetime.utcnow())
+    delete_accounting_journal_for_source(db, tenant_id, ACCOUNTING_DOCUMENT_PAYMENT_SOURCE, payment.id)
+    db.delete(payment)
+    db.flush()
+    if document:
+        sync_accounting_document_status(document)
+        db.add(document)
+    db.commit()
+    return {"detail": "Accounting document payment deleted"}
+
+
+@app.get("/accounting/reports/receivables-aging")
+def get_accounting_receivables_aging_report(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    return accounting_aging_report(db, tenant_id, "Invoice")
+
+
+@app.get("/accounting/reports/payables-aging")
+def get_accounting_payables_aging_report(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    return accounting_aging_report(db, tenant_id, "Bill")
+
+
+@app.get("/accounting/reports/trial-balance")
+def get_accounting_trial_balance_report(
+    request: Request,
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    sync_accounting_transactions_to_journal(db, tenant_id)
+    report = accounting_trial_balance_report(db, tenant_id, start_date, end_date)
+    db.commit()
+    return report
+
+
+@app.get("/accounting/reports/profit-loss")
+def get_accounting_profit_loss_report(
+    request: Request,
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    sync_accounting_transactions_to_journal(db, tenant_id)
+    report = accounting_profit_loss_report(db, tenant_id, start_date, end_date)
+    db.commit()
+    return report
+
+
+@app.get("/accounting/reports/balance-sheet")
+def get_accounting_balance_sheet_report(
+    request: Request,
+    end_date: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    sync_accounting_transactions_to_journal(db, tenant_id)
+    report = accounting_balance_sheet_report(db, tenant_id, end_date)
+    db.commit()
+    return report
+
+
 @app.get("/accounting/overview")
-def get_accounting_overview(db: Session = Depends(get_db)):
-    if ensure_default_accounting_accounts(db):
+def get_accounting_overview(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    if ensure_default_accounting_accounts(db, tenant_id):
         db.commit()
-    return accounting_overview_response(db)
+    overview = accounting_overview_response(db, tenant_id)
+    db.commit()
+    return overview
 
 
 @app.get("/accounting/accounts", response_model=list[AccountingAccountOut])
-def get_accounting_accounts(db: Session = Depends(get_db)):
-    if ensure_default_accounting_accounts(db):
+def get_accounting_accounts(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    if ensure_default_accounting_accounts(db, tenant_id):
         db.commit()
-    accounts = db.query(AccountingAccount).order_by(AccountingAccount.account_type, AccountingAccount.name).all()
-    return [accounting_account_response(account) for account in accounts]
+    sync_accounting_transactions_to_journal(db, tenant_id)
+    journal_sums = accounting_journal_sums(db, tenant_id)
+    db.commit()
+    accounts = (
+        db.query(AccountingAccount)
+        .filter(AccountingAccount.tenant_id == tenant_id)
+        .order_by(AccountingAccount.account_type, AccountingAccount.name)
+        .all()
+    )
+    return [accounting_account_response(account, journal_sums) for account in accounts]
 
 
 @app.post("/accounting/accounts", response_model=AccountingAccountOut)
-def create_accounting_account(payload: AccountingAccountCreate, db: Session = Depends(get_db)):
+def create_accounting_account(
+    payload: AccountingAccountCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
     clean_name = payload.name.strip()
     if not clean_name:
         raise HTTPException(status_code=400, detail="Account name is required")
 
     existing = (
         db.query(AccountingAccount)
-        .filter(func.lower(AccountingAccount.name) == clean_name.lower())
+        .filter(
+            AccountingAccount.tenant_id == tenant_id,
+            func.lower(AccountingAccount.name) == clean_name.lower(),
+        )
         .first()
     )
     if existing:
         raise HTTPException(status_code=400, detail="Account name already exists")
 
     account = AccountingAccount(
+        tenant_id=tenant_id,
         name=clean_name,
         account_type=normalize_accounting_account_type(payload.account_type),
         platform=payload.platform.strip() if payload.platform else None,
@@ -16560,11 +21186,11 @@ def create_accounting_account(payload: AccountingAccountCreate, db: Session = De
 def update_accounting_account(
     account_id: int,
     payload: AccountingAccountUpdate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
-    account = db.query(AccountingAccount).filter(AccountingAccount.id == account_id).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="Accounting account not found")
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    account = get_accounting_account_or_404(db, account_id, tenant_id)
 
     data = payload.model_dump(exclude_unset=True)
     if "name" in data and data["name"] is not None:
@@ -16574,6 +21200,7 @@ def update_accounting_account(
         duplicate = (
             db.query(AccountingAccount)
             .filter(
+                AccountingAccount.tenant_id == tenant_id,
                 func.lower(AccountingAccount.name) == clean_name.lower(),
                 AccountingAccount.id != account_id,
             )
@@ -16603,14 +21230,40 @@ def update_accounting_account(
 
 
 @app.delete("/accounting/accounts/{account_id}")
-def delete_accounting_account(account_id: int, db: Session = Depends(get_db)):
-    account = db.query(AccountingAccount).filter(AccountingAccount.id == account_id).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="Accounting account not found")
-    if account.transactions:
+def delete_accounting_account(
+    account_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    account = get_accounting_account_or_404(db, account_id, tenant_id)
+    has_journal_lines = (
+        db.query(AccountingJournalLine)
+        .filter(AccountingJournalLine.tenant_id == tenant_id, AccountingJournalLine.account_id == account.id)
+        .first()
+    )
+    has_document_lines = (
+        db.query(AccountingDocumentLine)
+        .filter(AccountingDocumentLine.tenant_id == tenant_id, AccountingDocumentLine.account_id == account.id)
+        .first()
+    )
+    has_document_payments = (
+        db.query(AccountingDocumentPayment)
+        .filter(AccountingDocumentPayment.tenant_id == tenant_id, AccountingDocumentPayment.account_id == account.id)
+        .first()
+    )
+    has_recurring_templates = (
+        db.query(AccountingRecurringTemplate)
+        .filter(
+            AccountingRecurringTemplate.tenant_id == tenant_id,
+            (AccountingRecurringTemplate.account_id == account.id) | (AccountingRecurringTemplate.line_account_id == account.id),
+        )
+        .first()
+    )
+    if account.transactions or has_journal_lines or has_document_lines or has_document_payments or has_recurring_templates:
         raise HTTPException(
             status_code=400,
-            detail="Delete or move this account's transactions first.",
+            detail="Delete or move this account's transactions, journals, documents, payments, and recurring templates first.",
         )
 
     db.delete(account)
@@ -16620,6 +21273,7 @@ def delete_accounting_account(account_id: int, db: Session = Depends(get_db)):
 
 @app.get("/accounting/transactions", response_model=list[AccountingTransactionOut])
 def get_accounting_transactions(
+    request: Request,
     account_id: int | None = Query(default=None),
     direction: str | None = Query(default=None),
     category: str | None = Query(default=None),
@@ -16628,8 +21282,10 @@ def get_accounting_transactions(
     limit: int = Query(default=500, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
-    query = db.query(AccountingTransaction)
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    query = db.query(AccountingTransaction).filter(AccountingTransaction.tenant_id == tenant_id)
     if account_id is not None:
+        get_accounting_account_or_404(db, account_id, tenant_id)
         query = query.filter(AccountingTransaction.account_id == account_id)
     if direction:
         query = query.filter(AccountingTransaction.direction == normalize_accounting_direction(direction))
@@ -16656,18 +21312,21 @@ def get_accounting_transactions(
 @app.post("/accounting/transactions", response_model=AccountingTransactionOut)
 def create_accounting_transaction(
     payload: AccountingTransactionCreate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
-    account = db.query(AccountingAccount).filter(AccountingAccount.id == payload.account_id).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="Accounting account not found")
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    account = get_accounting_account_or_404(db, payload.account_id, tenant_id)
 
     amount = float(payload.amount or 0)
     if amount < 0:
         raise HTTPException(status_code=400, detail="Amount cannot be negative")
 
+    transaction_date = payload.transaction_date or datetime.utcnow()
+    ensure_accounting_period_is_open(db, tenant_id, transaction_date)
     currency = normalize_accounting_currency(payload.currency)
     transaction = AccountingTransaction(
+        tenant_id=tenant_id,
         account_id=account.id,
         direction=normalize_accounting_direction(payload.direction),
         category=(payload.category or "Manual").strip() or "Manual",
@@ -16686,9 +21345,11 @@ def create_accounting_transaction(
         source_type=payload.source_type,
         source_id=payload.source_id,
         description=payload.description,
-        transaction_date=payload.transaction_date or datetime.utcnow(),
+        transaction_date=transaction_date,
     )
     db.add(transaction)
+    db.flush()
+    upsert_transaction_journal_entry(db, transaction, tenant_id, enforce_lock=True)
     db.commit()
     db.refresh(transaction)
     return accounting_transaction_response(transaction)
@@ -16698,17 +21359,15 @@ def create_accounting_transaction(
 def update_accounting_transaction(
     transaction_id: int,
     payload: AccountingTransactionUpdate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
-    transaction = db.query(AccountingTransaction).filter(AccountingTransaction.id == transaction_id).first()
-    if not transaction:
-        raise HTTPException(status_code=404, detail="Accounting transaction not found")
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    transaction = get_accounting_transaction_or_404(db, transaction_id, tenant_id)
 
     data = payload.model_dump(exclude_unset=True)
     if "account_id" in data and data["account_id"] is not None:
-        account = db.query(AccountingAccount).filter(AccountingAccount.id == data["account_id"]).first()
-        if not account:
-            raise HTTPException(status_code=404, detail="Accounting account not found")
+        account = get_accounting_account_or_404(db, data["account_id"], tenant_id)
         transaction.account_id = account.id
 
     if "direction" in data and data["direction"] is not None:
@@ -16738,6 +21397,7 @@ def update_accounting_transaction(
     if "transaction_date" in data and data["transaction_date"] is not None:
         transaction.transaction_date = data["transaction_date"]
 
+    ensure_accounting_period_is_open(db, tenant_id, transaction.transaction_date)
     if any(key in data for key in ("amount", "currency", "exchange_rate", "amount_pkr")):
         transaction.amount_pkr = accounting_amount_pkr(
             amount=transaction.amount,
@@ -16747,25 +21407,33 @@ def update_accounting_transaction(
         )
 
     db.add(transaction)
+    db.flush()
+    upsert_transaction_journal_entry(db, transaction, tenant_id, enforce_lock=True)
     db.commit()
     db.refresh(transaction)
     return accounting_transaction_response(transaction)
 
 
 @app.delete("/accounting/transactions/{transaction_id}")
-def delete_accounting_transaction(transaction_id: int, db: Session = Depends(get_db)):
-    transaction = db.query(AccountingTransaction).filter(AccountingTransaction.id == transaction_id).first()
-    if not transaction:
-        raise HTTPException(status_code=404, detail="Accounting transaction not found")
+def delete_accounting_transaction(
+    transaction_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    transaction = get_accounting_transaction_or_404(db, transaction_id, tenant_id)
+    ensure_accounting_period_is_open(db, tenant_id, transaction.transaction_date)
 
+    delete_accounting_journal_for_source(db, tenant_id, ACCOUNTING_TRANSACTION_SOURCE, transaction.id)
     db.delete(transaction)
     db.commit()
     return {"detail": "Accounting transaction deleted"}
 
 
 @app.post("/accounting/sync-order-payouts")
-def sync_accounting_order_payouts(db: Session = Depends(get_db)):
-    orders = db.query(Order).all()
+def sync_accounting_order_payouts(request: Request, db: Session = Depends(get_db)):
+    tenant_id = accounting_tenant_id_for_request(request, db)
+    orders = db.query(Order).filter(Order.tenant_id == tenant_id).all()
     synced = 0
     for order in orders:
         transaction = sync_order_payout_accounting(db, order)
@@ -16776,7 +21444,7 @@ def sync_accounting_order_payouts(db: Session = Depends(get_db)):
     return {
         "detail": "Order payouts synced to accounting",
         "synced": synced,
-        "overview": accounting_overview_response(db),
+        "overview": accounting_overview_response(db, tenant_id),
     }
 
 
@@ -16787,49 +21455,65 @@ def get_courier_balances(db: Session = Depends(get_db)):
     shipping_records = db.query(Shipping).all()
     payments = db.query(CourierPayment).all()
 
-    courier_names = set()
+    account_names = set()
+
+    def get_primary_shipping_account(s: Shipping) -> str | None:
+        agent = (s.dispatch_agent or "").strip()
+        courier = (s.courier_name or "").strip()
+        return agent if agent else (courier if courier else None)
 
     for shipping in shipping_records:
-        if shipping.courier_name:
-            courier_names.add(shipping.courier_name.strip())
+        acc = get_primary_shipping_account(shipping)
+        if acc:
+            account_names.add(acc)
+        if shipping.courier_name and shipping.courier_name.strip():
+            account_names.add(shipping.courier_name.strip())
+        if shipping.dispatch_agent and shipping.dispatch_agent.strip():
+            account_names.add(shipping.dispatch_agent.strip())
 
     for payment in payments:
-        if payment.courier_name:
-            courier_names.add(payment.courier_name.strip())
+        if payment.courier_name and payment.courier_name.strip():
+            account_names.add(payment.courier_name.strip())
 
     balances = []
 
-    for courier_name in sorted(courier_names):
+    for name in sorted(account_names):
+        norm = name.strip().lower()
+
+        matching_shipments = [
+            s for s in shipping_records
+            if (get_primary_shipping_account(s) and get_primary_shipping_account(s).strip().lower() == norm)
+            or (s.dispatch_agent and s.dispatch_agent.strip().lower() == norm)
+            or (s.courier_name and s.courier_name.strip().lower() == norm and not (s.dispatch_agent and s.dispatch_agent.strip()))
+        ]
+
         total_shipping_cost = sum(
             s.shipping_cost or 0
-            for s in shipping_records
-            if s.courier_name and s.courier_name.strip().lower() == courier_name.lower()
+            for s in matching_shipments
         )
 
         total_paid = sum(
             p.amount or 0
             for p in payments
-            if p.courier_name and p.courier_name.strip().lower() == courier_name.lower()
+            if p.courier_name and p.courier_name.strip().lower() == norm
         )
 
-        total_shipments = sum(
-            1
-            for s in shipping_records
-            if s.courier_name and s.courier_name.strip().lower() == courier_name.lower()
-        )
+        total_shipments = len(matching_shipments)
 
         shipping_cost_pending = sum(
             1
-            for s in shipping_records
-            if s.courier_name
-            and s.courier_name.strip().lower() == courier_name.lower()
-            and (s.shipping_cost is None or s.shipping_cost == 0)
+            for s in matching_shipments
+            if s.shipping_cost is None or s.shipping_cost == 0
         )
 
         balance_due = total_shipping_cost - total_paid
 
+        # Exclude empty accounts with zero shipments, zero shipping cost, and zero payments
+        if total_shipments == 0 and total_paid == 0 and total_shipping_cost == 0:
+            continue
+
         balances.append({
-            "courier_name": courier_name,
+            "courier_name": name,
             "total_shipments": total_shipments,
             "total_shipping_cost": total_shipping_cost,
             "total_paid": total_paid,
@@ -16992,6 +21676,68 @@ def app_install_info(request: Request):
     }
 
 
+from .muse_api import MuseOrder, MusePayout, MuseQueueService, enqueue, rotate_key, submission_result, order_result
+from .models import MuseSubmission, MuseApiKey
+
+
+@app.post("/muse-settings/key")
+def muse_settings_key(request: Request, db: Session = Depends(get_db)):
+    return rotate_key(db, get_authenticated_user(request, db), db.info.get("tenant_id"))
+
+
+def muse_admin(request, db):
+    user = get_authenticated_user(request, db)
+    if user.role not in {"admin", "super_admin"} or db.info.get("tenant_id") is None:
+        raise HTTPException(403, "A company administrator must configure Muse")
+
+
+@app.get("/muse-settings")
+def muse_settings(request: Request, db: Session = Depends(get_db)):
+    muse_admin(request, db)
+    tenant_id = db.info["tenant_id"]
+    rows = db.query(MuseSubmission).filter_by(tenant_id=tenant_id).order_by(MuseSubmission.id.desc()).limit(100).all()
+    return {"configured": db.query(MuseApiKey).filter_by(tenant_id=tenant_id).first() is not None,
+            "poll_interval_minutes": 10, "submissions": [submission_result(row) for row in rows]}
+
+
+@app.post("/muse-settings/retry/{submission_id}")
+def muse_retry(submission_id: int, request: Request, db: Session = Depends(get_db)):
+    muse_admin(request, db)
+    row = db.query(MuseSubmission).filter_by(id=submission_id, tenant_id=db.info["tenant_id"]).first()
+    if not row or row.status != "Failed":
+        raise HTTPException(409, "Failed submission not found")
+    row.status, row.error = "Pending", None
+    db.commit()
+    return submission_result(row)
+
+
+@app.post("/integrations/muse/orders", status_code=202)
+def muse_order(payload: MuseOrder, db: Session = Depends(get_db)):
+    return enqueue(payload, "order", db)
+
+
+@app.post("/integrations/muse/payouts", status_code=202)
+def muse_payout(payload: MusePayout, db: Session = Depends(get_db)):
+    return enqueue(payload, "payout", db)
+
+
+@app.get("/integrations/muse/pending-payouts")
+def muse_pending(db: Session = Depends(get_db)):
+    return [order_result(order) for order in db.query(Order).filter(
+        Order.import_batch_key == "muse-api", Order.payout_status != "Received").all()]
+
+
+@app.get("/integrations/muse/submissions")
+def muse_submissions(db: Session = Depends(get_db)):
+    return [submission_result(row) for row in db.query(MuseSubmission).filter_by(
+        tenant_id=db.info["tenant_id"]).order_by(MuseSubmission.id.desc()).limit(100).all()]
+
+
+muse_queue_service = MuseQueueService(engine, create_order_record, sync_order_payout_accounting)
+app.router.add_event_handler("startup", muse_queue_service.start)
+app.router.add_event_handler("shutdown", muse_queue_service.stop)
+
+
 def frontend_response(path: str = ""):
     if not FRONTEND_DIST_DIR.exists():
         raise HTTPException(status_code=404, detail="Frontend build not found")
@@ -17005,8 +21751,10 @@ def frontend_response(path: str = ""):
     if requested_file.is_file():
         return FileResponse(requested_file)
 
-    first_segment = path.split("/", 1)[0]
-    if path in ("", "index.html") or first_segment in {"portal", "login", "catalog", "website", "school"}:
+    segments = [segment for segment in path.split("/") if segment]
+    first_segment = segments[0] if segments else ""
+    route_segment = segments[1] if len(segments) > 1 else first_segment
+    if path in ("", "index.html") or route_segment in {"portal", "login", "catalog", "website", "school"}:
         index_file = FRONTEND_DIST_DIR / "index.html"
         if index_file.is_file():
             return FileResponse(index_file)

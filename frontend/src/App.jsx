@@ -8,6 +8,11 @@ import SchoolSplash from "./school/SchoolSplash";
 import Sidebar from "./components/sidebar";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
+import {
+ normalizeAppPath,
+ routeScopeSlugFromPath,
+ scopedAppPath,
+} from "./utils/routeUtils";
 import "./pages/OperationsSizing.css";
 import "./pages/DashboardDesktop.css";
 import "./pages/DashboardFocus.css";
@@ -26,22 +31,22 @@ const Shipping = lazy(() => import("./pages/Shipping"));
 const ShippingBalance = lazy(() => import("./pages/ShippingBalance"));
 const Fulfillment = lazy(() => import("./pages/Fulfillment"));
 const LabelPrinter = lazy(() => import("./pages/LabelPrinter"));
-const LabelPrinter2 = lazy(() => import("./pages/LabelPrinter2"));
 const PrinterSettings = lazy(() => import("./pages/PrinterSettings"));
 const ServiceTakers = lazy(() => import("./pages/ServiceTakers"));
 const ServiceTakerPortal = lazy(() => import("./pages/ServiceTakerPortal"));
+const LocalOrders = lazy(() => import("./pages/LocalOrders"));
 const FollowUps = lazy(() => import("./pages/FollowUps"));
 const Payouts = lazy(() => import("./pages/Payouts"));
 const Payments = lazy(() => import("./pages/Payments"));
 const WorkerPayouts = lazy(() => import("./pages/WorkerPayouts"));
 const WorkerAccounts2 = lazy(() => import("./pages/WorkerAccounts2"));
 const Accounting = lazy(() => import("./pages/Accounting"));
-const AccountingQuicks = lazy(() => import("./pages/AccountingQuicks"));
 const Production = lazy(() => import("./pages/Production"));
 const MyTasks = lazy(() => import("./pages/MyTasks"));
 const Reports = lazy(() => import("./pages/Reports"));
 const Website = lazy(() => import("./pages/Website"));
 const WebsiteAdmin = lazy(() => import("./pages/WebsiteAdmin"));
+const WebsiteVisitors = lazy(() => import("./pages/WebsiteVisitors"));
 const Deployment = lazy(() => import("./pages/Deployment"));
 const WebsiteCatalog = lazy(() => import("./pages/WebsiteCatalog"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -73,6 +78,7 @@ const pagePaths = {
   Inspiration: "/portal/inspiration",
   Quotes: "/portal/quotes",
   Website: "/portal/website",
+  "Website Visitors": "/portal/website-visitors",
   Deployment: "/portal/deployment",
   WebsiteStorefront: "/",
   WebsiteCatalog: "/catalog",
@@ -89,6 +95,7 @@ const pagePaths = {
   Customers: "/portal/customers",
   Suppliers: "/portal/suppliers",
   Orders: "/portal/orders",
+  "Local Orders": "/portal/local-orders",
   Shipping: "/portal/shipping",
   "Shipping Balance": "/portal/shipping-balance",
   "Warehouse / Fulfillment": "/portal/fulfillment",
@@ -96,13 +103,14 @@ const pagePaths = {
   "Warehouse Shipments": "/portal/warehouse/shipments",
   "Warehouse Stock": "/portal/warehouse/stock",
   "Label Printer": "/portal/label-printer",
-  "Label Printer 2": "/portal/label-printer-2",
   "Printer Settings": "/portal/printer-settings",
   "Service Takers": "/portal/service-takers",
   "Service Dashboard": "/portal/service-taker/dashboard",
   "Service Products": "/portal/service-taker/products",
   "Service Inbound": "/portal/service-taker/inbound",
   "Service Shipments": "/portal/service-taker/shipments",
+  "Service Manufacturing": "/portal/service-taker/local-orders",
+  "Service Quotations": "/portal/service-taker/quotations",
   "Service Charges": "/portal/service-taker/charges",
   "Follow Ups": "/portal/follow-ups",
   Payouts: "/portal/payouts",
@@ -110,7 +118,6 @@ const pagePaths = {
   "Worker Accounts": "/portal/worker-accounts",
   "Worker Payouts": "/portal/worker-payouts",
   Accounting: "/portal/accounting",
-  "Accounting Quicks": "/portal/accounting-quicks",
   Manufacturing: "/portal/manufacturing",
   Production: "/portal/production",
   "My Tasks": "/portal/my-tasks",
@@ -134,6 +141,7 @@ const serviceTakerPages = [
   "Service Products",
   "Service Inbound",
   "Service Shipments",
+  "Service Manufacturing",
   "Service Charges",
 ];
 
@@ -144,10 +152,10 @@ const rolePages = {
     "Dashboard",
     "Customers",
     "Orders",
+    "Local Orders",
     "Payouts",
     "Billings",
     "Accounting",
-    "Accounting Quicks",
     "Shipping",
     "Shipping Balance",
     "Warehouse / Fulfillment",
@@ -156,7 +164,6 @@ const rolePages = {
     "Products",
     "Inventory",
     "Label Printer",
-    "Label Printer 2",
     "Printer Settings",
     "Suppliers",
     "Manufacturing",
@@ -176,6 +183,7 @@ const rolePages = {
     "Users",
     "Inspiration",
     "Website",
+    "Website Visitors",
     "Deployment",
     "TempData",
     "Messages",
@@ -185,6 +193,7 @@ const rolePages = {
     "Dashboard",
     "Customers",
     "Orders",
+    "Local Orders",
     "Payouts",
     "Billings",
     "Accounting",
@@ -195,7 +204,6 @@ const rolePages = {
     "Products",
     "Inventory",
     "Label Printer",
-    "Label Printer 2",
     "Printer Settings",
     "Suppliers",
     "Manufacturing",
@@ -207,6 +215,7 @@ const rolePages = {
     "Quotes",
     "Inspiration",
     "Website",
+    "Website Visitors",
     "TempData",
     "Messages",
     "Copy Clipboard",
@@ -243,6 +252,7 @@ pathToPage["/portal/"] = "Dashboard";
 pathToPage["/portal/payments"] = "Billings";
 pathToPage["/portal/amazon/fba-inventory"] = "Products";
 pathToPage["/portal/service-taker"] = "Service Dashboard";
+pathToPage["/portal/service-taker/manufacturing"] = "Service Manufacturing";
 pathToPage["/website"] = "WebsiteStorefront";
 pathToPage["/website/catalog"] = "WebsiteCatalog";
 
@@ -256,14 +266,12 @@ const schoolWorkspacePages = new Set([
   "School Finance",
 ]);
 
-const isSchoolWorkspacePage = (page) => schoolWorkspacePages.has(page);
+const publicPages = new Set(["WebsiteStorefront", "WebsiteCatalog", "School Admission Apply"]);
 
-const normalizePath = (pathname) => {
-  if (!pathname) return "/portal";
-  const cleaned = pathname.replace(/\/+$|^\/+/g, "");
-  if (cleaned === "portal") return "/portal";
-  return `/${cleaned}`;
-};
+const isSchoolWorkspacePage = (page) => schoolWorkspacePages.has(page);
+const isPublicPage = (page) => publicPages.has(page);
+
+const normalizePath = normalizeAppPath;
 
 const pageFromPath = (pathname) => {
   const path = normalizePath(pathname);
@@ -271,6 +279,7 @@ const pageFromPath = (pathname) => {
   if (path === "/portal/website") return "Website";
   if (pathToPage[path]) return pathToPage[path];
   if (/^\/portal\/orders\/\d+$/.test(path)) return "Orders";
+  if (/^\/portal\/worker-accounts\/suppliers\/\d+$/.test(path)) return "Worker Accounts";
   if (/^\/portal\/suppliers\/\d+(?:\/ledger)?$/.test(path)) return "Suppliers";
   return "Dashboard";
 };
@@ -278,29 +287,41 @@ const pageFromPath = (pathname) => {
 const isSupplierLedgerPath = (pathname) =>
   /^\/portal\/suppliers\/\d+\/ledger\/?$/.test(normalizePath(pathname));
 
+
 const normalizeClientAllowedPages = (pages = [], role = "", impersonatedBySuperAdmin = false) => {
   if (impersonatedBySuperAdmin) return rolePages.admin;
-  if (role === "service_taker") return serviceTakerPages;
+  if (role === "service_taker") {
+    const visibleServicePages = (Array.isArray(pages) ? pages : [])
+      .filter((page) => serviceTakerPages.includes(page));
+    const hasFulfillmentPage = visibleServicePages.some((page) =>
+      ['Service Inbound', 'Service Shipments'].includes(page)
+    );
+    if (
+      visibleServicePages.includes("Service Charges") &&
+      !hasFulfillmentPage &&
+      !visibleServicePages.includes("Service Manufacturing")
+    ) {
+      const insertAt = visibleServicePages.includes("Service Dashboard") ? 1 : 0;
+      visibleServicePages.splice(insertAt, 0, "Service Manufacturing");
+    }
+    return visibleServicePages.length ? visibleServicePages : ["Service Dashboard"];
+  }
   if (role === "super_admin") return PLATFORM_SUPER_ADMIN_PAGES;
   const normalized = [];
 
   pages.forEach((page) => {
-    if (page === "Accounting") page = "Accounting Quicks";
     if (page === "Payments") page = "Billings";
     if (page === "Amazon FBA Inventory") page = "Products";
     if (!normalized.includes(page)) normalized.push(page);
   });
 
-  if ((role === "admin" || role === "manager")) {
-    if (!normalized.includes("Accounting Quicks")) normalized.push("Accounting Quicks");
-    if (!normalized.includes("Accounting")) normalized.push("Accounting");
-  }
 
-  if (role === "admin" && !normalized.includes("Deployment")) normalized.push("Deployment");
-  if ((role === "admin" || role === "manager" || role === "worker")) {
+  if ((role === "admin" || role === "manager" || role === "worker") && normalized.includes("Workers")) {
     if (!normalized.includes("Worker Accounts")) normalized.push("Worker Accounts");
   }
-  // Always allow Printer Settings if Label Printer or Settings is accessible
+  if (normalized.includes("Website") && !normalized.includes("Website Visitors")) {
+    normalized.push("Website Visitors");
+  }
   if (normalized.includes("Label Printer") || normalized.includes("Settings")) {
     if (!normalized.includes("Printer Settings")) normalized.push("Printer Settings");
   }
@@ -308,6 +329,48 @@ const normalizeClientAllowedPages = (pages = [], role = "", impersonatedBySuperA
   return normalized;
 };
 
+const TENANT_MODULE_ALWAYS_VISIBLE_PAGES = new Set(["Dashboard"]);
+const TENANT_MODULE_PAGE_ALIASES = {
+  "Printer Settings": "Label Printer",
+  "Worker Accounts": "Workers",
+};
+
+const tenantModuleControllerPage = (page) => TENANT_MODULE_PAGE_ALIASES[page] || page;
+
+const filterPagesByTenantModules = (pages = [], modules = [], user = null) => {
+  if (!user || (user.role === "super_admin" && !user.impersonatedBySuperAdmin)) {
+    return pages;
+  }
+  if (!Array.isArray(modules) || modules.length === 0) return pages;
+
+  const enabledByPage = new Map();
+  modules.forEach((module) => {
+    if (module?.page_name) enabledByPage.set(module.page_name, Boolean(module.enabled));
+  });
+  if (enabledByPage.size === 0) return pages;
+
+  return pages.filter((page) => {
+    if (TENANT_MODULE_ALWAYS_VISIBLE_PAGES.has(page)) return true;
+    const controllerPage = tenantModuleControllerPage(page);
+    return !enabledByPage.has(controllerPage) || enabledByPage.get(controllerPage);
+  });
+};
+
+const allowedPagesForRouteUser = (user, modules = []) => {
+  if (!user) return [];
+  const pages = Array.isArray(user.allowed_pages)
+    ? user.allowed_pages
+    : rolePages[user.role] || rolePages.worker;
+  return filterPagesByTenantModules(
+    normalizeClientAllowedPages(
+      pages,
+      user.role,
+      user.impersonatedBySuperAdmin
+    ),
+    modules,
+    user
+  );
+};
 class GlobalErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -423,21 +486,90 @@ function App() {
   const [showSchoolSplash, setShowSchoolSplash] = useState(() =>
     isSchoolWorkspacePage(pageFromPath(window.location.pathname))
   );
+  const [currentRoute, setCurrentRoute] = useState(
+    () => `${window.location.pathname}${window.location.search}${window.location.hash}`
+  );
   const lastActivityPageRef = useRef("");
+  const pendingLoginPathRef = useRef("");
 
+  const currentFullPath = () =>
+    `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+  const sanitizeLoginReturnPath = (path) => {
+    if (!path) return "";
+
+    try {
+      const targetUrl = new URL(path, window.location.origin);
+      if (targetUrl.origin !== window.location.origin) return "";
+
+      const normalizedPath = normalizePath(targetUrl.pathname);
+      const targetPage = pageFromPath(targetUrl.pathname);
+      if (normalizedPath === "/login" || targetPage === "Login") return "";
+
+      return `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
+    } catch {
+      return "";
+    }
+  };
+
+  const getLoginNextPath = () => {
+    const params = new URLSearchParams(window.location.search);
+    return sanitizeLoginReturnPath(params.get("next"));
+  };
+
+  const rememberLoginReturnPath = (path = currentFullPath()) => {
+    const returnPath = sanitizeLoginReturnPath(path);
+    if (returnPath) pendingLoginPathRef.current = returnPath;
+    return returnPath;
+  };
+
+  const buildLoginPath = (returnPath = pendingLoginPathRef.current) => {
+    const loginPath = scopedAppPath("/login", { preserveCurrentScope: true });
+    const safeReturnPath = sanitizeLoginReturnPath(returnPath);
+    return safeReturnPath
+      ? `${loginPath}?next=${encodeURIComponent(safeReturnPath)}`
+      : loginPath;
+  };
+
+  const pathAllowedForUser = (path, user) => {
+    if (!path || !user) return false;
+
+    const targetPage = pageFromPath(path);
+    if (targetPage === "Login") return false;
+    if (isPublicPage(targetPage)) return true;
+    const modulesForUser = user?.id === authenticatedUser?.id ? tenantModules : [];
+    if (user.role === "school") return isSchoolWorkspacePage(targetPage);
+    if (user.role === "service_taker") return allowedPagesForRouteUser(user, modulesForUser).includes(targetPage);
+
+    return allowedPagesForRouteUser(user, modulesForUser).includes(targetPage);
+  };
+
+  const scopedReturnPathForUser = (path, user) => {
+    const targetUrl = new URL(path, window.location.origin);
+    const scopedPath = scopedAppPath(normalizePath(targetUrl.pathname), {
+      user,
+      pathname: targetUrl.pathname,
+      preserveCurrentScope: true,
+    });
+    return `${scopedPath}${targetUrl.search}${targetUrl.hash}`;
+  };
+  const [tenantModules, setTenantModules] = useState([]);
   const rawAllowedPages = authenticatedUser
     ? Array.isArray(authenticatedUser.allowed_pages)
       ? authenticatedUser.allowed_pages
       : rolePages[authenticatedUser.role] || rolePages.worker
     : [];
-  const normalizedAllowedPages = normalizeClientAllowedPages(
-    rawAllowedPages,
-    authenticatedUser?.role,
-    authenticatedUser?.impersonatedBySuperAdmin
+  const normalizedAllowedPages = filterPagesByTenantModules(
+    normalizeClientAllowedPages(
+      rawAllowedPages,
+      authenticatedUser?.role,
+      authenticatedUser?.impersonatedBySuperAdmin
+    ),
+    tenantModules,
+    authenticatedUser
   );
   const allowedPageKey = normalizedAllowedPages.join("|");
   const schoolWorkspaceActive = isSchoolWorkspacePage(activePage);
-  const [tenantModules, setTenantModules] = useState([]);
 
   useEffect(() => {
     if (!authenticatedUser) return;
@@ -459,7 +591,7 @@ function App() {
 
   const hasSchoolPortalAccess = useMemo(() => {
     if (!authenticatedUser) return false;
-    if (authenticatedUser.role === "super_admin") return true;
+    if (authenticatedUser.role === "super_admin" && !authenticatedUser.impersonatedBySuperAdmin) return true;
     if (!Array.isArray(tenantModules) || tenantModules.length === 0) return true;
     const schoolMod = tenantModules.find(
       (m) => m.slug === "school-erp" || m.page_name === "School ERP" || m.name === "School ERP"
@@ -468,7 +600,7 @@ function App() {
   }, [authenticatedUser, tenantModules]);
 
   useEffect(() => {
-    if (!authenticatedUser) return;
+    if (!authenticatedUser || !hasSchoolPortalAccess) return;
     let cancelled = false;
     api
       .get("/school/settings")
@@ -481,10 +613,42 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [authenticatedUser]);
+  }, [authenticatedUser, hasSchoolPortalAccess]);
+
 
   useEffect(() => {
-    if (!authenticatedUser) return undefined;
+    if (!authenticatedUser) return;
+
+    const routeTenantSlug = routeScopeSlugFromPath(window.location.pathname);
+    const userTenantSlug =
+      authenticatedUser.role === "super_admin" && !authenticatedUser.impersonatedBySuperAdmin
+        ? ""
+        : (authenticatedUser.tenant_slug || "").trim().toLowerCase();
+
+    if (!routeTenantSlug || !userTenantSlug || routeTenantSlug === userTenantSlug) {
+      return;
+    }
+
+    const returnPath = rememberLoginReturnPath();
+    clearAuthenticatedUser();
+    setAuthenticatedUser(null);
+    setSchoolAccess(null);
+    setSidebarCounts({});
+    setLogoutMessage(`Please sign in to the ${routeTenantSlug} company workspace.`);
+    setActivePage("Login");
+    window.history.replaceState(
+      {},
+      "",
+      buildLoginPath(returnPath)
+    );
+  }, [
+    authenticatedUser?.id,
+    authenticatedUser?.role,
+    authenticatedUser?.tenant_slug,
+    authenticatedUser?.impersonatedBySuperAdmin,
+  ]);
+  useEffect(() => {
+    if (!authenticatedUser || !hasSchoolPortalAccess) return undefined;
     let cancelled = false;
     api
       .get("/school/foundation/me")
@@ -497,7 +661,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [authenticatedUser]);
+  }, [authenticatedUser, hasSchoolPortalAccess]);
 
   useEffect(() => {
     if (!showSchoolSplash) return undefined;
@@ -506,8 +670,12 @@ function App() {
   }, [showSchoolSplash]);
 
   useEffect(() => {
+    const readRoute = () =>
+      `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
     const handlePopState = () => {
       const nextPage = pageFromPath(window.location.pathname);
+      setCurrentRoute(readRoute());
       setActivePage(nextPage);
       window.dispatchEvent(
         new CustomEvent("erp:navigation", {
@@ -516,8 +684,19 @@ function App() {
       );
     };
 
+    const handleClientNavigation = (event) => {
+      const nextPage =
+        event.detail?.page || pageFromPath(window.location.pathname);
+      setCurrentRoute(readRoute());
+      setActivePage(nextPage);
+    };
+
     window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
+    window.addEventListener("erp:navigation", handleClientNavigation);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("erp:navigation", handleClientNavigation);
+    };
   }, []);
 
   const logoutWithMessage = useCallback((message) => {
@@ -525,10 +704,11 @@ function App() {
     setSchoolAccess(null);
     setSidebarCounts({});
     clearAuthenticatedUser();
+    pendingLoginPathRef.current = "";
     window.history.pushState({}, "", "/login");
     setActivePage("Login");
     setLogoutMessage(message);
-  }, []);
+  }, [authenticatedUser]);
 
   const checkUserStatus = useCallback(async () => {
     if (!authenticatedUser) return;
@@ -651,6 +831,11 @@ function App() {
           nextCounts.Messages = Number(response.data?.unread_count || 0);
         }
 
+        if (allowedPagesForCounts.includes("Website Visitors")) {
+          const response = await api.get("/visitor-chat/sessions/unread-count");
+          nextCounts["Website Visitors"] = Number(response.data?.unread_count || 0);
+        }
+
         if (active) setSidebarCounts(nextCounts);
       } catch (error) {
         console.warn("Sidebar counts could not be loaded.", error);
@@ -658,11 +843,22 @@ function App() {
     };
 
     const initialLoadId = setTimeout(loadSidebarCounts, 0);
-    const intervalId = setInterval(loadSidebarCounts, 120000);
+    const intervalId = setInterval(loadSidebarCounts, 30000);
+    const handleRefresh = () => {
+      loadSidebarCounts();
+    };
+
+    window.addEventListener("erp:refresh-sidebar-counts", handleRefresh);
+    window.addEventListener("erp:shipping-updated", handleRefresh);
+    window.addEventListener("erp:order-updated", handleRefresh);
+
     return () => {
       active = false;
       clearTimeout(initialLoadId);
       clearInterval(intervalId);
+      window.removeEventListener("erp:refresh-sidebar-counts", handleRefresh);
+      window.removeEventListener("erp:shipping-updated", handleRefresh);
+      window.removeEventListener("erp:order-updated", handleRefresh);
     };
   }, [
     allowedPageKey,
@@ -701,24 +897,28 @@ function App() {
     authenticatedUser?.username,
   ]);
 
-  const isPublicPage = (page) => ["WebsiteStorefront", "WebsiteCatalog", "School Admission Apply"].includes(page);
-
   useEffect(() => {
     if (authenticatedUser || isPublicPage(activePage) || activePage === "Login") return;
-    if (window.location.pathname !== "/login") {
-      window.history.replaceState({}, "", "/login");
+    const returnPath = rememberLoginReturnPath();
+    const loginPath = buildLoginPath(returnPath);
+    if (currentFullPath() !== loginPath) {
+      window.history.replaceState({}, "", loginPath);
     }
     setActivePage("Login");
   }, [activePage, authenticatedUser]);
 
-  const updatePath = (page) => {
+  const updatePath = (page, routeUser = authenticatedUser) => {
     const isWorkspacePage = isSchoolWorkspacePage(page);
+    const routeAllowedPages = allowedPagesForRouteUser(routeUser, routeUser?.id === authenticatedUser?.id ? tenantModules : []);
     const targetPage = isPublicPage(page) || isWorkspacePage
       ? page
-      : authenticatedUser && !normalizedAllowedPages.includes(page)
+      : routeUser && !routeAllowedPages.includes(page)
       ? "Dashboard"
       : page;
-    const nextPath = pagePaths[targetPage] || "/portal";
+    const nextPath = scopedAppPath(pagePaths[targetPage] || "/portal", {
+      user: routeUser,
+      preserveCurrentScope: !routeUser,
+    });
     if (
       !isSchoolWorkspacePage(activePage) &&
       isSchoolWorkspacePage(targetPage) &&
@@ -749,16 +949,39 @@ function App() {
     setSchoolAccess(null);
     setLogoutMessage("");
     saveAuthenticatedUser(user);
-    const requestedPage = pageFromPath(window.location.pathname);
-    updatePath(
+    const returnPath =
+      pendingLoginPathRef.current ||
+      getLoginNextPath() ||
+      sanitizeLoginReturnPath(currentFullPath());
+    const fallbackPage =
       user.role === "school"
         ? "School ERP"
         : user.role === "service_taker"
-          ? serviceTakerPages.includes(requestedPage)
-            ? requestedPage
-            : "Service Dashboard"
-          : "Dashboard"
-    );
+          ? "Service Dashboard"
+          : "Dashboard";
+
+    if (returnPath && pathAllowedForUser(returnPath, user)) {
+      const requestedPage = pageFromPath(returnPath);
+      const nextPath = scopedReturnPathForUser(returnPath, user);
+      const pathChanged = currentFullPath() !== nextPath;
+      if (pathChanged) {
+        window.history.pushState({}, "", nextPath);
+      }
+      window.dispatchEvent(
+        new CustomEvent("erp:navigation", {
+          detail: {
+            page: requestedPage,
+            source: pathChanged ? "navigation" : "reselect",
+          },
+        })
+      );
+      setActivePage(requestedPage);
+      pendingLoginPathRef.current = "";
+      return;
+    }
+
+    pendingLoginPathRef.current = "";
+    updatePath(fallbackPage, user);
   };
 
   const clearLogoutMessage = () => {
@@ -792,7 +1015,7 @@ function App() {
     };
     setAuthenticatedUser(updatedUser);
     saveAuthenticatedUser(updatedUser);
-    updatePath("Dashboard");
+    updatePath("Dashboard", updatedUser);
   };
 
   const handleReturnToSuperAdmin = () => {
@@ -806,7 +1029,7 @@ function App() {
     };
     setAuthenticatedUser(superAdminUser);
     saveAuthenticatedUser(superAdminUser);
-    updatePath("Dashboard");
+    updatePath("Dashboard", superAdminUser);
   };
 
   const toggleSidebar = () => {
@@ -906,12 +1129,12 @@ function App() {
     }
     if (activePage === "Inventory") return <Inventory />;
     if (activePage === "Label Printer") return <LabelPrinter />;
-    if (activePage === "Label Printer 2") return <LabelPrinter2 />;
     if (activePage === "Printer Settings") return <PrinterSettings />;
     if (activePage === "Inspiration") return <Inspiration />;
     if (activePage === "Quotes") return <Quotes />;
     if (activePage === "TempData") return <TempData />;
     if (activePage === "Messages") return <Messages />;
+    if (activePage === "Website Visitors") return <WebsiteVisitors />;
     if (activePage === "Customers") {
       return (
         <Customers
@@ -924,7 +1147,7 @@ function App() {
       );
     }
     if (activePage === "Suppliers") {
-      return isSupplierLedgerPath(window.location.pathname) ? (
+      return isSupplierLedgerPath(currentRoute) ? (
         <SupplierLedger />
       ) : (
         <Suppliers />
@@ -943,6 +1166,7 @@ function App() {
     }
     if (activePage === "Shipping Balance") return <ShippingBalance />;
     if (activePage === "Service Takers") return <ServiceTakers />;
+    if (activePage === "Local Orders") return <LocalOrders />;
     if (serviceTakerPages.includes(activePage)) {
       const portalSection =
         activePage === "Service Dashboard"
@@ -951,8 +1175,12 @@ function App() {
           ? "inbound"
           : activePage === "Service Shipments"
             ? "orders"
-            : activePage === "Service Charges"
-              ? "billing"
+            : activePage === "Service Manufacturing"
+              ? "manufacturing"
+              : activePage === "Service Quotations"
+                ? "quotations"
+              : activePage === "Service Charges"
+                ? "billing"
               : "inventory";
       return <ServiceTakerPortal section={portalSection} />;
     }
@@ -1002,7 +1230,6 @@ function App() {
       );
     }
     if (activePage === "Accounting") return <Accounting />;
-    if (activePage === "Accounting Quicks") return <AccountingQuicks />;
     if (activePage === "Manufacturing") return <Manufacturing />;
     if (activePage === "Production") return <Production />;
     if (activePage === "My Tasks") return <MyTasks workerId={authenticatedUser.worker_id} />;
@@ -1037,7 +1264,6 @@ function App() {
       );
     }
     if (activePage === "Label Printer") return <LabelPrinter />;
-    if (activePage === "Label Printer 2") return <LabelPrinter2 />;
     if (activePage === "Copy Clipboard") return <CopyClipboard />;
 
     return <Dashboard />;
@@ -1105,3 +1331,5 @@ function App() {
 }
 
 export default App;
+
+

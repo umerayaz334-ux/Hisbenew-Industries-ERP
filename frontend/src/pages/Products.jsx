@@ -258,6 +258,8 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
   const [showCatalogSelector, setShowCatalogSelector] = useState(false);
   const [catalogIncludedIds, setCatalogIncludedIds] = useState(() => new Set());
   const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogDiscount, setCatalogDiscount] = useState("0");
+  const catalogDiscountValid = catalogDiscount.trim() !== "" && Number.isFinite(Number(catalogDiscount)) && Number(catalogDiscount) >= 0 && Number(catalogDiscount) <= 100;
   const [showSummary, setShowSummary] = useState(false);
   const [notice, setNotice] = useState(null);
   const [selectedProductIds, setSelectedProductIds] = useState(() => new Set());
@@ -807,11 +809,12 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
   const openCatalogSelector = () => {
     setCatalogIncludedIds(new Set(products.map((product) => product.id)));
     setCatalogSearch("");
+    setCatalogDiscount("0");
     setShowCatalogSelector(true);
   };
 
   const downloadProductCatalog = async () => {
-    if (catalogDownloading) return;
+    if (catalogDownloading || !catalogDiscountValid) return;
     const productIds = [...catalogIncludedIds];
     if (!productIds.length) {
       setNotice({ type: "error", text: "Select at least one product for the catalog." });
@@ -819,7 +822,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
     }
     setCatalogDownloading(true);
     try {
-      const response = await api.post("/products/catalog-download", { product_ids: productIds }, {
+      const response = await api.post("/products/catalog-download", { product_ids: productIds, discount_percent: Number(catalogDiscount) }, {
         timeout: 30000,
       });
       const downloadUrl = getStaticUrl(response.data?.download_url);
@@ -1862,6 +1865,16 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
               </button>
             </div>
 
+            <div className="products-catalog-pricing">
+              <label htmlFor="catalog-discount">Catalog price reduction (%)</label>
+              <input id="catalog-discount" type="number" min="0" max="100" step="0.01"
+                value={catalogDiscount} disabled={catalogDownloading}
+                aria-invalid={!catalogDiscountValid} aria-describedby="catalog-discount-help"
+                onChange={(event) => setCatalogDiscount(event.target.value)} />
+              <p id="catalog-discount-help">{catalogDiscountValid
+                ? `${Number(catalogDiscount)}% off wholesale and retail prices in this PDF only. Saved product prices stay the same.`
+                : "Enter a percentage from 0 to 100."}</p>
+            </div>
             <div className="products-catalog-selector-tools">
               <input
                 onChange={(event) => setCatalogSearch(event.target.value)}
@@ -1920,7 +1933,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
               </button>
               <button
                 className="products-primary-button"
-                disabled={catalogDownloading || catalogIncludedIds.size === 0}
+                disabled={catalogDownloading || catalogIncludedIds.size === 0 || !catalogDiscountValid}
                 onClick={downloadProductCatalog}
                 type="button"
               >

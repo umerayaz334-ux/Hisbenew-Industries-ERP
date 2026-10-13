@@ -79,16 +79,29 @@ export default function PrinterSettings() {
   };
 
   const getPrinterEndpoint = (path) => {
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
     if (useLocalPrinterBridge) {
-      return buildPrintBridgeUrl(localPrintBridgeUrl, path);
+      const localPath = cleanPath === "/printers"
+        ? "/local-label-printers"
+        : cleanPath === "/print"
+          ? "/local-label-printers/print"
+          : cleanPath;
+      return buildPrintBridgeUrl(localPrintBridgeUrl, localPath);
     }
-    return `/print-agent${path.startsWith("/") ? path : `/${path}`}`;
+    return `/print-agent${cleanPath}`;
   };
 
   const fetchPrinterData = (path, options = {}) => {
     if (useLocalPrinterBridge) {
       const endpoint = getPrinterEndpoint(path);
-      return fetch(endpoint, options).then(async (res) => {
+      return fetch(endpoint, {
+        ...options,
+        targetAddressSpace: "loopback",
+        headers: {
+          Accept: "application/json",
+          ...(options.headers || {}),
+        },
+      }).then(async (res) => {
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
           throw new Error(body?.detail || body?.message || `Local print bridge returned HTTP ${res.status}`);
@@ -120,10 +133,11 @@ export default function PrinterSettings() {
       const availablePrinters = Array.isArray(data.printers) ? data.printers : [];
       if (availablePrinters.length > 0) {
         setDirectPrinterState((current) => {
-          if (current && availablePrinters.some((p) => p.name === current)) {
+          if (current && availablePrinters.some((p) => p.name === current && p.supports_direct_labels && p.is_connected !== false)) {
             return current;
           }
-          const defaultP = availablePrinters.find((p) => p.is_default) || availablePrinters[0];
+          const thermalP = availablePrinters.find((p) => p.supports_direct_labels && p.is_connected) || availablePrinters.find((p) => p.supports_direct_labels);
+          const defaultP = thermalP || availablePrinters.find((p) => p.is_default) || availablePrinters[0];
           const chosen = defaultP?.name || "";
           try {
             window.localStorage.setItem(DIRECT_PRINTER_STORAGE_KEY, chosen);
@@ -253,7 +267,7 @@ export default function PrinterSettings() {
               <option value="">-- Select Printer --</option>
               {printerOptions.map((printer) => (
                 <option key={printer.name} value={printer.name}>
-                  {`${printer.name}${printer.is_default ? " (System Default)" : ""}${printer.is_connected ? "" : " - Offline"}`}
+                  {`${printer.name}${printer.supports_direct_labels ? " (TSPL)" : ""}${printer.is_default ? " (System Default)" : ""}${printer.is_connected ? "" : " - Offline"}`}
                 </option>
               ))}
             </select>

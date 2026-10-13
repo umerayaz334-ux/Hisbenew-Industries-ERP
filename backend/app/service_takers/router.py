@@ -1,21 +1,34 @@
-import json
+﻿import json
 import os
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from sqlalchemy import func
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..config import UPLOAD_DIR
 from ..database import SessionLocal
-from ..models import User
+from ..models import (
+    ActivityLog,
+    InternalCall,
+    InternalCallSignal,
+    InternalMessage,
+    InternalMessageContactRequest,
+    PublicAccessRequest,
+    User,
+    UserRoleRequest,
+    WebsiteVisitorMessage,
+)
 from ..security import hash_pin, sanitize_upload_filename
 from .models import (
     ServiceTaker,
     ServiceTakerInbound,
     ServiceTakerInboundItem,
     ServiceTakerInventoryTransaction,
+    ServiceTakerManufacturingOrder,
+    ServiceTakerManufacturingPayment,
+    ServiceTakerManufacturingUpdate,
     ServiceTakerOrder,
     ServiceTakerOrderItem,
     ServiceTakerProduct,
@@ -24,6 +37,9 @@ from .schemas import (
     ServiceTakerCreate,
     ServiceTakerInboundCreate,
     ServiceTakerInboundReceive,
+    ServiceTakerManufacturingAdminUpdate,
+    ServiceTakerManufacturingPaymentCreate,
+    ServiceTakerManufacturingRequestCreate,
     ServiceTakerOrderAdminUpdate,
     ServiceTakerOrderCreate,
     ServiceTakerProductCreate,
@@ -35,9 +51,60 @@ router = APIRouter(prefix="/service-takers", tags=["Service takers"])
 
 LABEL_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".zpl", ".zip", ".btw"}
 MAX_LABEL_BYTES = 15 * 1024 * 1024
-PRODUCT_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+PRODUCT_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
 MAX_PRODUCT_IMAGE_BYTES = 8 * 1024 * 1024
+PAYMENT_PROOF_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.pdf'}
+MAX_PAYMENT_PROOF_BYTES = 8 * 1024 * 1024
 ACTIVE_ORDER_STATUSES = ("Submitted", "Awaiting label", "Processing", "Ready")
+ACTIVE_MANUFACTURING_STATUSES = (
+    "Quote requested",
+    "Quoted",
+    "Deposit pending",
+    "Confirmed",
+    "In production",
+    "Quality check",
+    "Ready",
+)
+SERVICE_TAKER_PRODUCTS_PAGE = 'Service Products'
+SERVICE_TAKER_FULFILLMENT_PAGES = (
+    'Service Inbound',
+    'Service Shipments',
+)
+SERVICE_TAKER_MANUFACTURING_PAGE = "Service Manufacturing"
+SERVICE_TAKER_CHARGES_PAGE = "Service Charges"
+
+
+def service_taker_allowed_pages(
+    fulfillment_enabled: bool,
+    manufacturing_enabled: bool,
+) -> list[str]:
+    pages = ['Service Dashboard']
+    if fulfillment_enabled or manufacturing_enabled:
+        pages.append(SERVICE_TAKER_PRODUCTS_PAGE)
+    if fulfillment_enabled:
+        pages.extend(SERVICE_TAKER_FULFILLMENT_PAGES)
+    if manufacturing_enabled:
+        pages.append(SERVICE_TAKER_MANUFACTURING_PAGE)
+    if fulfillment_enabled or manufacturing_enabled:
+        pages.append(SERVICE_TAKER_CHARGES_PAGE)
+    return pages
+
+
+def service_taker_service_access(user: User | None) -> dict:
+    try:
+        allowed_pages = set(json.loads(user.allowed_pages or "[]")) if user else set()
+    except (TypeError, json.JSONDecodeError):
+        allowed_pages = set()
+    fulfillment_enabled = any(
+        page in allowed_pages for page in SERVICE_TAKER_FULFILLMENT_PAGES
+    )
+    manufacturing_enabled = SERVICE_TAKER_MANUFACTURING_PAGE in allowed_pages
+    if SERVICE_TAKER_CHARGES_PAGE in allowed_pages and not fulfillment_enabled:
+        manufacturing_enabled = True
+    return {
+        "fulfillment_enabled": fulfillment_enabled,
+        "manufacturing_enabled": manufacturing_enabled,
+    }
 
 
 def get_db(request: Request):
@@ -176,6 +243,7 @@ def product_response(product: ServiceTakerProduct) -> dict:
 
 def client_response(db: Session, client: ServiceTaker) -> dict:
     user = db.query(User).filter(User.id == client.user_id).one_or_none()
+    service_access = service_taker_service_access(user)
     products = db.query(ServiceTakerProduct).filter(
         ServiceTakerProduct.service_taker_id == client.id
     )
@@ -204,6 +272,8 @@ def client_response(db: Session, client: ServiceTaker) -> dict:
         "pick_pack_fee": float(client.pick_pack_fee or 0),
         "additional_item_fee": float(client.additional_item_fee or 0),
         "label_fee": float(client.label_fee or 0),
+        "fulfillment_enabled": service_access["fulfillment_enabled"],
+        "manufacturing_enabled": service_access["manufacturing_enabled"],
         "notes": client.notes,
         "is_active": bool(client.is_active and user and user.is_active),
         "product_count": products.count(),
@@ -225,6 +295,14 @@ def client_response(db: Session, client: ServiceTaker) -> dict:
                 ServiceTakerInbound.status.in_(
                     ("Submitted", "Partially received")
                 ),
+            )
+            .count()
+        ),
+        "open_manufacturing_count": (
+            db.query(ServiceTakerManufacturingOrder)
+            .filter(
+                ServiceTakerManufacturingOrder.service_taker_id == client.id,
+                ServiceTakerManufacturingOrder.status.in_(ACTIVE_MANUFACTURING_STATUSES),
             )
             .count()
         ),
@@ -303,6 +381,10 @@ def order_total(order: ServiceTakerOrder) -> float:
 
 def order_response(order: ServiceTakerOrder) -> dict:
     is_cancelled = order.status == "Cancelled"
+    item_quantity = sum(int(item.quantity or 0) for item in order.items)
+    package_quantity = int(getattr(order, "package_quantity", 1) or 1)
+    request_type = getattr(order, "shipping_request_type", None) or "stock"
+    manufacturing_order = getattr(order, "manufacturing_order", None)
     return {
         "id": order.id,
         "service_taker_id": order.service_taker_id,
@@ -311,6 +393,17 @@ def order_response(order: ServiceTakerOrder) -> dict:
         ),
         "request_no": order.request_no,
         "client_reference": order.client_reference,
+        "shipping_request_type": request_type,
+        "manufacturing_order_id": getattr(order, "manufacturing_order_id", None),
+        "manufacturing_request_no": manufacturing_order.request_no if manufacturing_order else None,
+        "manufacturing_product_name": manufacturing_order.product_name if manufacturing_order else None,
+        "product_description": getattr(order, "product_description", None),
+        "package_quantity": package_quantity,
+        "package_weight_kg": float(order.package_weight_kg) if getattr(order, "package_weight_kg", None) is not None else None,
+        "package_length_cm": float(order.package_length_cm) if getattr(order, "package_length_cm", None) is not None else None,
+        "package_width_cm": float(order.package_width_cm) if getattr(order, "package_width_cm", None) is not None else None,
+        "package_height_cm": float(order.package_height_cm) if getattr(order, "package_height_cm", None) is not None else None,
+        "preferred_courier": getattr(order, "preferred_courier", None),
         "status": order.status,
         "recipient_name": order.recipient_name,
         "recipient_company": order.recipient_company,
@@ -335,7 +428,7 @@ def order_response(order: ServiceTakerOrder) -> dict:
         "total_cost": order_total(order),
         "currency": order.service_taker.currency if order.service_taker else "USD",
         "notes": order.notes,
-        "item_quantity": sum(int(item.quantity or 0) for item in order.items),
+        "item_quantity": item_quantity or package_quantity,
         "items": [
             {
                 "id": item.id,
@@ -351,7 +444,6 @@ def order_response(order: ServiceTakerOrder) -> dict:
         "created_at": order.created_at,
         "updated_at": order.updated_at,
     }
-
 
 def ledger_response(transaction: ServiceTakerInventoryTransaction) -> dict:
     return {
@@ -371,6 +463,207 @@ def ledger_response(transaction: ServiceTakerInventoryTransaction) -> dict:
     }
 
 
+def manufacturing_payment_status(payment: ServiceTakerManufacturingPayment) -> str:
+    return payment.status or "Confirmed"
+
+
+def manufacturing_paid_total(order: ServiceTakerManufacturingOrder) -> float:
+    return round(
+        sum(
+            float(payment.amount or 0)
+            for payment in order.payments
+            if manufacturing_payment_status(payment) == "Confirmed"
+        ),
+        2,
+    )
+
+
+def manufacturing_pending_payment_total(order: ServiceTakerManufacturingOrder) -> float:
+    return round(
+        sum(
+            float(payment.amount or 0)
+            for payment in order.payments
+            if manufacturing_payment_status(payment) == "Pending confirmation"
+        ),
+        2,
+    )
+
+
+def manufacturing_quote_total(order: ServiceTakerManufacturingOrder) -> float:
+    if order.quoted_total:
+        return round(float(order.quoted_total or 0), 2)
+    return round(
+        (float(order.quoted_unit_price or 0) * int(order.quantity or 0))
+        + float(order.tooling_cost or 0),
+        2,
+    )
+
+
+def manufacturing_balance_due(order: ServiceTakerManufacturingOrder) -> float:
+    if order.status in {"Cancelled", "Rejected"}:
+        return 0.0
+    return max(0.0, round(manufacturing_quote_total(order) - manufacturing_paid_total(order), 2))
+
+
+def manufacturing_deposit_balance(order: ServiceTakerManufacturingOrder) -> float:
+    if order.status in {"Cancelled", "Rejected"}:
+        return 0.0
+    return max(0.0, round(float(order.deposit_required or 0) - manufacturing_paid_total(order), 2))
+
+
+def manufacturing_payment_response(payment: ServiceTakerManufacturingPayment) -> dict:
+    return {
+        "id": payment.id,
+        "service_taker_id": payment.service_taker_id,
+        "manufacturing_order_id": payment.manufacturing_order_id,
+        "amount": float(payment.amount or 0),
+        "payment_type": payment.payment_type,
+        "status": manufacturing_payment_status(payment),
+        "method": payment.method,
+        "reference": payment.reference,
+        'note': payment.note,
+        'proof_url': payment.proof_url,
+        'proof_name': payment.proof_name,
+        'proof_uploaded_at': payment.proof_uploaded_at,
+        'paid_at': payment.paid_at,
+        "confirmed_at": payment.confirmed_at,
+        "confirmed_by_user_id": payment.confirmed_by_user_id,
+        "created_at": payment.created_at,
+    }
+
+
+def manufacturing_update_response(update: ServiceTakerManufacturingUpdate) -> dict:
+    actor_name = None
+    actor_role = None
+    actor_type = "system"
+    message_text = (update.message or "").lower()
+    if update.created_by_user:
+        actor_name = update.created_by_user.name or update.created_by_user.email
+        actor_role = update.created_by_user.role
+        actor_type = "service_taker" if update.created_by_user.role == "service_taker" else "company"
+    elif (
+        update.status == "Quote requested"
+        or "by client" in message_text
+        or "service taker" in message_text
+        or "quote request submitted" in message_text
+    ):
+        actor_type = "service_taker"
+        actor_name = "Service Taker"
+    else:
+        actor_type = "company"
+        actor_name = "Company"
+
+    return {        "id": update.id,
+        "service_taker_id": update.service_taker_id,
+        "manufacturing_order_id": update.manufacturing_order_id,
+        "status": update.status,
+        "message": update.message,
+        "created_by_user_id": update.created_by_user_id,
+        "actor_name": actor_name,
+        "actor_role": actor_role,
+        "actor_type": actor_type,
+        "created_at": update.created_at,
+    }
+
+
+def manufacturing_order_response(order: ServiceTakerManufacturingOrder) -> dict:
+    paid_total = manufacturing_paid_total(order)
+    pending_payment_total = manufacturing_pending_payment_total(order)
+    quote_total = manufacturing_quote_total(order)
+    return {
+        "id": order.id,
+        "service_taker_id": order.service_taker_id,
+        "company_name": order.service_taker.company_name if order.service_taker else None,
+        "request_no": order.request_no,
+        "client_reference": order.client_reference,
+        "status": order.status,
+        "product_id": order.product_id,
+        "product_sku": order.product.sku if order.product else None,
+        "product_name": order.product_name,
+        "image_url": order.image_url,
+        "product_image_url": order.product.image_url if order.product else None,
+        "quantity": int(order.quantity or 0),
+        "steel_type": order.steel_type,
+        "tang_type": order.tang_type,
+        "blade_thickness_mm": order.blade_thickness_mm,
+        "blade_length_in": order.blade_length_in,
+        "overall_length_in": order.overall_length_in,
+        "handle_material": order.handle_material,
+        "sheath_type": order.sheath_type,
+        "finish": order.finish,
+        "hardness": order.hardness,
+        "edge_type": order.edge_type,
+        "packaging": order.packaging,
+        "target_unit_price": order.target_unit_price,
+        "quoted_unit_price": float(order.quoted_unit_price or 0),
+        "tooling_cost": float(order.tooling_cost or 0),
+        "quoted_total": quote_total,
+        "deposit_required": float(order.deposit_required or 0),
+        "paid_total": paid_total,
+        "pending_payment_total": pending_payment_total,
+        "balance_due": manufacturing_balance_due(order),
+        "deposit_balance_due": manufacturing_deposit_balance(order),
+        "currency": order.service_taker.currency if order.service_taker else "USD",
+        "requested_ready_at": order.requested_ready_at,
+        "estimated_ready_at": order.estimated_ready_at,
+        "confirmed_at": order.confirmed_at,
+        "production_started_at": order.production_started_at,
+        "ready_at": order.ready_at,
+        "completed_at": order.completed_at,
+        "notes": order.notes,
+        "admin_notes": order.admin_notes,
+        "last_update": order.last_update,
+        "payments": [manufacturing_payment_response(payment) for payment in order.payments],
+        "updates": [manufacturing_update_response(update) for update in order.updates],
+        "created_at": order.created_at,
+        "updated_at": order.updated_at,
+    }
+
+
+def refresh_manufacturing_totals(order: ServiceTakerManufacturingOrder) -> None:
+    order.quoted_total = round(
+        (float(order.quoted_unit_price or 0) * int(order.quantity or 0))
+        + float(order.tooling_cost or 0),
+        2,
+    )
+
+
+def set_manufacturing_status_dates(order: ServiceTakerManufacturingOrder, status: str | None) -> None:
+    if not status:
+        return
+    now = datetime.utcnow()
+    if status in {"Confirmed", "In production", "Quality check", "Ready", "Completed"} and not order.confirmed_at:
+        order.confirmed_at = now
+    if status in {"In production", "Quality check", "Ready", "Completed"} and not order.production_started_at:
+        order.production_started_at = now
+    if status in {"Ready", "Completed"} and not order.ready_at:
+        order.ready_at = now
+    if status == "Completed" and not order.completed_at:
+        order.completed_at = now
+
+
+def add_manufacturing_update(
+    db: Session,
+    order: ServiceTakerManufacturingOrder,
+    status: str,
+    message: str,
+    user_id: int | None = None,
+) -> None:
+    cleaned_message = clean_text(message)
+    if not cleaned_message:
+        return
+    order.last_update = cleaned_message
+    db.add(
+        ServiceTakerManufacturingUpdate(
+            tenant_id=order.tenant_id,
+            service_taker_id=order.service_taker_id,
+            manufacturing_order_id=order.id,
+            status=status,
+            message=cleaned_message,
+            created_by_user_id=user_id,
+        )
+    )
+
 def dashboard_response(
     db: Session,
     clients: list[ServiceTaker],
@@ -388,11 +681,15 @@ def dashboard_response(
                 "open_inbounds": 0,
                 "open_orders": 0,
                 "shipped_order_cost": 0,
+                "open_manufacturing": 0,
+                "manufacturing_balance_due": 0,
+                "manufacturing_payments_received": 0,
             },
             "clients": [],
             "products": [],
             "inbounds": [],
             "orders": [],
+            "manufacturing_orders": [],
             "ledger": [],
         }
 
@@ -412,6 +709,15 @@ def dashboard_response(
         db.query(ServiceTakerOrder)
         .filter(ServiceTakerOrder.service_taker_id.in_(client_ids))
         .order_by(ServiceTakerOrder.created_at.desc(), ServiceTakerOrder.id.desc())
+        .all()
+    )
+    manufacturing_orders = (
+        db.query(ServiceTakerManufacturingOrder)
+        .filter(ServiceTakerManufacturingOrder.service_taker_id.in_(client_ids))
+        .order_by(
+            ServiceTakerManufacturingOrder.created_at.desc(),
+            ServiceTakerManufacturingOrder.id.desc(),
+        )
         .all()
     )
     ledger = (
@@ -446,14 +752,33 @@ def dashboard_response(
                 1 for order in orders if order.status in ACTIVE_ORDER_STATUSES
             ),
             "shipped_order_cost": round(shipped_cost, 2),
+            "open_manufacturing": sum(
+                1
+                for order in manufacturing_orders
+                if order.status in ACTIVE_MANUFACTURING_STATUSES
+            ),
+            "manufacturing_balance_due": round(
+                sum(
+                    manufacturing_balance_due(order)
+                    for order in manufacturing_orders
+                    if order.status != "Cancelled"
+                ),
+                2,
+            ),
+            "manufacturing_payments_received": round(
+                sum(manufacturing_paid_total(order) for order in manufacturing_orders),
+                2,
+            ),
         },
         "clients": [client_response(db, client) for client in clients],
         "products": [product_response(product) for product in products],
         "inbounds": [inbound_response(inbound) for inbound in inbounds],
         "orders": [order_response(order) for order in orders],
+        "manufacturing_orders": [
+            manufacturing_order_response(order) for order in manufacturing_orders
+        ],
         "ledger": [ledger_response(transaction) for transaction in ledger],
     }
-
 
 def service_taker_by_id(db: Session, service_taker_id: int) -> ServiceTaker:
     client = (
@@ -481,13 +806,37 @@ def ensure_username_available(
         raise HTTPException(status_code=400, detail="Username is already in use.")
 
 
+def auto_service_product_sku(db: Session, client_id: int, seed: str) -> str:
+    base = "".join(
+        character if character.isalnum() else "-"
+        for character in str(seed or "PRODUCT").upper()
+    )
+    base = "-".join(part for part in base.split("-") if part)[:80] or "PRODUCT"
+    candidate = base
+    counter = 2
+    while (
+        db.query(ServiceTakerProduct.id)
+        .filter(
+            ServiceTakerProduct.service_taker_id == client_id,
+            func.lower(ServiceTakerProduct.sku) == candidate.lower(),
+        )
+        .first()
+    ):
+        suffix = f"-{counter}"
+        candidate = f"{base[:120 - len(suffix)]}{suffix}"
+        counter += 1
+    return candidate
+
+
 def create_product_for_client(
     db: Session,
     client: ServiceTaker,
     payload: ServiceTakerProductCreate,
 ) -> ServiceTakerProduct:
-    sku = payload.sku.strip()
-    if (
+    product_name = payload.name.strip()
+    raw_sku = clean_text(payload.sku)
+    sku = raw_sku or auto_service_product_sku(db, client.id, product_name)
+    if raw_sku and (
         db.query(ServiceTakerProduct.id)
         .filter(
             ServiceTakerProduct.service_taker_id == client.id,
@@ -497,12 +846,13 @@ def create_product_for_client(
     ):
         raise HTTPException(
             status_code=400,
-            detail="This SKU already exists in the service taker's catalog.",
+            detail="This SKU already exists in this product catalog. Use a different SKU or leave SKU blank for auto numbering.",
         )
     product = ServiceTakerProduct(
+        tenant_id=client.tenant_id,
         service_taker_id=client.id,
         sku=sku,
-        name=payload.name.strip(),
+        name=product_name,
         barcode=clean_text(payload.barcode),
         description=clean_text(payload.description),
         unit_weight_kg=float(payload.unit_weight_kg or 0),
@@ -515,7 +865,6 @@ def create_product_for_client(
     db.commit()
     db.refresh(product)
     return product
-
 
 def create_inbound_for_client(
     db: Session,
@@ -578,54 +927,98 @@ def create_order_for_client(
     client: ServiceTaker,
     payload: ServiceTakerOrderCreate,
 ) -> ServiceTakerOrder:
-    product_ids = [item.product_id for item in payload.items]
+    request_type = (clean_text(payload.shipping_request_type) or "stock").lower()
+    if request_type not in {"stock", "manufactured", "external"}:
+        raise HTTPException(status_code=400, detail="Choose a valid shipping request type.")
+
+    product_ids = [item.product_id for item in payload.items] if request_type == "stock" else []
+    if request_type == "stock" and not product_ids:
+        raise HTTPException(status_code=400, detail="Select at least one warehouse SKU to ship.")
     if len(product_ids) != len(set(product_ids)):
         raise HTTPException(
             status_code=400,
             detail="Each SKU can appear only once in a shipment request.",
         )
-    products = (
-        db.query(ServiceTakerProduct)
-        .filter(
-            ServiceTakerProduct.service_taker_id == client.id,
-            ServiceTakerProduct.id.in_(product_ids),
-            ServiceTakerProduct.is_active == True,
-        )
-        .all()
-    )
-    product_by_id = {product.id: product for product in products}
-    if len(products) != len(product_ids):
-        raise HTTPException(
-            status_code=400,
-            detail="One or more requested SKUs do not belong to this service taker.",
-        )
-    shortages = []
-    for item in payload.items:
-        product = product_by_id[item.product_id]
-        available = max(
-            0,
-            int(product.quantity_on_hand or 0)
-            - int(product.reserved_quantity or 0),
-        )
-        if item.quantity > available:
-            shortages.append(f"{product.sku}: {available} available")
-    if shortages:
-        raise HTTPException(
-            status_code=409,
-            detail="Insufficient service-taker stock. " + "; ".join(shortages),
-        )
 
-    total_units = sum(item.quantity for item in payload.items)
-    pick_pack_cost = float(client.pick_pack_fee or 0) + max(
-        0,
-        total_units - 1,
-    ) * float(client.additional_item_fee or 0)
+    products = []
+    product_by_id = {}
+    shortages = []
+    total_units = max(1, int(payload.package_quantity or 1))
+    product_description = clean_text(payload.product_description)
+    manufacturing_order = None
+
+    if request_type == "stock":
+        products = (
+            db.query(ServiceTakerProduct)
+            .filter(
+                ServiceTakerProduct.service_taker_id == client.id,
+                ServiceTakerProduct.id.in_(product_ids),
+                ServiceTakerProduct.is_active == True,
+            )
+            .all()
+        )
+        product_by_id = {product.id: product for product in products}
+        if len(products) != len(product_ids):
+            raise HTTPException(
+                status_code=400,
+                detail="One or more requested SKUs do not belong to this service taker.",
+            )
+        for item in payload.items:
+            product = product_by_id[item.product_id]
+            available = max(
+                0,
+                int(product.quantity_on_hand or 0)
+                - int(product.reserved_quantity or 0),
+            )
+            if item.quantity > available:
+                shortages.append(f"{product.sku}: {available} available")
+        if shortages:
+            raise HTTPException(
+                status_code=409,
+                detail="Insufficient service-taker stock. " + "; ".join(shortages),
+            )
+        total_units = sum(item.quantity for item in payload.items)
+    elif request_type == "manufactured":
+        if not payload.manufacturing_order_id:
+            raise HTTPException(status_code=400, detail="Select a local order ready for shipping.")
+        manufacturing_order = (
+            db.query(ServiceTakerManufacturingOrder)
+            .filter(
+                ServiceTakerManufacturingOrder.id == payload.manufacturing_order_id,
+                ServiceTakerManufacturingOrder.service_taker_id == client.id,
+                ServiceTakerManufacturingOrder.status.in_(("Ready", "Completed")),
+            )
+            .one_or_none()
+        )
+        if not manufacturing_order:
+            raise HTTPException(
+                status_code=400,
+                detail="Selected local order is not ready for shipping.",
+            )
+        total_units = max(1, int(payload.package_quantity or manufacturing_order.quantity or 1))
+        product_description = product_description or (
+            f"{manufacturing_order.request_no} / {manufacturing_order.product_name}"
+        )
+    else:
+        if not product_description:
+            raise HTTPException(
+                status_code=400,
+                detail="Enter the outside product or parcel details.",
+            )
+
+    pick_pack_cost = 0.0
+    if request_type == "stock":
+        pick_pack_cost = float(client.pick_pack_fee or 0) + max(
+            0,
+            total_units - 1,
+        ) * float(client.additional_item_fee or 0)
     label_cost = (
         float(client.label_fee or 0)
         if payload.label_source == "Hisbenew"
         else 0
     )
     order = ServiceTakerOrder(
+        tenant_id=client.tenant_id,
         service_taker_id=client.id,
         request_no=next_number(
             db,
@@ -639,6 +1032,16 @@ def create_order_for_client(
             if payload.label_source == "Client"
             else "Submitted"
         ),
+        shipping_request_type=request_type,
+        manufacturing_order_id=manufacturing_order.id if manufacturing_order else None,
+        product_description=product_description,
+        package_quantity=total_units,
+        package_weight_kg=payload.package_weight_kg,
+        package_length_cm=payload.package_length_cm,
+        package_width_cm=payload.package_width_cm,
+        package_height_cm=payload.package_height_cm,
+        preferred_courier=clean_text(payload.preferred_courier),
+        shipping_service=clean_text(payload.shipping_service),
         recipient_name=payload.recipient_name.strip(),
         recipient_company=clean_text(payload.recipient_company),
         recipient_phone=clean_text(payload.recipient_phone),
@@ -657,19 +1060,319 @@ def create_order_for_client(
     )
     db.add(order)
     db.flush()
-    for item in payload.items:
-        product = product_by_id[item.product_id]
-        product.reserved_quantity = int(product.reserved_quantity or 0) + item.quantity
-        db.add(
-            ServiceTakerOrderItem(
-                order_id=order.id,
-                product_id=item.product_id,
-                quantity=item.quantity,
+    if request_type == "stock":
+        for item in payload.items:
+            product = product_by_id[item.product_id]
+            product.reserved_quantity = int(product.reserved_quantity or 0) + item.quantity
+            db.add(
+                ServiceTakerOrderItem(
+                    order_id=order.id,
+                    product_id=item.product_id,
+                    quantity=item.quantity,
+                )
             )
-        )
     db.commit()
     db.refresh(order)
     return order
+
+def create_manufacturing_for_client(
+    db: Session,
+    client: ServiceTaker,
+    payload: ServiceTakerManufacturingRequestCreate,
+    user_id: int | None = None,
+) -> ServiceTakerManufacturingOrder:
+    product = None
+    if payload.product_id:
+        product = (
+            db.query(ServiceTakerProduct)
+            .filter(
+                ServiceTakerProduct.id == payload.product_id,
+                ServiceTakerProduct.service_taker_id == client.id,
+                ServiceTakerProduct.is_active == True,
+            )
+            .one_or_none()
+        )
+        if not product:
+            raise HTTPException(
+                status_code=400,
+                detail="Choose an active product from this service taker catalog.",
+            )
+    product_name = product.name if product else clean_text(payload.product_name)
+    if not product_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Choose an existing product or add a new product/design name.",
+        )
+    client_reference = clean_text(payload.client_reference) or (product.sku if product else None)
+    order = ServiceTakerManufacturingOrder(
+        tenant_id=client.tenant_id,
+        service_taker_id=client.id,
+        request_no=next_number(
+            db,
+            ServiceTakerManufacturingOrder,
+            "request_no",
+            "ST-MFG",
+        ),
+        client_reference=client_reference,
+        status="Quote requested",
+        product_id=product.id if product else None,
+        product_name=product_name,
+        image_url=product.image_url if product else None,
+        quantity=payload.quantity,
+        steel_type=clean_text(payload.steel_type),
+        tang_type=clean_text(payload.tang_type),
+        blade_thickness_mm=payload.blade_thickness_mm,
+        blade_length_in=payload.blade_length_in,
+        overall_length_in=payload.overall_length_in,
+        handle_material=clean_text(payload.handle_material),
+        sheath_type=clean_text(payload.sheath_type),
+        finish=clean_text(payload.finish),
+        hardness=clean_text(payload.hardness),
+        edge_type=clean_text(payload.edge_type),
+        packaging=clean_text(payload.packaging),
+        target_unit_price=payload.target_unit_price,
+        requested_ready_at=payload.requested_ready_at,
+        notes=clean_text(payload.notes),
+    )
+    db.add(order)
+    db.flush()
+    add_manufacturing_update(
+        db,
+        order,
+        order.status,
+        "Quote request submitted by service taker.",
+        user_id or client.user_id,
+    )
+    db.commit()
+    db.refresh(order)
+    return order
+
+def get_admin_manufacturing_order(
+    db: Session,
+    request_id: int,
+) -> ServiceTakerManufacturingOrder:
+    order = (
+        db.query(ServiceTakerManufacturingOrder)
+        .filter(ServiceTakerManufacturingOrder.id == request_id)
+        .one_or_none()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Manufacturing quote not found.")
+    return order
+
+
+def portal_manufacturing_order(
+    db: Session,
+    client: ServiceTaker,
+    request_id: int,
+) -> ServiceTakerManufacturingOrder:
+    order = (
+        db.query(ServiceTakerManufacturingOrder)
+        .filter(
+            ServiceTakerManufacturingOrder.id == request_id,
+            ServiceTakerManufacturingOrder.service_taker_id == client.id,
+        )
+        .one_or_none()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Manufacturing quote not found.")
+    return order
+
+
+@router.post("/admin/manufacturing-requests", status_code=201)
+def admin_create_manufacturing_request(
+    payload: ServiceTakerManufacturingRequestCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request, db)
+    if not payload.service_taker_id:
+        raise HTTPException(status_code=400, detail="Select a service taker.")
+    client = service_taker_by_id(db, payload.service_taker_id)
+    return manufacturing_order_response(
+        create_manufacturing_for_client(db, client, payload)
+    )
+
+
+@router.patch("/admin/manufacturing-requests/{request_id}")
+def admin_update_manufacturing_request(
+    request_id: int,
+    payload: ServiceTakerManufacturingAdminUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_admin(request, db)
+    order = get_admin_manufacturing_order(db, request_id)
+    if order.status in {"Completed", "Cancelled"} and payload.status not in {"Completed", "Cancelled", None}:
+        raise HTTPException(
+            status_code=409,
+            detail="Completed or cancelled manufacturing orders cannot be reopened here.",
+        )
+
+    fields = payload.model_fields_set
+    original_status = order.status
+    price_changed = False
+    if "quoted_unit_price" in fields:
+        order.quoted_unit_price = float(payload.quoted_unit_price or 0)
+        price_changed = True
+    if "tooling_cost" in fields:
+        order.tooling_cost = float(payload.tooling_cost or 0)
+        price_changed = True
+    if "deposit_required" in fields:
+        order.deposit_required = float(payload.deposit_required or 0)
+        price_changed = True
+    if price_changed:
+        refresh_manufacturing_totals(order)
+    if "estimated_ready_at" in fields:
+        order.estimated_ready_at = payload.estimated_ready_at
+    details_changed = False
+    for field in (
+        "client_reference",
+        "steel_type",
+        "tang_type",
+        "handle_material",
+        "sheath_type",
+        "finish",
+        "hardness",
+        "edge_type",
+        "packaging",
+    ):
+        if field in fields:
+            setattr(order, field, clean_text(getattr(payload, field)))
+            details_changed = True
+    for field in (
+        "blade_thickness_mm",
+        "blade_length_in",
+        "overall_length_in",
+    ):
+        if field in fields:
+            setattr(order, field, getattr(payload, field))
+            details_changed = True
+    if "admin_notes" in fields:
+        order.admin_notes = clean_text(payload.admin_notes)
+    if payload.status:
+        order.status = payload.status
+    elif price_changed and manufacturing_quote_total(order) > 0 and order.status == "Quote requested":
+        order.status = "Quoted"
+
+    set_manufacturing_status_dates(order, order.status)
+    status_changed = order.status != original_status
+    message = clean_text(payload.update_message)
+    if not message and status_changed:
+        message = f"Status changed to {order.status}."
+    elif not message and price_changed:
+        message = "Quote pricing updated."
+    elif not message and details_changed:
+        message = "Manufacturing details updated."
+    if message:
+        add_manufacturing_update(db, order, order.status, message, user.id)
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
+
+
+@router.post("/admin/manufacturing-requests/{request_id}/payments", status_code=201)
+def admin_record_manufacturing_payment(
+    request_id: int,
+    payload: ServiceTakerManufacturingPaymentCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_admin(request, db)
+    order = get_admin_manufacturing_order(db, request_id)
+    if order.status == "Cancelled":
+        raise HTTPException(status_code=409, detail="Cannot record payment on a cancelled order.")
+    payment = ServiceTakerManufacturingPayment(
+        tenant_id=order.tenant_id,
+        service_taker_id=order.service_taker_id,
+        manufacturing_order_id=order.id,
+        amount=round(float(payload.amount or 0), 2),
+        payment_type=clean_text(payload.payment_type) or "Deposit",
+        status="Confirmed",
+        method=clean_text(payload.method),
+        reference=clean_text(payload.reference),
+        note=clean_text(payload.note),
+        paid_at=payload.paid_at or datetime.utcnow(),
+        confirmed_at=datetime.utcnow(),
+        confirmed_by_user_id=user.id,
+    )
+    db.add(payment)
+    db.flush()
+    add_manufacturing_update(
+        db,
+        order,
+        order.status,
+        f"{payment.payment_type} payment recorded: {payment.amount:.2f}.",
+        user.id,
+    )
+    paid_total = manufacturing_paid_total(order)
+    if order.status in {"Quoted", "Deposit pending"} and paid_total >= float(order.deposit_required or 0):
+        order.status = "Confirmed"
+        set_manufacturing_status_dates(order, order.status)
+        add_manufacturing_update(
+            db,
+            order,
+            order.status,
+            "Deposit received. Manufacturing confirmed.",
+            user.id,
+        )
+    elif order.status == "Quoted" and float(order.deposit_required or 0) > paid_total:
+        order.status = "Deposit pending"
+        set_manufacturing_status_dates(order, order.status)
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
+
+
+@router.post("/admin/manufacturing-requests/{request_id}/payments/{payment_id}/confirm")
+def admin_confirm_manufacturing_payment(
+    request_id: int,
+    payment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_admin(request, db)
+    order = get_admin_manufacturing_order(db, request_id)
+    payment = (
+        db.query(ServiceTakerManufacturingPayment)
+        .filter(
+            ServiceTakerManufacturingPayment.id == payment_id,
+            ServiceTakerManufacturingPayment.manufacturing_order_id == order.id,
+        )
+        .one_or_none()
+    )
+    if not payment:
+        raise HTTPException(status_code=404, detail="Manufacturing payment not found.")
+    if manufacturing_payment_status(payment) == "Confirmed":
+        return manufacturing_order_response(order)
+    if manufacturing_payment_status(payment) == "Rejected":
+        raise HTTPException(status_code=409, detail="Rejected payments cannot be confirmed.")
+    payment.status = "Confirmed"
+    payment.confirmed_at = datetime.utcnow()
+    payment.confirmed_by_user_id = user.id
+    add_manufacturing_update(
+        db,
+        order,
+        order.status,
+        f"{payment.payment_type} payment confirmed: {payment.amount:.2f}.",
+        user.id,
+    )
+    if order.status in {"Quoted", "Deposit pending"} and manufacturing_paid_total(order) >= float(order.deposit_required or 0):
+        order.status = "Confirmed"
+        set_manufacturing_status_dates(order, order.status)
+        add_manufacturing_update(
+            db,
+            order,
+            order.status,
+            "Deposit confirmed by company. Manufacturing order is live.",
+            user.id,
+        )
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
 
 
 def release_order_reservations(order: ServiceTakerOrder) -> None:
@@ -753,6 +1456,50 @@ def replace_product_image(product: ServiceTakerProduct, upload: UploadFile) -> N
         (UPLOAD_DIR / os.path.basename(old_url)).unlink(missing_ok=True)
 
 
+def replace_manufacturing_image(order: ServiceTakerManufacturingOrder, upload: UploadFile) -> None:
+    old_url = order.image_url
+    order.image_url = save_product_image(upload)
+    if old_url and old_url.startswith("/static/uploads/service-product-"):
+        (UPLOAD_DIR / os.path.basename(old_url)).unlink(missing_ok=True)
+
+
+def save_payment_proof(upload: UploadFile) -> tuple[str, str]:
+    safe_name = sanitize_upload_filename(upload.filename or 'payment-proof')
+    extension = os.path.splitext(safe_name)[1].lower()
+    if extension not in PAYMENT_PROOF_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail='Upload a PNG, JPG, JPEG, WebP, or PDF payment proof file.',
+        )
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    final_name = f'service-payment-proof-{uuid.uuid4().hex}{extension}'
+    destination = UPLOAD_DIR / final_name
+    total_bytes = 0
+    try:
+        with destination.open('wb') as output:
+            while True:
+                chunk = upload.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_PAYMENT_PROOF_BYTES:
+                    raise HTTPException(status_code=400, detail='Payment proof must be 8 MB or smaller.')
+                output.write(chunk)
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    return f'/static/uploads/{final_name}', safe_name
+
+
+def attach_payment_proof(payment: ServiceTakerManufacturingPayment, upload: UploadFile) -> None:
+    old_url = payment.proof_url
+    proof_url, proof_name = save_payment_proof(upload)
+    payment.proof_url = proof_url
+    payment.proof_name = proof_name
+    payment.proof_uploaded_at = datetime.utcnow()
+    if old_url and old_url.startswith('/static/uploads/service-payment-proof-'):
+        (UPLOAD_DIR / os.path.basename(old_url)).unlink(missing_ok=True)
+
 @router.get("/admin/dashboard")
 def admin_dashboard(request: Request, db: Session = Depends(get_db)):
     require_admin(request, db)
@@ -770,6 +1517,8 @@ def create_client(
     db: Session = Depends(get_db),
 ):
     require_admin(request, db)
+    if not payload.fulfillment_enabled and not payload.manufacturing_enabled:
+        raise HTTPException(status_code=400, detail="Select at least one portal service.")
     username = payload.username.strip()
     ensure_username_available(db, username)
     user = User(
@@ -780,13 +1529,10 @@ def create_client(
         phone=clean_text(payload.phone),
         email=clean_text(payload.email),
         allowed_pages=json.dumps(
-            [
-                "Service Dashboard",
-                "Service Products",
-                "Service Inbound",
-                "Service Shipments",
-                "Service Charges",
-            ]
+            service_taker_allowed_pages(
+                payload.fulfillment_enabled,
+                payload.manufacturing_enabled,
+            )
         ),
         customer_privacy_settings=json.dumps({}),
         session_expiry_minutes=0,
@@ -831,6 +1577,23 @@ def update_client(
         user.username = username
     if "pin" in fields and payload.pin:
         user.pin = hash_pin(payload.pin)
+    if "fulfillment_enabled" in fields or "manufacturing_enabled" in fields:
+        current_access = service_taker_service_access(user)
+        fulfillment_enabled = (
+            payload.fulfillment_enabled
+            if "fulfillment_enabled" in fields
+            else current_access["fulfillment_enabled"]
+        )
+        manufacturing_enabled = (
+            payload.manufacturing_enabled
+            if "manufacturing_enabled" in fields
+            else current_access["manufacturing_enabled"]
+        )
+        if not fulfillment_enabled and not manufacturing_enabled:
+            raise HTTPException(status_code=400, detail="Select at least one portal service.")
+        user.allowed_pages = json.dumps(
+            service_taker_allowed_pages(fulfillment_enabled, manufacturing_enabled)
+        )
     for field in (
         "company_name",
         "contact_name",
@@ -863,6 +1626,157 @@ def update_client(
     db.refresh(client)
     return client_response(db, client)
 
+
+@router.post("/admin/clients/{client_id}/delete")
+@router.delete("/admin/clients/{client_id}")
+def delete_client(
+    client_id: int,
+    request: Request,
+    confirmation: str = "",
+    db: Session = Depends(get_db),
+):
+    require_admin(request, db)
+    client = service_taker_by_id(db, client_id)
+    if confirmation.strip() != client.company_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Type the exact service taker company name to delete this account.",
+        )
+
+    linked_user = db.query(User).filter(User.id == client.user_id).one_or_none()
+    if linked_user and linked_user.role != "service_taker":
+        raise HTTPException(
+            status_code=409,
+            detail="Linked user is not a service taker account. Delete was stopped for safety.",
+        )
+
+    product_ids = [
+        row[0]
+        for row in db.query(ServiceTakerProduct.id)
+        .filter(ServiceTakerProduct.service_taker_id == client.id)
+        .all()
+    ]
+    inbound_ids = [
+        row[0]
+        for row in db.query(ServiceTakerInbound.id)
+        .filter(ServiceTakerInbound.service_taker_id == client.id)
+        .all()
+    ]
+    order_ids = [
+        row[0]
+        for row in db.query(ServiceTakerOrder.id)
+        .filter(ServiceTakerOrder.service_taker_id == client.id)
+        .all()
+    ]
+    manufacturing_ids = [
+        row[0]
+        for row in db.query(ServiceTakerManufacturingOrder.id)
+        .filter(ServiceTakerManufacturingOrder.service_taker_id == client.id)
+        .all()
+    ]
+
+    if manufacturing_ids:
+        db.query(ServiceTakerManufacturingUpdate).filter(
+            ServiceTakerManufacturingUpdate.manufacturing_order_id.in_(manufacturing_ids)
+        ).delete(synchronize_session=False)
+        db.query(ServiceTakerManufacturingPayment).filter(
+            ServiceTakerManufacturingPayment.manufacturing_order_id.in_(manufacturing_ids)
+        ).delete(synchronize_session=False)
+        db.query(ServiceTakerManufacturingOrder).filter(
+            ServiceTakerManufacturingOrder.id.in_(manufacturing_ids)
+        ).delete(synchronize_session=False)
+    if order_ids:
+        db.query(ServiceTakerOrderItem).filter(
+            ServiceTakerOrderItem.order_id.in_(order_ids)
+        ).delete(synchronize_session=False)
+        db.query(ServiceTakerOrder).filter(ServiceTakerOrder.id.in_(order_ids)).delete(
+            synchronize_session=False
+        )
+    if inbound_ids:
+        db.query(ServiceTakerInboundItem).filter(
+            ServiceTakerInboundItem.inbound_id.in_(inbound_ids)
+        ).delete(synchronize_session=False)
+        db.query(ServiceTakerInbound).filter(ServiceTakerInbound.id.in_(inbound_ids)).delete(
+            synchronize_session=False
+        )
+    db.query(ServiceTakerInventoryTransaction).filter(
+        ServiceTakerInventoryTransaction.service_taker_id == client.id
+    ).delete(synchronize_session=False)
+    if product_ids:
+        db.query(ServiceTakerProduct).filter(ServiceTakerProduct.id.in_(product_ids)).delete(
+            synchronize_session=False
+        )
+
+    if linked_user:
+        user_id = linked_user.id
+        db.query(ServiceTakerManufacturingUpdate).filter(
+            ServiceTakerManufacturingUpdate.created_by_user_id == user_id
+        ).update({ServiceTakerManufacturingUpdate.created_by_user_id: None}, synchronize_session=False)
+        db.query(ServiceTakerManufacturingPayment).filter(
+            ServiceTakerManufacturingPayment.confirmed_by_user_id == user_id
+        ).update({ServiceTakerManufacturingPayment.confirmed_by_user_id: None}, synchronize_session=False)
+        db.query(WebsiteVisitorMessage).filter(
+            WebsiteVisitorMessage.sender_user_id == user_id
+        ).update({WebsiteVisitorMessage.sender_user_id: None}, synchronize_session=False)
+        db.query(PublicAccessRequest).filter(
+            PublicAccessRequest.approved_user_id == user_id
+        ).update({PublicAccessRequest.approved_user_id: None}, synchronize_session=False)
+        db.query(PublicAccessRequest).filter(
+            PublicAccessRequest.reviewed_by_user_id == user_id
+        ).update({PublicAccessRequest.reviewed_by_user_id: None}, synchronize_session=False)
+        db.query(ActivityLog).filter(ActivityLog.actor_user_id == user_id).delete(
+            synchronize_session=False
+        )
+        db.query(UserRoleRequest).filter(UserRoleRequest.user_id == user_id).delete(
+            synchronize_session=False
+        )
+        db.query(InternalMessage).filter(
+            or_(
+                InternalMessage.sender_user_id == user_id,
+                InternalMessage.recipient_user_id == user_id,
+            )
+        ).delete(synchronize_session=False)
+        db.query(InternalMessageContactRequest).filter(
+            or_(
+                InternalMessageContactRequest.requester_user_id == user_id,
+                InternalMessageContactRequest.recipient_user_id == user_id,
+            )
+        ).delete(synchronize_session=False)
+        call_ids = [
+            row[0]
+            for row in db.query(InternalCall.id)
+            .filter(
+                or_(
+                    InternalCall.caller_user_id == user_id,
+                    InternalCall.recipient_user_id == user_id,
+                )
+            )
+            .all()
+        ]
+        db.query(InternalCall).filter(InternalCall.ended_by_user_id == user_id).update(
+            {InternalCall.ended_by_user_id: None},
+            synchronize_session=False,
+        )
+        if call_ids:
+            db.query(InternalCallSignal).filter(
+                or_(
+                    InternalCallSignal.call_id.in_(call_ids),
+                    InternalCallSignal.sender_user_id == user_id,
+                )
+            ).delete(synchronize_session=False)
+            db.query(InternalCall).filter(InternalCall.id.in_(call_ids)).delete(
+                synchronize_session=False
+            )
+        else:
+            db.query(InternalCallSignal).filter(
+                InternalCallSignal.sender_user_id == user_id
+            ).delete(synchronize_session=False)
+
+    db.delete(client)
+    if linked_user:
+        db.delete(linked_user)
+    db.commit()
+    return {"status": "deleted", "service_taker_id": client_id}
 
 @router.post("/admin/products", status_code=201)
 def admin_create_product(
@@ -1102,6 +2016,26 @@ def admin_upload_label(
     return order_response(order)
 
 
+@router.post("/admin/orders/{order_id}/cancel")
+def admin_cancel_order(
+    order_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request, db)
+    order = get_admin_order(db, order_id)
+    if order.status == "Shipped":
+        raise HTTPException(status_code=409, detail="A shipped request cannot be cancelled.")
+    if order.status == "Cancelled":
+        return order_response(order)
+    release_order_reservations(order)
+    order.status = "Cancelled"
+    clear_order_costs(order)
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return order_response(order)
+
 @router.post("/admin/orders/{order_id}/ship")
 def ship_order(
     order_id: int,
@@ -1283,6 +2217,546 @@ def portal_cancel_inbound(
     return inbound_response(inbound)
 
 
+
+
+@router.post("/portal/manufacturing-requests", status_code=201)
+def portal_create_manufacturing_request(
+    payload: ServiceTakerManufacturingRequestCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    return manufacturing_order_response(
+        create_manufacturing_for_client(db, client, payload, getattr(request.state, "user_id", None))
+    )
+
+
+@router.post("/portal/manufacturing-requests/{request_id}/confirm")
+def portal_confirm_manufacturing_request(
+    request_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    order = portal_manufacturing_order(db, client, request_id)
+    if order.status in {"Cancelled", "Rejected"}:
+        raise HTTPException(status_code=409, detail="This quote request is no longer active.")
+    if order.status in {"Confirmed", "In production", "Quality check", "Ready", "Completed"}:
+        return manufacturing_order_response(order)
+    if manufacturing_quote_total(order) <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Hisbenew must send a quote before you can confirm manufacturing.",
+        )
+    paid_total = manufacturing_paid_total(order)
+    order.status = (
+        "Confirmed"
+        if paid_total >= float(order.deposit_required or 0)
+        else "Deposit pending"
+    )
+    set_manufacturing_status_dates(order, order.status)
+    add_manufacturing_update(
+        db,
+        order,
+        order.status,
+        "Quote confirmed by service taker.",
+        getattr(request.state, "user_id", None),
+    )
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
+
+
+@router.post("/portal/manufacturing-requests/{request_id}/reject")
+def portal_reject_manufacturing_request(
+    request_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    order = portal_manufacturing_order(db, client, request_id)
+    if order.status in {"Confirmed", "In production", "Quality check", "Ready", "Completed"}:
+        raise HTTPException(status_code=409, detail="Live manufacturing orders cannot be rejected.")
+    if order.status in {"Cancelled", "Rejected"}:
+        return manufacturing_order_response(order)
+    order.status = "Rejected"
+    order.last_update = "Quote rejected by service taker."
+    add_manufacturing_update(
+        db,
+        order,
+        order.status,
+        "Quote rejected by service taker.",
+        getattr(request.state, "user_id", None),
+    )
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
+
+@router.post("/admin/manufacturing-requests/{request_id}/image")
+def admin_upload_manufacturing_image(
+    request_id: int,
+    request: Request,
+    image_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    require_admin(request, db)
+    order = get_admin_manufacturing_order(db, request_id)
+    replace_manufacturing_image(order, image_file)
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
+
+
+@router.post("/portal/manufacturing-requests/{request_id}/image")
+def portal_upload_manufacturing_image(
+    request_id: int,
+    request: Request,
+    image_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    order = portal_manufacturing_order(db, client, request_id)
+    if order.status not in {"Quote requested", "Quoted"}:
+        raise HTTPException(status_code=409, detail="Images can only be changed before deposit confirmation.")
+    replace_manufacturing_image(order, image_file)
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
+
+
+@router.post('/portal/manufacturing-requests/{request_id}/deposit')
+def portal_request_manufacturing_deposit(
+    request_id: int,
+    request: Request,
+    amount: float | None = Form(None),
+    proof_file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    order = portal_manufacturing_order(db, client, request_id)
+    if order.status in {'Cancelled', 'Rejected'}:
+        raise HTTPException(status_code=409, detail='This quote request is no longer active.')
+    if order.status in {'Confirmed', 'In production', 'Quality check', 'Ready', 'Completed'}:
+        return manufacturing_order_response(order)
+    if manufacturing_quote_total(order) <= 0:
+        raise HTTPException(
+            status_code=409,
+            detail='Hisbenew must send a quote before deposit can be marked.',
+        )
+    existing_pending = next(
+        (
+            payment
+            for payment in order.payments
+            if manufacturing_payment_status(payment) == 'Pending confirmation'
+            and (payment.payment_type or 'Deposit') == 'Deposit'
+        ),
+        None,
+    )
+    if not existing_pending:
+        deposit_due = manufacturing_deposit_balance(order)
+        deposit_amount = round(float(amount if amount is not None else deposit_due), 2)
+        if deposit_amount <= 0:
+            if deposit_due <= 0:
+                order.status = 'Confirmed'
+                set_manufacturing_status_dates(order, order.status)
+                add_manufacturing_update(
+                    db,
+                    order,
+                    order.status,
+                    'Client proceeded to order. No deposit balance was required.',
+                    getattr(request.state, 'user_id', None),
+                )
+            else:
+                raise HTTPException(status_code=400, detail='Deposit amount must be greater than zero.')
+        else:
+            payment = ServiceTakerManufacturingPayment(
+                tenant_id=order.tenant_id,
+                service_taker_id=order.service_taker_id,
+                manufacturing_order_id=order.id,
+                amount=deposit_amount,
+                payment_type='Deposit',
+                status='Pending confirmation',
+                method='Client portal',
+                note=f'Client clicked Proceed to order and marked deposit {deposit_amount:.2f} for company confirmation.',
+                paid_at=datetime.utcnow(),
+            )
+            if proof_file:
+                attach_payment_proof(payment, proof_file)
+            db.add(payment)
+            db.flush()
+            order.status = 'Deposit pending'
+            update_message = 'Deposit proof uploaded by client and waiting for company confirmation.' if proof_file else 'Deposit marked by client and waiting for company confirmation.'
+            add_manufacturing_update(
+                db,
+                order,
+                order.status,
+                update_message,
+                getattr(request.state, 'user_id', None),
+            )
+    else:
+        if proof_file:
+            attach_payment_proof(existing_pending, proof_file)
+            add_manufacturing_update(
+                db,
+                order,
+                order.status,
+                'Deposit proof updated by client.',
+                getattr(request.state, 'user_id', None),
+            )
+        order.status = 'Deposit pending'
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
+
+@router.post("/portal/manufacturing-requests/{request_id}/balance")
+def portal_request_manufacturing_balance_payment(
+    request_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    order = portal_manufacturing_order(db, client, request_id)
+    if order.status in {"Cancelled", "Rejected"}:
+        raise HTTPException(status_code=409, detail="This quote request is no longer active.")
+    if order.status not in {"Ready", "Completed"}:
+        raise HTTPException(status_code=409, detail="Final payment becomes available when the order is ready.")
+    balance_due = manufacturing_balance_due(order)
+    if balance_due <= 0:
+        return manufacturing_order_response(order)
+    existing_pending = next(
+        (
+            payment
+            for payment in order.payments
+            if manufacturing_payment_status(payment) == "Pending confirmation"
+            and (payment.payment_type or "Balance") == "Balance"
+        ),
+        None,
+    )
+    if not existing_pending:
+        payment = ServiceTakerManufacturingPayment(
+            tenant_id=order.tenant_id,
+            service_taker_id=order.service_taker_id,
+            manufacturing_order_id=order.id,
+            amount=balance_due,
+            payment_type="Balance",
+            status="Pending confirmation",
+            method="Client portal",
+            note="Client marked final balance for company confirmation.",
+            paid_at=datetime.utcnow(),
+        )
+        db.add(payment)
+        add_manufacturing_update(
+            db,
+            order,
+            order.status,
+            "Client marked final balance payment for company confirmation.",
+            getattr(request.state, "user_id", None),
+        )
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
+
+
+@router.post('/portal/payments', status_code=201)
+@router.post('/portal/local-orders/payments', status_code=201)
+def portal_create_general_payment(
+    request: Request,
+    amount: float = Form(...),
+    payment_type: str = Form("Payment"),
+    note: str | None = Form(None),
+    manufacturing_order_id: int | None = Form(None),
+    proof_file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    payment_amount = round(float(amount or 0), 2)
+    if payment_amount <= 0:
+        raise HTTPException(status_code=400, detail="Payment amount must be greater than zero.")
+    
+    order = None
+    if manufacturing_order_id:
+        order = db.query(ServiceTakerManufacturingOrder).filter(
+            ServiceTakerManufacturingOrder.id == manufacturing_order_id,
+            ServiceTakerManufacturingOrder.service_taker_id == client.id,
+        ).one_or_none()
+    
+    if not order:
+        # Find oldest active order with balance due
+        orders_with_due = [
+            o for o in db.query(ServiceTakerManufacturingOrder)
+            .filter(
+                ServiceTakerManufacturingOrder.service_taker_id == client.id,
+                ServiceTakerManufacturingOrder.status.notin_(["Cancelled", "Rejected"]),
+            )
+            .order_by(ServiceTakerManufacturingOrder.created_at.asc())
+            .all()
+            if manufacturing_balance_due(o) > 0
+        ]
+        if orders_with_due:
+            order = orders_with_due[0]
+        else:
+            order = (
+                db.query(ServiceTakerManufacturingOrder)
+                .filter(
+                    ServiceTakerManufacturingOrder.service_taker_id == client.id,
+                    ServiceTakerManufacturingOrder.status.notin_(["Cancelled", "Rejected"]),
+                )
+                .order_by(ServiceTakerManufacturingOrder.created_at.desc())
+                .first()
+            )
+    
+    if not order:
+        order = (
+            db.query(ServiceTakerManufacturingOrder)
+            .filter(ServiceTakerManufacturingOrder.service_taker_id == client.id)
+            .order_by(ServiceTakerManufacturingOrder.created_at.desc())
+            .first()
+        )
+
+    if not order:
+        raise HTTPException(status_code=400, detail="Please submit a quote request first before recording payment.")
+
+    cleaned_payment_type = clean_text(payment_type) or "Payment"
+    payment = ServiceTakerManufacturingPayment(
+        tenant_id=order.tenant_id,
+        service_taker_id=client.id,
+        manufacturing_order_id=order.id,
+        amount=payment_amount,
+        payment_type=cleaned_payment_type,
+        status="Pending confirmation",
+        method="Client portal",
+        note=clean_text(note) or f"Client uploaded {cleaned_payment_type.lower()} payment screenshot from portal.",
+        paid_at=datetime.utcnow(),
+    )
+    if proof_file:
+        attach_payment_proof(payment, proof_file)
+    db.add(payment)
+    db.flush()
+    if cleaned_payment_type.lower() == "deposit" and order.status in {"Quoted", "Deposit pending"}:
+        order.status = "Deposit pending"
+        set_manufacturing_status_dates(order, order.status)
+    add_manufacturing_update(
+        db,
+        order,
+        order.status,
+        f"{cleaned_payment_type} payment {payment_amount:.2f} submitted by client for company confirmation.",
+        getattr(request.state, 'user_id', None),
+    )
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(payment)
+    return manufacturing_payment_response(payment)
+
+@router.post('/portal/manufacturing-requests/{request_id}/payments', status_code=201)
+def portal_create_manufacturing_payment_request(
+    request_id: int,
+    request: Request,
+    amount: float = Form(...),
+    payment_type: str = Form("Deposit"),
+    note: str | None = Form(None),
+    proof_file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    order = portal_manufacturing_order(db, client, request_id)
+    if order.status in {"Cancelled", "Rejected"}:
+        raise HTTPException(status_code=409, detail="This local order is closed.")
+    if manufacturing_quote_total(order) <= 0:
+        raise HTTPException(status_code=409, detail="Hisbenew must send a quote before payment can be submitted.")
+    payment_amount = round(float(amount or 0), 2)
+    if payment_amount <= 0:
+        raise HTTPException(status_code=400, detail="Payment amount must be greater than zero.")
+    cleaned_payment_type = clean_text(payment_type) or "Deposit"
+    payment = ServiceTakerManufacturingPayment(
+        tenant_id=order.tenant_id,
+        service_taker_id=order.service_taker_id,
+        manufacturing_order_id=order.id,
+        amount=payment_amount,
+        payment_type=cleaned_payment_type,
+        status="Pending confirmation",
+        method="Client portal",
+        note=clean_text(note) or f"Client uploaded {cleaned_payment_type.lower()} payment screenshot from portal.",
+        paid_at=datetime.utcnow(),
+    )
+    if proof_file:
+        attach_payment_proof(payment, proof_file)
+    db.add(payment)
+    db.flush()
+    if cleaned_payment_type.lower() == "deposit" and order.status in {"Quoted", "Deposit pending"}:
+        order.status = "Deposit pending"
+        set_manufacturing_status_dates(order, order.status)
+    add_manufacturing_update(
+        db,
+        order,
+        order.status,
+        f"{cleaned_payment_type} payment {payment_amount:.2f} submitted by client for company confirmation.",
+        getattr(request.state, 'user_id', None),
+    )
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
+
+@router.post('/portal/manufacturing-requests/{request_id}/payments/{payment_id}/proof')
+def portal_upload_manufacturing_payment_proof(
+    request_id: int,
+    payment_id: int,
+    request: Request,
+    proof_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    order = portal_manufacturing_order(db, client, request_id)
+    payment = (
+        db.query(ServiceTakerManufacturingPayment)
+        .filter(
+            ServiceTakerManufacturingPayment.id == payment_id,
+            ServiceTakerManufacturingPayment.manufacturing_order_id == order.id,
+            ServiceTakerManufacturingPayment.service_taker_id == client.id,
+        )
+        .one_or_none()
+    )
+    if not payment:
+        raise HTTPException(status_code=404, detail='Manufacturing payment not found.')
+    if manufacturing_payment_status(payment) != 'Pending confirmation':
+        raise HTTPException(status_code=409, detail='Proof can only be updated before company confirmation.')
+    attach_payment_proof(payment, proof_file)
+    add_manufacturing_update(
+        db,
+        order,
+        order.status,
+        f'{payment.payment_type} proof updated by client.',
+        getattr(request.state, 'user_id', None),
+    )
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
+
+@router.post("/admin/local-orders", status_code=201)
+def admin_create_local_order_request(
+    payload: ServiceTakerManufacturingRequestCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return admin_create_manufacturing_request(payload, request, db)
+
+
+@router.patch("/admin/local-orders/{request_id}")
+def admin_update_local_order_request(
+    request_id: int,
+    payload: ServiceTakerManufacturingAdminUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return admin_update_manufacturing_request(request_id, payload, request, db)
+
+
+@router.post("/admin/local-orders/{request_id}/payments", status_code=201)
+def admin_record_local_order_payment(
+    request_id: int,
+    payload: ServiceTakerManufacturingPaymentCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return admin_record_manufacturing_payment(request_id, payload, request, db)
+
+
+@router.post("/admin/local-orders/{request_id}/payments/{payment_id}/confirm")
+def admin_confirm_local_order_payment(
+    request_id: int,
+    payment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return admin_confirm_manufacturing_payment(request_id, payment_id, request, db)
+
+
+@router.post("/admin/local-orders/{request_id}/image")
+def admin_upload_local_order_image(
+    request_id: int,
+    request: Request,
+    image_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    return admin_upload_manufacturing_image(request_id, request, image_file, db)
+
+
+@router.post("/portal/local-orders", status_code=201)
+def portal_create_local_order_request(
+    payload: ServiceTakerManufacturingRequestCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return portal_create_manufacturing_request(payload, request, db)
+
+
+@router.post("/portal/local-orders/{request_id}/image")
+def portal_upload_local_order_image(
+    request_id: int,
+    request: Request,
+    image_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    return portal_upload_manufacturing_image(request_id, request, image_file, db)
+
+
+@router.post("/portal/local-orders/{request_id}/reject")
+def portal_reject_local_order_request(
+    request_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return portal_reject_manufacturing_request(request_id, request, db)
+
+@router.post("/portal/local-orders/{request_id}/balance")
+def portal_request_local_order_balance_payment(
+    request_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    return portal_request_manufacturing_balance_payment(request_id, request, db)
+
+@router.post('/portal/local-orders/{request_id}/payments', status_code=201)
+def portal_create_local_order_payment_request(
+    request_id: int,
+    request: Request,
+    amount: float = Form(...),
+    payment_type: str = Form("Deposit"),
+    note: str | None = Form(None),
+    proof_file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
+    return portal_create_manufacturing_payment_request(request_id, request, amount, payment_type, note, proof_file, db)
+
+@router.post('/portal/local-orders/{request_id}/payments/{payment_id}/proof')
+def portal_upload_local_order_payment_proof(
+    request_id: int,
+    payment_id: int,
+    request: Request,
+    proof_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    return portal_upload_manufacturing_payment_proof(request_id, payment_id, request, proof_file, db)
+
+
+@router.post('/portal/local-orders/{request_id}/deposit')
+def portal_request_local_order_deposit(
+    request_id: int,
+    request: Request,
+    amount: float | None = Form(None),
+    proof_file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
+    return portal_request_manufacturing_deposit(request_id, request, amount, proof_file, db)
+
+
 @router.post("/portal/orders", status_code=201)
 def portal_create_order(
     payload: ServiceTakerOrderCreate,
@@ -1356,3 +2830,6 @@ def portal_cancel_order(
     db.commit()
     db.refresh(order)
     return order_response(order)
+
+
+

@@ -695,3 +695,272 @@
     text-align: center;
   }
 }
+
+/* Messenger request and attachment additions */
+.erp-messenger-request-box {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid #edf1f5;
+  background: #fbfdff;
+}
+
+.erp-messenger-request-box > strong {
+  color: #17202a;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.erp-messenger-request-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.erp-messenger-request-box input,
+.erp-messenger-request-box textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #d5dde6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17202a;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.erp-messenger-request-box input {
+  height: 36px;
+  padding: 0 10px;
+}
+
+.erp-messenger-request-box textarea {
+  padding: 9px 10px;
+  resize: vertical;
+}
+
+.erp-messenger-request-row button,
+.erp-messenger-search-results button,
+.erp-messenger-request-list button,
+.erp-messages-pending-attachment button {
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.erp-messenger-request-row button {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid #164e63;
+  background: #164e63;
+  color: #ffffff;
+}
+
+.erp-messenger-search-results,
+.erp-messenger-request-list {
+  display: grid;
+  gap: 7px;
+}
+
+.erp-messenger-search-results button {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px;
+  border: 1px solid #dbe6ef;
+  background: #ffffff;
+  color: #17202a;
+  text-align: left;
+}
+
+.erp-messenger-search-results button span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eaf7f4;
+  color: #155e59;
+  font-size: 10px;
+}
+
+.erp-messenger-search-results button strong,
+.erp-messenger-search-results button small,
+.erp-messenger-request-list strong,
+.erp-messenger-request-list span,
+.erp-messenger-request-list p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.erp-messenger-search-results button small {
+  color: #64748b;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.erp-messenger-request-list {
+  flex: 0 0 auto;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border-bottom: 1px solid #edf1f5;
+  background: #fffaf0;
+}
+
+.erp-messenger-request-list article {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid #f0d9a9;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.erp-messenger-request-list strong {
+  display: block;
+  color: #17202a;
+  font-size: 12px;
+}
+
+.erp-messenger-request-list span,
+.erp-messenger-request-list p {
+  display: block;
+  margin: 2px 0 0;
+  color: #805c16;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.erp-messenger-request-list article > div:last-child {
+  display: flex;
+  gap: 6px;
+}
+
+.erp-messenger-request-list button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid #d4ad65;
+  background: #fff9ec;
+  color: #6f4d16;
+}
+
+.erp-message-attachment {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  color: inherit;
+  text-decoration: none;
+}
+
+.erp-message-bubble.is-theirs .erp-message-attachment {
+  background: #f1f5f9;
+  color: #17202a;
+}
+
+.erp-message-attachment.is-image {
+  grid-template-columns: 88px minmax(0, 1fr);
+}
+
+.erp-message-attachment img {
+  width: 88px;
+  height: 64px;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.erp-message-attachment span,
+.erp-messages-pending-attachment span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.erp-message-attachment strong,
+.erp-messages-pending-attachment strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.erp-message-attachment small,
+.erp-messages-pending-attachment small {
+  color: currentColor;
+  font-size: 10px;
+  opacity: 0.72;
+}
+
+.erp-messages-compose-main {
+  flex: 1 1 0%;
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.erp-messages-compose-main textarea {
+  width: 100%;
+}
+
+.erp-messages-attach-button {
+  width: 42px;
+  min-width: 42px !important;
+  padding: 0 !important;
+  border-color: #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #164e63 !important;
+}
+
+.erp-messages-pending-attachment {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #dbe6ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #17202a;
+}
+
+.erp-messages-pending-attachment button {
+  min-width: 0 !important;
+  min-height: 30px !important;
+  padding: 0 9px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #475569 !important;
+}
+
+.erp-messenger-request-box button:disabled,
+.erp-messenger-search-results button:disabled,
+.erp-messenger-request-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 560px) {
+  .erp-messenger-request-row,
+  .erp-messages-compose {
+    grid-template-columns: 1fr;
+  }
+
+  .erp-messages-compose {
+    display: grid;
+  }
+
+  .erp-messages-attach-button,
+  .erp-messages-compose > button[type="submit"] {
+    width: 100% !important;
+  }
+}

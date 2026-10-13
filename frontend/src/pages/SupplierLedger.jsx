@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { formatUtcLocal, parseUtcLocal } from "../utils/dateUtils";
+import { normalizeAppPath } from "../utils/routeUtils";
 import "./SupplierLedger.css";
 
 const formatMoney = (value) =>
@@ -12,7 +13,7 @@ const formatMoney = (value) =>
 const formatExcelNumber = (value) => Number(value || 0).toFixed(2);
 
 const getSupplierLedgerIdFromPath = () => {
-  const match = window.location.pathname.match(
+  const match = normalizeAppPath(window.location.pathname).match(
     /^\/portal\/suppliers\/(\d+)\/ledger\/?$/
   );
   return match ? Number(match[1]) : null;

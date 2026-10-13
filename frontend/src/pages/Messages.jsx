@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import api from "../api/api";
+import api, { getStaticUrl } from "../api/api";
 import { subscribeRealtime } from "../api/realtime";
 import { useInternalCall } from "../components/InternalCallContext";
 import { formatUtcLocal } from "../utils/dateUtils";
@@ -54,18 +54,57 @@ function BackIcon() {
   );
 }
 
+function PaperclipIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+      <path
+        d="m21.4 11.6-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.3 9.2a2 2 0 1 1-2.8-2.8l8.6-8.6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+const personInitials = (person) =>
+  String(person?.name || person?.username || "U")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+
+const formatFileSize = (value) => {
+  const size = Number(value || 0);
+  if (!size) return "";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 function Messages() {
   const [people, setPeople] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [conversation, setConversation] = useState([]);
   const [draft, setDraft] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [contactQuery, setContactQuery] = useState("");
+  const [requestNote, setRequestNote] = useState("");
+  const [contactResults, setContactResults] = useState([]);
+  const [contactRequests, setContactRequests] = useState([]);
+  const [attachment, setAttachment] = useState(null);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [sending, setSending] = useState(false);
+  const [requestBusy, setRequestBusy] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [error, setError] = useState("");
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const threadBodyRef = useRef(null);
+  const fileInputRef = useRef(null);
   const {
     isCallBusy,
     isVideoCallingEnabled,
@@ -76,6 +115,21 @@ function Messages() {
   const selectedUser = useMemo(
     () => people.find((person) => person.id === selectedUserId) || null,
     [people, selectedUserId]
+  );
+
+  const unreadTotal = useMemo(
+    () => people.reduce((total, person) => total + Number(person.unread_count || 0), 0),
+    [people]
+  );
+
+  const incomingRequests = useMemo(
+    () => contactRequests.filter((item) => item.direction === "incoming" && item.status === "pending"),
+    [contactRequests]
+  );
+
+  const pendingRequests = useMemo(
+    () => contactRequests.filter((item) => item.status === "pending"),
+    [contactRequests]
   );
 
   const filteredPeople = useMemo(() => {
@@ -98,20 +152,28 @@ function Messages() {
     };
   }, []);
 
+  const loadRequests = useCallback(async () => {
+    try {
+      const response = await api.get("/internal-message-contact-requests");
+      setContactRequests(Array.isArray(response.data) ? response.data : []);
+    } catch (loadError) {
+      console.warn("Messenger requests loading warning:", loadError);
+    }
+  }, []);
+
   const loadPeople = useCallback(async () => {
     try {
       const response = await api.get("/internal-message-users");
       const nextPeople = Array.isArray(response.data) ? response.data : [];
       setPeople(nextPeople);
       setSelectedUserId((currentId) => {
-        if (currentId && nextPeople.some((person) => person.id === currentId)) {
-          return currentId;
-        }
+        if (currentId && nextPeople.some((person) => person.id === currentId)) return currentId;
         return nextPeople[0]?.id || null;
       });
+      setError("");
     } catch (loadError) {
-      console.error("Message users loading error:", loadError);
-      setError("Unable to load ERP users.");
+      console.error("Messenger users loading error:", loadError);
+      setError("Unable to load Messenger contacts.");
     } finally {
       setLoadingPeople(false);
     }
@@ -147,19 +209,43 @@ function Messages() {
   );
 
   useEffect(() => {
-    const initialLoadId = window.setTimeout(loadPeople, 0);
-    const intervalId = window.setInterval(loadPeople, 60000);
+    const initialLoadId = window.setTimeout(() => {
+      loadPeople();
+      loadRequests();
+    }, 0);
+    const intervalId = window.setInterval(() => {
+      loadPeople();
+      loadRequests();
+    }, 60000);
     return () => {
       window.clearTimeout(initialLoadId);
       window.clearInterval(intervalId);
     };
-  }, [loadPeople]);
+  }, [loadPeople, loadRequests]);
+
+  useEffect(() => {
+    const query = contactQuery.trim();
+    if (query.length < 2) {
+      setContactResults([]);
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const response = await api.get("/internal-message-contact-search", {
+          params: { query },
+        });
+        setContactResults(Array.isArray(response.data) ? response.data : []);
+      } catch (searchError) {
+        console.warn("Messenger contact search warning:", searchError);
+        setContactResults([]);
+      }
+    }, 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [contactQuery]);
 
   useEffect(() => {
     const initialLoadId = window.setTimeout(loadConversation, 0);
-    if (!selectedUserId) {
-      return () => window.clearTimeout(initialLoadId);
-    }
+    if (!selectedUserId) return () => window.clearTimeout(initialLoadId);
     const intervalId = window.setInterval(
       () => loadConversation({ quiet: true }),
       60000
@@ -195,10 +281,69 @@ function Messages() {
     return () => window.cancelAnimationFrame(animationFrame);
   }, [conversation.length, loadingConversation, selectedUserId]);
 
+  const sendContactRequest = async (event, target = contactQuery) => {
+    if (event?.preventDefault) event.preventDefault();
+    const recipient = String(target || "").trim();
+    if (!recipient || requestBusy) return;
+    setRequestBusy(true);
+    setError("");
+    try {
+      await api.post("/internal-message-contact-requests", {
+        recipient,
+        message: requestNote.trim() || null,
+      });
+      setContactQuery("");
+      setRequestNote("");
+      setContactResults([]);
+      await loadRequests();
+      await loadPeople();
+    } catch (requestError) {
+      console.error("Contact request error:", requestError);
+      setError(requestError.response?.data?.detail || "Contact request could not be sent.");
+    } finally {
+      setRequestBusy(false);
+    }
+  };
+
+  const reviewContactRequest = async (requestId, status) => {
+    if (requestBusy) return;
+    setRequestBusy(true);
+    setError("");
+    try {
+      await api.patch(`/internal-message-contact-requests/${requestId}`, { status });
+      await loadRequests();
+      await loadPeople();
+    } catch (reviewError) {
+      console.error("Contact request review error:", reviewError);
+      setError(reviewError.response?.data?.detail || "Contact request could not be updated.");
+    } finally {
+      setRequestBusy(false);
+    }
+  };
+
+  const handleAttachmentChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || uploadingAttachment) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    setUploadingAttachment(true);
+    setError("");
+    try {
+      const response = await api.post("/internal-message-attachments", formData);
+      setAttachment(response.data || null);
+    } catch (uploadError) {
+      console.error("Attachment upload error:", uploadError);
+      setError(uploadError.response?.data?.detail || "Attachment could not be uploaded.");
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
   const sendMessage = async (event) => {
     event.preventDefault();
     const body = draft.trim();
-    if (!body || !selectedUserId || sending) return;
+    if ((!body && !attachment) || !selectedUserId || sending || uploadingAttachment) return;
 
     setSending(true);
     setError("");
@@ -206,8 +351,13 @@ function Messages() {
       await api.post("/internal-messages", {
         recipient_user_id: selectedUserId,
         body,
+        attachment_url: attachment?.url || null,
+        attachment_name: attachment?.name || null,
+        attachment_type: attachment?.type || null,
+        attachment_size: attachment?.size || null,
       });
       setDraft("");
+      setAttachment(null);
       await loadConversation({ quiet: true });
       await loadPeople();
     } catch (sendError) {
@@ -230,6 +380,26 @@ function Messages() {
     event.currentTarget.form?.requestSubmit();
   };
 
+  const renderAttachment = (item) => {
+    if (!item?.attachment_url) return null;
+    const url = getStaticUrl(item.attachment_url);
+    const isImage = String(item.attachment_type || "").startsWith("image/");
+    return (
+      <a
+        className={`erp-message-attachment ${isImage ? "is-image" : ""}`.trim()}
+        href={url || item.attachment_url}
+        rel="noopener noreferrer"
+        target="_blank"
+      >
+        {isImage ? <img alt={item.attachment_name || "Attachment"} src={url || item.attachment_url} /> : <PaperclipIcon />}
+        <span>
+          <strong>{item.attachment_name || "Attachment"}</strong>
+          <small>{formatFileSize(item.attachment_size) || item.attachment_type || "File"}</small>
+        </span>
+      </a>
+    );
+  };
+
   return (
     <div
       className={`erp-messages-page ${
@@ -238,7 +408,7 @@ function Messages() {
     >
       <div className="erp-messages-topbar">
         <div className="erp-messages-topbar-left">
-          <h1 className="erp-messages-topbar-title">💬 Live Chat & Support Hub</h1>
+          <h1 className="erp-messages-topbar-title">Messenger</h1>
           <span className="erp-messages-topbar-status">
             <span className="erp-messages-status-dot" />
             Realtime Connected
@@ -249,7 +419,10 @@ function Messages() {
             Contacts: <strong>{people.length}</strong>
           </div>
           <div className="erp-messages-stat-pill">
-            Visitors: <strong>{people.filter((p) => p.role === "visitor").length}</strong>
+            Unread: <strong>{unreadTotal}</strong>
+          </div>
+          <div className="erp-messages-stat-pill">
+            Requests: <strong>{incomingRequests.length}</strong>
           </div>
         </div>
       </div>
@@ -259,7 +432,7 @@ function Messages() {
         <div className="erp-messages-voice-setup" role="alert">
           <div>
             <strong>Microphone calls need the secure mobile link</strong>
-            <span>Install the ERP certificate once, close Chrome, then reopen Messages over HTTPS.</span>
+            <span>Install the ERP certificate once, close Chrome, then reopen Messenger over HTTPS.</span>
           </div>
           <a href={mobileVoiceSetup.certificateUrl}>Install certificate</a>
           <a href={mobileVoiceSetup.secureUrl}>Open secure ERP</a>
@@ -273,25 +446,92 @@ function Messages() {
       >
         <aside className="erp-messages-people">
           <div className="erp-messages-people-head">
-            <h2>💬 Messages</h2>
+            <h2>Messenger</h2>
             <span>{filteredPeople.length}</span>
           </div>
+
+          <form className="erp-messenger-request-box" onSubmit={sendContactRequest}>
+            <strong>Connect with a team member</strong>
+            <div className="erp-messenger-request-row">
+              <input
+                onChange={(event) => setContactQuery(event.target.value)}
+                placeholder="Username or email"
+                type="text"
+                value={contactQuery}
+              />
+              <button disabled={!contactQuery.trim() || requestBusy} type="submit">
+                Request
+              </button>
+            </div>
+            <textarea
+              onChange={(event) => setRequestNote(event.target.value)}
+              placeholder="Optional note"
+              rows={2}
+              value={requestNote}
+            />
+            {contactResults.length > 0 && (
+              <div className="erp-messenger-search-results">
+                {contactResults.map((result) => (
+                  <button
+                    disabled={requestBusy || ["approved", "requested", "incoming"].includes(result.status)}
+                    key={result.id}
+                    onClick={(event) => sendContactRequest(event, result.username || result.email)}
+                    type="button"
+                  >
+                    <span>{personInitials(result)}</span>
+                    <strong>{result.name}</strong>
+                    <small>{result.status || result.username || result.email}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </form>
+
+          {pendingRequests.length > 0 && (
+            <div className="erp-messenger-request-list">
+              {pendingRequests.slice(0, 4).map((item) => (
+                <article key={item.id}>
+                  <div>
+                    <strong>{item.direction === "incoming" ? item.requester_name : item.recipient_name}</strong>
+                    <span>{item.direction === "incoming" ? "Wants to message you" : "Waiting for approval"}</span>
+                    {item.message && <p>{item.message}</p>}
+                  </div>
+                  <div>
+                    {item.direction === "incoming" ? (
+                      <>
+                        <button disabled={requestBusy} onClick={() => reviewContactRequest(item.id, "approved")} type="button">
+                          Approve
+                        </button>
+                        <button disabled={requestBusy} onClick={() => reviewContactRequest(item.id, "declined")} type="button">
+                          Decline
+                        </button>
+                      </>
+                    ) : (
+                      <button disabled={requestBusy} onClick={() => reviewContactRequest(item.id, "canceled")} type="button">
+                        Cancel request
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
 
           <div className="erp-messages-search-wrap">
             <input
               className="erp-messages-search-input"
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search people or visitors..."
+              placeholder="Search contacts..."
               type="text"
               value={searchQuery}
             />
           </div>
 
           {loadingPeople ? (
-            <div className="erp-messages-empty">Loading people...</div>
+            <div className="erp-messages-empty">Loading contacts...</div>
           ) : filteredPeople.length === 0 ? (
             <div className="erp-messages-empty">
-              {searchQuery ? "No matching people found." : "No active users found."}
+              {searchQuery ? "No matching contacts found." : "Send a request to start messaging."}
             </div>
           ) : (
             <div className="erp-messages-person-list">
@@ -299,7 +539,7 @@ function Messages() {
                 <button
                   className={`erp-messages-person ${
                     person.id === selectedUserId ? "is-active" : ""
-                  } ${person.role === "visitor" ? "is-visitor" : ""}`.trim()}
+                  }`.trim()}
                   key={person.id}
                   onClick={() => {
                     setSelectedUserId(person.id);
@@ -308,23 +548,13 @@ function Messages() {
                   type="button"
                 >
                   <span className="erp-messages-avatar">
-                    {person.role === "visitor"
-                      ? "💬"
-                      : String(person.name || "U")
-                          .split(/\s+/)
-                          .filter(Boolean)
-                          .slice(0, 2)
-                          .map((part) => part[0])
-                          .join("")
-                          .toUpperCase()}
+                    {personInitials(person)}
                   </span>
                   <span className="erp-messages-person-copy">
                     <strong>{person.name}</strong>
-                    <small>{person.role === "visitor" ? "💬 Visitor" : person.role || "User"}</small>
+                    <small>{person.role || "User"}</small>
                   </span>
-                  {person.unread_count > 0 && (
-                    <em>{person.unread_count}</em>
-                  )}
+                  {person.unread_count > 0 && <em>{person.unread_count}</em>}
                 </button>
               ))}
             </div>
@@ -346,48 +576,40 @@ function Messages() {
                 <div>
                   <span>Conversation</span>
                   <h2>{selectedUser.name}</h2>
-                  <p>
-                    {selectedUser.role === "visitor"
-                      ? "💬 Live Website Visitor"
-                      : selectedUser.username || selectedUser.role || "ERP user"}
-                  </p>
+                  <p>{selectedUser.username || selectedUser.role || "ERP user"}</p>
                 </div>
                 <div className="erp-messages-call-actions">
-                  {selectedUser.role !== "visitor" && (
-                    <>
-                      <button
-                        aria-label={`Start voice call with ${selectedUser.name}`}
-                        className="erp-messages-call-button"
-                        disabled={isCallBusy}
-                        onClick={() => startCall(selectedUser)}
-                        title={isCallBusy ? "Finish the current call first" : `Call ${selectedUser.name}`}
-                        type="button"
-                      >
-                        <PhoneIcon />
-                        <span>Call</span>
-                      </button>
-                      {isVideoCallingEnabled && (
-                        <button
-                          aria-label={`Start video call with ${selectedUser.name}`}
-                          className="erp-messages-call-button is-video"
-                          disabled={isCallBusy}
-                          onClick={() => startVideoCall(selectedUser)}
-                          title={isCallBusy ? "Finish the current call first" : `Video call ${selectedUser.name}`}
-                          type="button"
-                        >
-                          <VideoIcon />
-                          <span>Video</span>
-                        </button>
-                      )}
-                    </>
+                  <button
+                    aria-label={`Start voice call with ${selectedUser.name}`}
+                    className="erp-messages-call-button"
+                    disabled={isCallBusy}
+                    onClick={() => startCall(selectedUser)}
+                    title={isCallBusy ? "Finish the current call first" : `Call ${selectedUser.name}`}
+                    type="button"
+                  >
+                    <PhoneIcon />
+                    <span>Call</span>
+                  </button>
+                  {isVideoCallingEnabled && (
+                    <button
+                      aria-label={`Start video call with ${selectedUser.name}`}
+                      className="erp-messages-call-button is-video"
+                      disabled={isCallBusy}
+                      onClick={() => startVideoCall(selectedUser)}
+                      title={isCallBusy ? "Finish the current call first" : `Video call ${selectedUser.name}`}
+                      type="button"
+                    >
+                      <VideoIcon />
+                      <span>Video</span>
+                    </button>
                   )}
                 </div>
               </>
             ) : (
               <div>
                 <span>Conversation</span>
-                <h2>Select a person</h2>
-                <p>Choose a user to start messaging.</p>
+                <h2>Select a contact</h2>
+                <p>Approve a request or choose a contact to start messaging.</p>
               </div>
             )}
           </div>
@@ -400,7 +622,7 @@ function Messages() {
             {loadingConversation ? (
               <div className="erp-messages-empty">Loading messages...</div>
             ) : !selectedUser ? (
-              <div className="erp-messages-empty">Select a person to chat.</div>
+              <div className="erp-messages-empty">Select a contact to chat.</div>
             ) : conversation.length === 0 ? (
               <div className="erp-messages-empty">
                 No messages yet. Send the first one.
@@ -413,12 +635,11 @@ function Messages() {
                   }`.trim()}
                   key={message.id}
                 >
-                  <p>{message.body}</p>
+                  {message.body && <p>{message.body}</p>}
+                  {renderAttachment(message)}
                   <span>
                     {formatUtcLocal(message.created_at)}
-                    {message.is_mine && (
-                      <strong>{message.read_at ? "Read" : "Sent"}</strong>
-                    )}
+                    {message.is_mine && <strong>{message.read_at ? "Read" : "Sent"}</strong>}
                   </span>
                 </article>
               ))
@@ -426,22 +647,45 @@ function Messages() {
           </div>
 
           <form className="erp-messages-compose" onSubmit={sendMessage}>
-            <textarea
-              disabled={!selectedUser}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={handleComposerKeyDown}
-              placeholder={
-                selectedUser
-                  ? selectedUser.role === "visitor"
-                    ? `Reply to ${selectedUser.name}...`
-                    : `Message ${selectedUser.name}...`
-                  : "Select a person first"
-              }
-              rows={1}
-              value={draft}
+            <input
+              hidden
+              onChange={handleAttachmentChange}
+              ref={fileInputRef}
+              type="file"
             />
-            <button disabled={!selectedUser || !draft.trim() || sending} type="submit">
-              {sending ? "Sending..." : "Send ➔"}
+            <button
+              className="erp-messages-attach-button"
+              disabled={!selectedUser || uploadingAttachment}
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach file"
+              type="button"
+            >
+              <PaperclipIcon />
+            </button>
+            <div className="erp-messages-compose-main">
+              {attachment && (
+                <div className="erp-messages-pending-attachment">
+                  <PaperclipIcon />
+                  <span>
+                    <strong>{attachment.name || "Attachment"}</strong>
+                    <small>{formatFileSize(attachment.size) || attachment.type || "File"}</small>
+                  </span>
+                  <button onClick={() => setAttachment(null)} type="button">Remove</button>
+                </div>
+              )}
+              <textarea
+                disabled={!selectedUser}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
+                placeholder={
+                  selectedUser ? `Message ${selectedUser.name}...` : "Select a contact first"
+                }
+                rows={1}
+                value={draft}
+              />
+            </div>
+            <button disabled={!selectedUser || (!draft.trim() && !attachment) || sending || uploadingAttachment} type="submit">
+              {uploadingAttachment ? "Uploading" : sending ? "Sending" : "Send"}
             </button>
           </form>
         </main>

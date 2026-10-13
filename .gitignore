@@ -99,3 +99,17 @@ tmp/portable/
 
 **/node-compile-cache/
 **/python-cache/
+# ==========================================
+# ERP Runtime / Generated Data
+# ==========================================
+
+backend/static/optimized/
+backend/backups/
+backend/shipping_rates/uploads/
+backend/fedex_settings.json
+backend/fedex_tracking_cache.json
+
+# Frozen experiments / old rebuild work
+v2/
+
+print-agent/agent_config.json

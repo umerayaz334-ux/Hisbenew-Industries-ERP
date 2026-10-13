@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
 import "./Orders.css";
+import MuseSettings from "../components/MuseSettings";
 
 const getProductInitials = (articleNo, productName) =>
   String(articleNo || productName || "PR")
@@ -137,12 +138,12 @@ const getOrderPayoutBreakdown = (order = {}) => {
   const storedPayoutFee = Math.max(Number(order.deduction_usd || 0), 0);
   const hasStoredDeductions = storedCommission > 0 || storedPayoutFee > 0;
   const calculated =
-    isFaire && gross > 0 && !hasStoredDeductions
+    isFaire && order.import_batch_key !== "muse-api" && gross > 0 && !hasStoredDeductions
       ? calculateFairePayoutBreakdown(gross)
       : null;
   const commission = calculated ? calculated.commission : storedCommission;
   const payoutFee = calculated ? calculated.payoutFee : storedPayoutFee;
-  const final =
+  const final = order.import_batch_key === "muse-api" ? Number(order.expected_payout_usd || 0) :
     calculated?.final ??
     Math.max(
       Number(order.expected_payout_usd || order.payout_amount_usd || 0) ||
@@ -1846,6 +1847,7 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
           <h1>Orders</h1>
         </div>
         <div className="orders-header-actions">
+          <MuseSettings />
           <input
             accept=".csv,text/csv"
             className="orders-file-input"

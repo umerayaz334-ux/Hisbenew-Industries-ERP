@@ -65,11 +65,24 @@ def _sanitized_payload(payload: dict | None) -> str | None:
     return sanitize_external_message(serialized)[:4000]
 
 
-def _job_stale_after_minutes() -> int:
+def _env_minutes(name: str, default: int, *, minimum: int) -> int:
     try:
-        return max(5, int(os.getenv("AMAZON_JOB_STALE_MINUTES", "30")))
+        return max(minimum, int(os.getenv(name, str(default))))
     except (TypeError, ValueError):
-        return 30
+        return default
+
+
+def _job_stale_after_minutes(job: AmazonSyncJob) -> int:
+    if job.job_type in {JOB_TYPE_FBA_ORDERS_SYNC, JOB_TYPE_FBA_ORDER_REFRESH}:
+        payload = _job_request_payload(job)
+        if str(payload.get("mode") or "").strip().lower() == "backfill":
+            return _env_minutes(
+                "AMAZON_FBA_ORDER_BACKFILL_STALE_MINUTES",
+                15,
+                minimum=5,
+            )
+        return _env_minutes("AMAZON_FBA_ORDER_JOB_STALE_MINUTES", 3, minimum=2)
+    return _env_minutes("AMAZON_JOB_STALE_MINUTES", 30, minimum=5)
 
 
 def _active_job_started_at(job: AmazonSyncJob) -> datetime | None:
@@ -82,7 +95,7 @@ def _is_stale_processing_job(job: AmazonSyncJob, *, now: datetime) -> bool:
     started_at = _active_job_started_at(job)
     if not started_at:
         return True
-    return started_at <= now - timedelta(minutes=_job_stale_after_minutes())
+    return started_at <= now - timedelta(minutes=_job_stale_after_minutes(job))
 
 
 def _fail_stale_processing_job(job: AmazonSyncJob, *, now: datetime) -> None:
@@ -97,6 +110,34 @@ def _fail_stale_processing_job(job: AmazonSyncJob, *, now: datetime) -> None:
     job.locked_at = None
     job.locked_by = None
     job.updated_at = now
+
+
+def fail_stale_processing_jobs(
+    db: Session,
+    *,
+    amazon_account_id: int | None = None,
+    job_types: tuple[str, ...] | None = None,
+    reference_id: str | int | None = None,
+    now: datetime | None = None,
+) -> int:
+    """Fail processing jobs whose worker disappeared before completion."""
+    current_time = now or datetime.utcnow()
+    query = db.query(AmazonSyncJob).filter(AmazonSyncJob.status == "Processing")
+    if amazon_account_id is not None:
+        query = query.filter(AmazonSyncJob.amazon_account_id == amazon_account_id)
+    if job_types:
+        query = query.filter(AmazonSyncJob.job_type.in_(job_types))
+    if reference_id is not None:
+        query = query.filter(AmazonSyncJob.reference_id == str(reference_id))
+
+    failed_count = 0
+    for job in query.all():
+        if _is_stale_processing_job(job, now=current_time):
+            _fail_stale_processing_job(job, now=current_time)
+            failed_count += 1
+    if failed_count:
+        db.flush()
+    return failed_count
 
 
 def enqueue_amazon_job(
@@ -142,6 +183,14 @@ def enqueue_unique_amazon_job(
     clean_reference_id = (
         str(reference_id) if reference_id is not None else None
     )
+    now = datetime.utcnow()
+    fail_stale_processing_jobs(
+        db,
+        amazon_account_id=amazon_account_id,
+        job_types=(job_type,),
+        reference_id=clean_reference_id,
+        now=now,
+    )
     existing = (
         db.query(AmazonSyncJob)
         .filter(
@@ -154,7 +203,6 @@ def enqueue_unique_amazon_job(
         .first()
     )
     if existing:
-        now = datetime.utcnow()
         if not _is_stale_processing_job(existing, now=now):
             return existing, False
         _fail_stale_processing_job(existing, now=now)

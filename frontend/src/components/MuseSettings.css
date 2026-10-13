@@ -1,0 +1,8 @@
+.muse-overlay { position: fixed; inset: 0; z-index: 1200; background: #0f172a88; display: grid; place-items: center; padding: 24px; }
+.muse-panel { width: min(800px, 100%); max-height: 90vh; overflow: auto; background: white; color: #172b35; border-radius: 16px; padding: 24px; box-shadow: 0 20px 70px #0004; }
+.muse-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.muse-panel p { line-height: 1.6; }
+.muse-panel input, .muse-panel textarea { display: block; box-sizing: border-box; width: 100%; padding: 10px; margin: 8px 0 16px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: monospace; }
+.muse-panel button { padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f1f5f9; cursor: pointer; }
+.muse-panel [role=alert] { color: #a32121; }
+.muse-submission { padding: 12px 0; border-bottom: 1px solid #e2e8f0; }

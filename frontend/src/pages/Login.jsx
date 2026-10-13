@@ -1,5 +1,6 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import api, { API_BASE_URL } from "../api/api";
+import { routeScopeSlugFromPath } from "../utils/routeUtils";
 import "./Login.css";
 
 export default function Login({ onLogin, message, onClearMessage }) {
@@ -29,9 +30,11 @@ export default function Login({ onLogin, message, onClearMessage }) {
 
     setLoading(true);
     try {
+      const tenantSlug = routeScopeSlugFromPath(window.location.pathname);
       const response = await api.post("/login", {
         username: username.trim(),
         pin,
+        ...(tenantSlug ? { tenant_slug: tenantSlug } : {}),
       });
       onLogin(response.data);
     } catch (err) {
@@ -94,7 +97,7 @@ export default function Login({ onLogin, message, onClearMessage }) {
                   clearFeedback();
                   setPin(e.target.value.replace(/\D/g, ""));
                 }}
-                placeholder="••••"
+                placeholder="****"
                 autoComplete="current-password"
               />
               <button
@@ -121,3 +124,4 @@ export default function Login({ onLogin, message, onClearMessage }) {
     </div>
   );
 }
+

@@ -3367,10 +3367,9 @@
 }
 
 .shipping-table-wrap {
-  max-height: min(640px, calc(100vh - 300px));
-  overflow: auto;
-  scrollbar-color: #b9b9b9 #f3f3f3;
-  scrollbar-width: thin;
+  max-height: none !important;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .orders-page .table-wrap {
@@ -3674,10 +3673,8 @@
 }
 
 .shipping-order-list {
-  max-height: min(560px, calc(100vh - 300px));
-  overflow: auto;
-  scrollbar-color: #b9b9b9 #f3f3f3;
-  scrollbar-width: thin;
+  max-height: none !important;
+  overflow: visible !important;
 }
 
 .shipping-order-card {
@@ -3816,34 +3813,50 @@
 }
 
 .shipping-dispatch-form {
-  background: #fafafa;
-}
-
-.shipping-field-grid {
-  gap: 9px;
+  background: #f8fafc;
 }
 
 .shipping-card-actions {
-  gap: 8px;
-  padding-top: 12px;
+  gap: 6px;
+  padding-top: 6px;
 }
 
 .shipping-share-button,
 .shipping-ship-button {
-  min-height: 34px;
+  min-height: 28px;
+  height: 28px;
   padding: 0 10px;
-  border-radius: 4px;
-  box-shadow: none;
+  border-radius: 5px;
   font-size: 11px;
 }
 
-.shipping-ship-button {
-  border-color: #217346;
-  background: #217346;
+.shipping-share-button {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
 }
 
-.shipping-ship-button:hover {
-  background: #185c37;
+.shipping-share-button:hover {
+  border-color: #059669;
+  background: #10b981;
+  color: #ffffff;
+}
+
+.shipping-share-button.is-copied {
+  background: #059669;
+  border-color: #047857;
+  color: #ffffff;
+}
+
+.shipping-ship-button {
+  border-color: #0f172a;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.shipping-ship-button:hover:not(:disabled) {
+  background: #2563eb;
+  border-color: #2563eb;
 }
 
 .shipping-history-table th:nth-child(5),

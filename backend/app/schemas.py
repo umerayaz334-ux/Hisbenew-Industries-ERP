@@ -364,7 +364,11 @@ class PublicAccessRequestOut(BaseModel):
 
 class InternalMessageCreate(BaseModel):
     recipient_user_id: int
-    body: str
+    body: str = ""
+    attachment_url: str | None = None
+    attachment_name: str | None = None
+    attachment_type: str | None = None
+    attachment_size: int | None = None
 
 
 class InternalMessageOut(BaseModel):
@@ -374,6 +378,10 @@ class InternalMessageOut(BaseModel):
     sender_name: str
     recipient_name: str
     body: str
+    attachment_url: str | None = None
+    attachment_name: str | None = None
+    attachment_type: str | None = None
+    attachment_size: int | None = None
     read_at: datetime | None = None
     created_at: datetime
     is_mine: bool = False
@@ -387,6 +395,39 @@ class InternalMessageUserOut(BaseModel):
     unread_count: int = 0
     last_message_at: datetime | None = None
 
+
+
+class InternalMessageContactRequestCreate(BaseModel):
+    recipient: str
+    message: str | None = None
+
+
+class InternalMessageContactRequestReview(BaseModel):
+    status: str
+
+
+class InternalMessageContactRequestOut(BaseModel):
+    id: int
+    requester_user_id: int
+    requester_name: str
+    requester_username: str | None = None
+    recipient_user_id: int
+    recipient_name: str
+    recipient_username: str | None = None
+    message: str | None = None
+    status: str
+    direction: str
+    reviewed_at: datetime | None = None
+    created_at: datetime
+
+
+class InternalMessageContactSearchOut(BaseModel):
+    id: int
+    name: str
+    username: str | None = None
+    email: str | None = None
+    role: str
+    status: str | None = None
 
 class InternalCallCreate(BaseModel):
     recipient_user_id: int
@@ -898,6 +939,7 @@ class WorkerPaymentOut(BaseModel):
 class ShippingCreate(BaseModel):
     order_id: int
     courier_name: str | None = None
+    dispatch_agent: str | None = None
     tracking_number: str | None = None
     package_weight_kg: float | None = Field(default=None, gt=0)
     shipping_cost: float | None = None
@@ -907,6 +949,7 @@ class ShippingCreate(BaseModel):
 
 class ShippingUpdate(BaseModel):
     courier_name: str | None = None
+    dispatch_agent: str | None = None
     tracking_number: str | None = None
     package_weight_kg: float | None = Field(default=None, gt=0)
     shipping_cost: float | None = None
@@ -919,7 +962,9 @@ class ShippingOut(BaseModel):
     order_id: int
     order_no: str | None = None
     customer_name: str | None = None
+    customer_company_name: str | None = None
     courier_name: str | None = None
+    dispatch_agent: str | None = None
     tracking_number: str | None = None
     package_weight_kg: float | None = None
     shipping_cost: float | None = None
@@ -930,6 +975,9 @@ class ShippingOut(BaseModel):
     calculated_weight_kg: float | None = None
     estimated_shipping_cost: float | None = None
     rate_source_version: str | None = None
+    carrier_url: str | None = None
+    detected_carrier: str | None = None
+    shipping_status: str | None = None
     shipped_at: datetime
     created_at: datetime
     updated_at: datetime
@@ -1228,6 +1276,7 @@ class AccountingAccountUpdate(BaseModel):
 
 class AccountingAccountOut(AccountingAccountCreate):
     id: int
+    tenant_id: int | None = None
     balance: float = 0
     balance_pkr: float = 0
     created_at: datetime
@@ -1274,9 +1323,187 @@ class AccountingTransactionUpdate(BaseModel):
 
 class AccountingTransactionOut(AccountingTransactionCreate):
     id: int
+    tenant_id: int | None = None
     account_name: str | None = None
     created_at: datetime
     updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingSettingsUpdate(BaseModel):
+    base_currency: str | None = None
+    reporting_currency: str | None = None
+    fiscal_year_start_month: int | None = Field(default=None, ge=1, le=12)
+    fiscal_year_start_day: int | None = Field(default=None, ge=1, le=31)
+    lock_date: datetime | None = None
+    allow_multi_currency: bool | None = None
+
+
+class AccountingSettingsOut(BaseModel):
+    id: int
+    tenant_id: int
+    base_currency: str = "PKR"
+    reporting_currency: str = "PKR"
+    fiscal_year_start_month: int = 1
+    fiscal_year_start_day: int = 1
+    lock_date: datetime | None = None
+    allow_multi_currency: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingFiscalYearCreate(BaseModel):
+    name: str
+    start_date: datetime
+    end_date: datetime
+    status: str = "Open"
+    notes: str | None = None
+
+
+class AccountingFiscalYearUpdate(BaseModel):
+    name: str | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+class AccountingFiscalYearOut(AccountingFiscalYearCreate):
+    id: int
+    tenant_id: int
+    closed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingPeriodLockCreate(BaseModel):
+    fiscal_year_id: int | None = None
+    period_start: datetime
+    period_end: datetime
+    locked: bool = True
+    reason: str | None = None
+
+
+class AccountingPeriodLockUpdate(BaseModel):
+    fiscal_year_id: int | None = None
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+    locked: bool | None = None
+    reason: str | None = None
+
+
+class AccountingPeriodLockOut(AccountingPeriodLockCreate):
+    id: int
+    tenant_id: int
+    locked_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingCurrencyRateCreate(BaseModel):
+    currency: str
+    rate_to_base: float = Field(default=1, gt=0)
+    effective_date: datetime | None = None
+    source: str = "Manual"
+    is_active: bool = True
+
+
+class AccountingCurrencyRateUpdate(BaseModel):
+    currency: str | None = None
+    rate_to_base: float | None = Field(default=None, gt=0)
+    effective_date: datetime | None = None
+    source: str | None = None
+    is_active: bool | None = None
+
+
+class AccountingCurrencyRateOut(BaseModel):
+    id: int
+    tenant_id: int
+    currency: str
+    rate_to_base: float
+    effective_date: datetime
+    source: str = "Manual"
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingJournalLineCreate(BaseModel):
+    account_id: int
+    description: str | None = None
+    debit: float = Field(default=0, ge=0)
+    credit: float = Field(default=0, ge=0)
+    currency: str = "PKR"
+    exchange_rate: float = Field(default=1, ge=0)
+    amount_pkr: float | None = None
+
+
+class AccountingJournalLineOut(AccountingJournalLineCreate):
+    id: int
+    tenant_id: int
+    journal_entry_id: int
+    account_name: str | None = None
+    account_type: str | None = None
+    amount_pkr: float = 0
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingJournalEntryCreate(BaseModel):
+    entry_no: str | None = None
+    entry_date: datetime | None = None
+    memo: str | None = None
+    source_type: str | None = None
+    source_id: int | None = None
+    status: str = "Posted"
+    lines: list[AccountingJournalLineCreate] = Field(default_factory=list)
+
+
+class AccountingJournalEntryUpdate(BaseModel):
+    entry_no: str | None = None
+    entry_date: datetime | None = None
+    memo: str | None = None
+    status: str | None = None
+    lines: list[AccountingJournalLineCreate] | None = None
+
+
+class AccountingJournalEntryOut(BaseModel):
+    id: int
+    tenant_id: int
+    entry_no: str
+    entry_date: datetime
+    memo: str | None = None
+    source_type: str | None = None
+    source_id: int | None = None
+    status: str = "Posted"
+    total_debit: float = 0
+    total_credit: float = 0
+    created_at: datetime
+    updated_at: datetime
+    lines: list[AccountingJournalLineOut] = Field(default_factory=list)
 
     model_config = {
         "from_attributes": True
@@ -1297,6 +1524,305 @@ class ProductionBatchUpdate(BaseModel):
     priority: str | None = None
     due_date: datetime | None = None
     notes: str | None = None
+
+
+class AccountingDocumentLineCreate(BaseModel):
+    account_id: int
+    description: str | None = None
+    quantity: float = Field(default=1, ge=0)
+    unit_price: float = Field(default=0, ge=0)
+    amount: float | None = None
+    tax_amount: float = Field(default=0, ge=0)
+
+
+class AccountingDocumentLineOut(AccountingDocumentLineCreate):
+    id: int
+    tenant_id: int
+    document_id: int
+    account_name: str | None = None
+    account_type: str | None = None
+    amount: float = 0
+    total: float = 0
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingDocumentPaymentCreate(BaseModel):
+    account_id: int
+    amount: float = Field(gt=0)
+    currency: str = "PKR"
+    exchange_rate: float = Field(default=1, ge=0)
+    amount_pkr: float | None = None
+    payment_date: datetime | None = None
+    reference: str | None = None
+    notes: str | None = None
+
+
+class AccountingDocumentPaymentOut(AccountingDocumentPaymentCreate):
+    id: int
+    tenant_id: int
+    document_id: int
+    account_name: str | None = None
+    payment_date: datetime
+    amount_pkr: float = 0
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingDocumentCreate(BaseModel):
+    document_type: str
+    document_no: str | None = None
+    contact_name: str
+    contact_email: str | None = None
+    issue_date: datetime | None = None
+    due_date: datetime | None = None
+    status: str = "Open"
+    currency: str = "PKR"
+    exchange_rate: float = Field(default=1, ge=0)
+    notes: str | None = None
+    source_type: str | None = None
+    source_id: int | None = None
+    lines: list[AccountingDocumentLineCreate] = Field(default_factory=list)
+
+
+class AccountingDocumentUpdate(BaseModel):
+    document_no: str | None = None
+    contact_name: str | None = None
+    contact_email: str | None = None
+    issue_date: datetime | None = None
+    due_date: datetime | None = None
+    status: str | None = None
+    currency: str | None = None
+    exchange_rate: float | None = None
+    notes: str | None = None
+    lines: list[AccountingDocumentLineCreate] | None = None
+
+
+class AccountingDocumentOut(BaseModel):
+    id: int
+    tenant_id: int
+    document_type: str
+    document_no: str
+    contact_name: str
+    contact_email: str | None = None
+    issue_date: datetime
+    due_date: datetime | None = None
+    status: str
+    payment_status: str = "Open"
+    currency: str = "PKR"
+    exchange_rate: float = 1
+    subtotal: float = 0
+    tax_total: float = 0
+    total: float = 0
+    paid_total: float = 0
+    balance_due: float = 0
+    days_past_due: int = 0
+    notes: str | None = None
+    source_type: str | None = None
+    source_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+    lines: list[AccountingDocumentLineOut] = Field(default_factory=list)
+    payments: list[AccountingDocumentPaymentOut] = Field(default_factory=list)
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingBankTransactionImportRequest(BaseModel):
+    account_id: int
+    csv_text: str
+    date_column: str = "date"
+    description_column: str = "description"
+    reference_column: str | None = "reference"
+    counterparty_column: str | None = "counterparty"
+    money_in_column: str | None = "money_in"
+    money_out_column: str | None = "money_out"
+    amount_column: str | None = "amount"
+    currency: str = "PKR"
+    exchange_rate: float = Field(default=1, ge=0)
+    skip_duplicates: bool = True
+
+class AccountingBankTransactionCreate(BaseModel):
+    account_id: int
+    transaction_date: datetime | None = None
+    description: str | None = None
+    reference: str | None = None
+    counterparty: str | None = None
+    money_in: float = Field(default=0, ge=0)
+    money_out: float = Field(default=0, ge=0)
+    currency: str = "PKR"
+    exchange_rate: float = Field(default=1, ge=0)
+    amount_pkr: float | None = None
+    status: str = "Unmatched"
+    notes: str | None = None
+
+
+class AccountingBankTransactionUpdate(BaseModel):
+    account_id: int | None = None
+    transaction_date: datetime | None = None
+    description: str | None = None
+    reference: str | None = None
+    counterparty: str | None = None
+    money_in: float | None = None
+    money_out: float | None = None
+    currency: str | None = None
+    exchange_rate: float | None = None
+    amount_pkr: float | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+class AccountingBankTransactionMatchRequest(BaseModel):
+    source_type: str
+    source_id: int
+
+
+class AccountingBankTransactionOut(AccountingBankTransactionCreate):
+    id: int
+    tenant_id: int
+    account_name: str | None = None
+    amount_pkr: float = 0
+    matched_source_type: str | None = None
+    matched_source_id: int | None = None
+    matched_label: str | None = None
+    matched_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingBankRuleCreate(BaseModel):
+    name: str
+    account_id: int | None = None
+    match_field: str = "Any"
+    match_type: str = "Contains"
+    match_value: str
+    action: str = "Create Money Entry"
+    direction: str | None = None
+    category: str = "Other"
+    counterparty: str | None = None
+    platform: str | None = None
+    description_template: str | None = None
+    priority: int = 100
+    is_active: bool = True
+    auto_match: bool = True
+
+
+class AccountingBankRuleUpdate(BaseModel):
+    name: str | None = None
+    account_id: int | None = None
+    match_field: str | None = None
+    match_type: str | None = None
+    match_value: str | None = None
+    action: str | None = None
+    direction: str | None = None
+    category: str | None = None
+    counterparty: str | None = None
+    platform: str | None = None
+    description_template: str | None = None
+    priority: int | None = None
+    is_active: bool | None = None
+    auto_match: bool | None = None
+
+
+class AccountingBankRuleApplyRequest(BaseModel):
+    rule_id: int | None = None
+    bank_transaction_id: int | None = None
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+class AccountingBankRuleOut(AccountingBankRuleCreate):
+    id: int
+    tenant_id: int
+    account_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class AccountingRecurringTemplateCreate(BaseModel):
+    name: str
+    template_type: str = "Money Entry"
+    status: str = "Active"
+    frequency: str = "Monthly"
+    interval_count: int = Field(default=1, ge=1)
+    next_run_date: datetime | None = None
+    end_date: datetime | None = None
+    max_occurrences: int | None = None
+    account_id: int | None = None
+    line_account_id: int | None = None
+    direction: str | None = None
+    category: str = "Other"
+    amount: float = Field(default=0, ge=0)
+    tax_amount: float = Field(default=0, ge=0)
+    currency: str = "PKR"
+    exchange_rate: float = Field(default=1, ge=0)
+    contact_name: str | None = None
+    contact_email: str | None = None
+    document_status: str = "Open"
+    line_description: str | None = None
+    notes: str | None = None
+
+
+class AccountingRecurringTemplateUpdate(BaseModel):
+    name: str | None = None
+    template_type: str | None = None
+    status: str | None = None
+    frequency: str | None = None
+    interval_count: int | None = Field(default=None, ge=1)
+    next_run_date: datetime | None = None
+    end_date: datetime | None = None
+    max_occurrences: int | None = None
+    account_id: int | None = None
+    line_account_id: int | None = None
+    direction: str | None = None
+    category: str | None = None
+    amount: float | None = Field(default=None, ge=0)
+    tax_amount: float | None = Field(default=None, ge=0)
+    currency: str | None = None
+    exchange_rate: float | None = Field(default=None, ge=0)
+    contact_name: str | None = None
+    contact_email: str | None = None
+    document_status: str | None = None
+    line_description: str | None = None
+    notes: str | None = None
+
+
+class AccountingRecurringRunRequest(BaseModel):
+    template_id: int | None = None
+    through_date: datetime | None = None
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+class AccountingRecurringTemplateOut(AccountingRecurringTemplateCreate):
+    id: int
+    tenant_id: int
+    account_name: str | None = None
+    line_account_name: str | None = None
+    last_run_at: datetime | None = None
+    occurrences_generated: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class ManualProductionTaskCreate(BaseModel):

@@ -17,10 +17,10 @@ import {
 import "./Website.css";
 
 const QUICK_CHAT_CHIPS = [
-  { label: "🗡️ Wholesale Price List", msg: "Hi! I would like to receive your wholesale catalog & price list for volume ordering." },
-  { label: "🚚 Lead Times & Shipping", msg: "Hello! What are your current manufacturing lead times and international shipping rates?" },
-  { label: "⚒️ Custom Forging Specs", msg: "Hi! I am interested in custom Damascus forging & OEM branding specs." },
-  { label: "📞 Speak to Sales Rep", msg: "Hello! Can a factory sales manager contact me regarding a bulk order?" },
+  { label: "Wholesale Price List", msg: "Hi! I would like to receive your wholesale catalog & price list for volume ordering." },
+  { label: "Lead Times & Shipping", msg: "Hello! What are your current manufacturing lead times and international shipping rates?" },
+  { label: "Custom Forging Specs", msg: "Hi! I am interested in custom Damascus forging & OEM branding specs." },
+  { label: "Speak to Sales Rep", msg: "Hello! Can a factory sales manager contact me regarding a bulk order?" },
 ];
 
 const fallbackCatalogImage =
@@ -28,6 +28,12 @@ const fallbackCatalogImage =
 
 const productImageUrl = (product) =>
   product?.image_url ? getStaticUrl(product.image_url) : null;
+
+const storefrontImageProps = (priority = false) => ({
+  loading: priority ? "eager" : "lazy",
+  decoding: "async",
+  fetchPriority: priority ? "high" : "auto",
+});
 
 const sortProducts = (products, settings) => {
   const hidden = new Set(settings.hidden_product_ids || []);
@@ -132,6 +138,13 @@ export default function WebsiteCatalog() {
     }
     return sid;
   });
+  const websiteTenantSlug = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const firstSegment = window.location.pathname.split("/").filter(Boolean)[0];
+    if (!firstSegment || ["catalog", "website", "login", "portal"].includes(firstSegment)) return null;
+    return firstSegment;
+  }, []);
+
   const [chatMessages, setChatMessages] = useState([]);
   const [chatDraft, setChatDraft] = useState("");
   const [chatSending, setChatSending] = useState(false);
@@ -164,7 +177,9 @@ export default function WebsiteCatalog() {
   const fetchChatMessages = useCallback(async () => {
     if (!chatSessionId) return;
     try {
-      const res = await api.get(`/public-live-chat/${chatSessionId}`);
+      const res = await api.get(`/public-live-chat/${chatSessionId}`, {
+        params: websiteTenantSlug ? { tenant_slug: websiteTenantSlug } : {},
+      });
       if (Array.isArray(res.data)) {
         const nextMsgs = res.data;
         if (nextMsgs.length > prevChatCountRef.current) {
@@ -182,7 +197,7 @@ export default function WebsiteCatalog() {
     } catch (e) {
       console.warn("Live chat fetch warning:", e);
     }
-  }, [chatSessionId, isChatOpen]);
+  }, [chatSessionId, isChatOpen, websiteTenantSlug]);
 
   useEffect(() => {
     fetchChatMessages();
@@ -223,8 +238,13 @@ export default function WebsiteCatalog() {
     try {
       await api.post("/public-live-chat", {
         session_id: chatSessionId,
+        tenant_slug: websiteTenantSlug || null,
         visitor_name: visitorName,
         visitor_email: chatVisitorEmail || null,
+        page_path:
+          typeof window !== "undefined"
+            ? `${window.location.pathname}${window.location.search}`
+            : "/catalog",
         message: text,
       });
       await fetchChatMessages();
@@ -263,8 +283,8 @@ export default function WebsiteCatalog() {
     let active = true;
 
     Promise.allSettled([
-      api.get("/website-products"),
-      api.get("/website-settings"),
+      api.get(`/website-products?t=${Date.now()}`),
+      api.get(`/website-settings?t=${Date.now()}`),
     ]).then(([productsResult, settingsResult]) => {
       if (!active) return;
 
@@ -303,7 +323,7 @@ export default function WebsiteCatalog() {
 
   // Preset Hero Categories requested by user
   const PRESET_HERO_CATEGORIES = useMemo(() => [
-    "✨ All Collections",
+    "All Collections",
     "Chef Knife Sets",
     "Cleaver Knifes",
     "Folding Knifes",
@@ -313,14 +333,14 @@ export default function WebsiteCatalog() {
   ], []);
 
   // Category-Wise 3D Coverflow Hero Slider State
-  const [selectedHeroCategory, setSelectedHeroCategory] = useState("✨ All Collections");
+  const [selectedHeroCategory, setSelectedHeroCategory] = useState("All Collections");
   const [coverflowIndex, setCoverflowIndex] = useState(0);
 
   // Showcase 1 product from EVERY category side-by-side or filter by selected pill
   const coverflowProducts = useMemo(() => {
     if (!sortedProducts.length) return [];
 
-    if (selectedHeroCategory === "✨ All Collections" || selectedHeroCategory === "All") {
+    if (selectedHeroCategory === "All Collections" || selectedHeroCategory === "All") {
       const catMap = new Map();
       sortedProducts.forEach((p) => {
         const cat = p.category || "General Collection";
@@ -399,9 +419,87 @@ export default function WebsiteCatalog() {
     return list;
   }, [category, query, sortBy, sortedProducts]);
 
+  // Preload the first visible storefront images so the hero and first product row paint faster.
+  useEffect(() => {
+    const urls = [
+      productImageUrl(currentHeroProduct) || fallbackCatalogImage,
+      ...coverflowProducts.slice(0, 4).map((product) => productImageUrl(product)),
+      ...filteredProducts.slice(0, 6).map((product) => productImageUrl(product)),
+    ].filter(Boolean);
+
+    urls.forEach((url) => {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = url;
+    });
+  }, [currentHeroProduct, coverflowProducts, filteredProducts]);
+
   const summary = useMemo(() => cartSummary(cartItems), [cartItems]);
   const shippingFee = summary.subtotal > 500 || summary.subtotal === 0 ? 0 : 25;
   const orderTotal = summary.subtotal + shippingFee;
+
+  const sendWebsiteHeartbeat = useCallback(
+    async (cartCount = summary.count) => {
+      try {
+        await api.post("/website-analytics/heartbeat", {
+          session_id: chatSessionId,
+          tenant_slug: websiteTenantSlug || null,
+          visitor_name: chatVisitorName || null,
+          visitor_contact: chatVisitorEmail || null,
+          page_path:
+            typeof window !== "undefined"
+              ? `${window.location.pathname}${window.location.search}`
+              : "/",
+          cart_item_count: cartCount,
+          page_title: typeof document !== "undefined" ? document.title : null,
+          product_id: selectedProductId || null,
+          product_name: selectedProductId
+            ? products.find((product) => String(product.id) === String(selectedProductId))?.name || null
+            : null,
+        });
+      } catch (err) {
+        console.warn("Website analytics heartbeat warning:", err);
+      }
+    },
+    [chatSessionId, chatVisitorEmail, chatVisitorName, products, selectedProductId, summary.count, websiteTenantSlug]
+  );
+
+  useEffect(() => {
+    sendWebsiteHeartbeat();
+    const intervalId = window.setInterval(() => sendWebsiteHeartbeat(), 30000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") sendWebsiteHeartbeat();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [sendWebsiteHeartbeat]);
+
+  const trackCartAdd = useCallback(
+    async (product, cartCount) => {
+      try {
+        await api.post("/website-analytics/add-to-cart", {
+          session_id: chatSessionId,
+          tenant_slug: websiteTenantSlug || null,
+          visitor_name: chatVisitorName || null,
+          visitor_contact: chatVisitorEmail || null,
+          page_path:
+            typeof window !== "undefined"
+              ? `${window.location.pathname}${window.location.search}`
+              : "/catalog",
+          cart_item_count: cartCount,
+          page_title: typeof document !== "undefined" ? document.title : null,
+          product_id: product?.id || null,
+          product_name: product?.name || product?.article_no || null,
+        });
+      } catch (err) {
+        console.warn("Website add-to-cart analytics warning:", err);
+      }
+    },
+    [chatSessionId, chatVisitorEmail, chatVisitorName, websiteTenantSlug]
+  );
 
   const persistCart = (nextItems) => {
     const savedItems = writeStorefrontCart(nextItems);
@@ -411,7 +509,8 @@ export default function WebsiteCatalog() {
 
   const handleAddToCart = (product, event) => {
     if (event) event.stopPropagation();
-    persistCart(addProductToCart(cartItems, product));
+    const savedItems = persistCart(addProductToCart(cartItems, product));
+    trackCartAdd(product, cartSummary(savedItems).count);
     setIsCartOpen(true);
   };
 
@@ -475,6 +574,7 @@ export default function WebsiteCatalog() {
       };
 
       persistCart([]);
+      sendWebsiteHeartbeat(0);
       setCompletedOrder(orderData);
     } catch (err) {
       console.error("Checkout error:", err);
@@ -520,9 +620,26 @@ export default function WebsiteCatalog() {
 
   return (
     <div className="shopify-storefront luxury-theme">
+      {/* Luxury First-Impression Preloader Overlay */}
+      {loading && (
+        <div className="shopify-initial-preloader" aria-live="polite" aria-busy="true">
+          <div className="shopify-preloader-content">
+            <div className="shopify-preloader-logo-ring">
+              <span className="shopify-preloader-mark">HI</span>
+              <div className="shopify-preloader-spinner-ring" />
+            </div>
+            <h2 className="shopify-preloader-title">{settings.brand_name || "HISBENEW CRAFTS"}</h2>
+            <p className="shopify-preloader-sub">HANDMADE CUTLERY & FORGED BLADES</p>
+            <div className="shopify-preloader-progress-bar">
+              <div className="shopify-preloader-progress-fill" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Announcement Bar */}
       <div className="shopify-announcement-bar">
-        <span>✨ EXCLUSIVE WHOLESALE & CRAFTSMAN COLLECTION • ✈️ GLOBAL EXPRESS SHIPPING AVAILABLE</span>
+        <span> EXCLUSIVE WHOLESALE & CRAFTSMAN COLLECTION   GLOBAL EXPRESS SHIPPING AVAILABLE</span>
       </div>
 
       {/* Header */}
@@ -535,7 +652,7 @@ export default function WebsiteCatalog() {
               type="button"
               aria-label="Toggle mobile menu"
             >
-              {isMobileMenuOpen ? "✕" : "☰"}
+              <span className="mobile-menu-bars" aria-hidden="true"></span>
             </button>
 
             <a className="shopify-brand" href="/catalog" onClick={(e) => { e.preventDefault(); closeProductPage(); }}>
@@ -547,7 +664,7 @@ export default function WebsiteCatalog() {
             </a>
           </div>
 
-          <nav className={`shopify-nav ${isMobileMenuOpen ? "is-open" : ""}`}>
+          <nav className={`shopify-nav $<span className="mobile-menu-bars" aria-hidden="true"></span>`}>
             <a href="/catalog" className={!selectedProductPageItem ? "is-active" : ""} onClick={(e) => { e.preventDefault(); closeProductPage(); setIsMobileMenuOpen(false); }}>Home Catalog</a>
             <a href="#catalog" onClick={() => { if (selectedProductPageItem) closeProductPage(); setIsMobileMenuOpen(false); }}>Shop Collection</a>
             <a
@@ -566,14 +683,14 @@ export default function WebsiteCatalog() {
                 className="shopify-mobile-drawer-login-btn"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                🔒 Factory Portal Login
+                 Factory Portal Login
               </a>
             </div>
           </nav>
 
           <div className="shopify-header-right">
             <div className="shopify-search-box">
-              <span className="shopify-search-icon">🔍</span>
+              <span className="shopify-search-icon" aria-hidden="true"></span>
               <input
                 type="text"
                 placeholder="Search collection..."
@@ -588,12 +705,12 @@ export default function WebsiteCatalog() {
               type="button"
               aria-label="View shopping cart"
             >
-              <span className="cart-icon-svg">🛍️</span>
+              <span className="cart-icon-svg" aria-hidden="true"></span>
               <span className="cart-badge-count">{summary.count}</span>
             </button>
 
             <a href="/login" className="shopify-portal-login-btn" title="Factory Admin Login">
-              🔒 Login
+               Login
             </a>
           </div>
         </div>
@@ -606,7 +723,7 @@ export default function WebsiteCatalog() {
           <div className="product-page-top-bar">
             <div className="product-page-breadcrumbs">
               <button className="back-to-catalog-btn" onClick={closeProductPage} type="button">
-                ← Back to Catalog
+                 Back to Catalog
               </button>
               <span className="crumb-sep">/</span>
               <a href="/catalog" onClick={(e) => { e.preventDefault(); closeProductPage(); }} className="crumb-link">
@@ -627,7 +744,7 @@ export default function WebsiteCatalog() {
                 }}
                 title="Copy shareable product link"
               >
-                🔗 Share Product Address
+                 Share Product Address
               </button>
             </div>
           </div>
@@ -638,7 +755,7 @@ export default function WebsiteCatalog() {
               {/* Left Column: Image Gallery & Badges */}
               <div className="product-page-gallery-col">
                 <div className="product-page-main-frame">
-                  <span className="product-page-forge-tag">🔥 BESTSELLER</span>
+                  <span className="product-page-forge-tag"> BESTSELLER</span>
                   {productImageUrl(selectedProductPageItem) ? (
                     <img
                       src={
@@ -649,6 +766,7 @@ export default function WebsiteCatalog() {
                           : "https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=1000&q=80"
                       }
                       alt={selectedProductPageItem.name}
+                      {...storefrontImageProps(true)}
                     />
                   ) : (
                     <div className="shopify-no-img-lg">{selectedProductPageItem.article_no}</div>
@@ -658,29 +776,29 @@ export default function WebsiteCatalog() {
                 <div className="product-page-thumbs">
                   <button className={`thumb-btn ${activeModalImgIdx === 0 ? "is-active" : ""}`} onClick={() => setActiveModalImgIdx(0)}>
                     {productImageUrl(selectedProductPageItem) ? (
-                      <img src={productImageUrl(selectedProductPageItem)} alt="View 1" />
+                      <img src={productImageUrl(selectedProductPageItem)} alt="View 1" {...storefrontImageProps(false)} />
                     ) : (
                       <span>Front</span>
                     )}
                   </button>
                   <button className={`thumb-btn ${activeModalImgIdx === 1 ? "is-active" : ""}`} onClick={() => setActiveModalImgIdx(1)}>
-                    <img src="https://images.unsplash.com/photo-1593642632823-8f785ba67e45?auto=format&fit=crop&w=300&q=80" alt="Detail" />
+                    <img src="https://images.unsplash.com/photo-1593642632823-8f785ba67e45?auto=format&fit=crop&w=300&q=80" alt="Detail" {...storefrontImageProps(false)} />
                   </button>
                   <button className={`thumb-btn ${activeModalImgIdx === 2 ? "is-active" : ""}`} onClick={() => setActiveModalImgIdx(2)}>
-                    <img src="https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=300&q=80" alt="Sheath" />
+                    <img src="https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=300&q=80" alt="Sheath" {...storefrontImageProps(false)} />
                   </button>
                 </div>
 
                 <div className="product-page-trust-bar">
                   <div>
-                    <span className="trust-icon">✈️</span>
+                    <span className="trust-icon" aria-hidden="true"></span>
                     <div>
                       <strong>DHL Express Shipping</strong>
                       <small>Worldwide 3-5 Day Delivery</small>
                     </div>
                   </div>
                   <div>
-                    <span className="trust-icon">🛡️</span>
+                    <span className="trust-icon" aria-hidden="true"></span>
                     <div>
                       <strong>Lifetime Guarantee</strong>
                       <small>Handmade Forging Warranty</small>
@@ -692,10 +810,10 @@ export default function WebsiteCatalog() {
               {/* Right Column: Details & Pricing */}
               <div className="product-page-details-col">
                 <div className="product-page-rating">
-                  <span className="stars">★★★★★</span>
+                  <span className="stars" aria-label="5 star rating"></span>
                   <strong className="score">4.9</strong>
                   <span className="count">(142 Customer Reviews)</span>
-                  <span className="stock-pill">In Stock • Ships Fast</span>
+                  <span className="stock-pill">In Stock  Ships Fast</span>
                 </div>
 
                 <h1 className="product-page-title">{selectedProductPageItem.name || selectedProductPageItem.article_no}</h1>
@@ -724,12 +842,12 @@ export default function WebsiteCatalog() {
 
                 <div className="product-page-wholesale-tiers">
                   <div className={`tier-card ${productModalQty <= 5 ? "is-active" : ""}`}>
-                    <strong>1 – 5 Pcs</strong>
+                    <strong>1  5 Pcs</strong>
                     <span>{formatUsdPrice(selectedProductPageItem.selling_price)}/ea</span>
                     <small>Standard Tier</small>
                   </div>
                   <div className={`tier-card ${productModalQty >= 6 && productModalQty <= 20 ? "is-active" : ""}`}>
-                    <strong>6 – 20 Pcs</strong>
+                    <strong>6  20 Pcs</strong>
                     <span>{formatUsdPrice(Number(selectedProductPageItem.selling_price || 0) * 0.84)}/ea</span>
                     <small className="green-text">Save 16%</small>
                   </div>
@@ -770,7 +888,7 @@ export default function WebsiteCatalog() {
                       setIsCartOpen(true);
                     }}
                   >
-                    🛒 Add {productModalQty > 1 ? `${productModalQty} Items` : ""} to Cart • {formatUsdPrice(
+                     Add {productModalQty > 1 ? `${productModalQty} Items` : ""} to Cart  {formatUsdPrice(
                       (productModalQty >= 21
                         ? Number(selectedProductPageItem.selling_price || 0) * 0.7
                         : productModalQty >= 6
@@ -784,7 +902,7 @@ export default function WebsiteCatalog() {
                     onClick={() => handleProductChatInquiry(selectedProductPageItem)}
                     type="button"
                   >
-                    💬 Live Chat Inquiry
+                     Live Chat Inquiry
                   </button>
                 </div>
 
@@ -822,9 +940,9 @@ export default function WebsiteCatalog() {
                       <div className="product-reviews-list">
                         <div className="review-card">
                           <div className="review-header">
-                            <span className="stars">★★★★★</span>
+                            <span className="stars" aria-label="5 star rating"></span>
                             <strong>Marcus T. (Texas, USA)</strong>
-                            <span className="verified-badge">✓ Verified Purchaser</span>
+                            <span className="verified-badge"> Verified Purchaser</span>
                           </div>
                           <p>"Incredible weight and edge retention. The Damascus pattern is genuinely hand-forged."</p>
                         </div>
@@ -861,7 +979,7 @@ export default function WebsiteCatalog() {
                     >
                       <div className="faire-card-media-square">
                         {relImg ? (
-                          <img src={relImg} alt={relProduct.name || relProduct.article_no} className="faire-square-img" />
+                          <img src={relImg} alt={relProduct.name || relProduct.article_no} className="faire-square-img" {...storefrontImageProps(false)} />
                         ) : (
                           <div className="faire-no-img">
                             <span>{relProduct.article_no || "Crafted Item"}</span>
@@ -870,16 +988,16 @@ export default function WebsiteCatalog() {
 
                         {idx === 0 && (
                           <div className="faire-card-badge-wrap glass-bottom">
-                            <span className="faire-badge-pill is-bestseller">🔥 BESTSELLER</span>
+                            <span className="faire-badge-pill is-bestseller"> BESTSELLER</span>
                           </div>
                         )}
 
                         <button
-                          className={`faire-wishlist-heart ${relIsWishlisted ? "is-liked" : ""}`}
+                          className={`faire-wishlist-heart $<span className="sr-only">{relIsWishlisted ? "Saved" : "Save"}</span>`}
                           onClick={(e) => toggleWishlist(relProduct.id, e)}
                           title="Add to Wishlist"
                         >
-                          {relIsWishlisted ? "♥" : "♡"}
+                          <span className="sr-only">{relIsWishlisted ? "Saved" : "Save"}</span>
                         </button>
 
                         <div className="faire-hover-actions">
@@ -906,7 +1024,7 @@ export default function WebsiteCatalog() {
                         </h3>
 
                         <div className="faire-case-info">
-                          Case of 1 • {relProduct.category || "Factory Knife"}
+                          Case of 1  {relProduct.category || "Factory Knife"}
                         </div>
                       </div>
                     </div>
@@ -926,7 +1044,7 @@ export default function WebsiteCatalog() {
                 {/* Left Column: Premium Copy & Wholesale/Customize CTAs */}
                 <div className="hero-slide-copy">
                   <span className="hero-spotlight-badge">
-                    ⭐ FACTORY DIRECT • {(currentHeroProduct.category || "WHOLESALE & OEM").toUpperCase()}
+                     FACTORY DIRECT  {(currentHeroProduct.category || "WHOLESALE & OEM").toUpperCase()}
                   </span>
                   <h1 className="hero-slide-title">
                     Handcrafted Masterpieces & Custom Blade Forging
@@ -940,9 +1058,9 @@ export default function WebsiteCatalog() {
                   </p>
 
                   <div className="hero-feature-pills">
-                    <span className="hero-feat-pill">✔ 100% Hand-Forged</span>
-                    <span className="hero-feat-pill">✈️ Express Shipping</span>
-                    <span className="hero-feat-pill">🛡️ Quality Guarantee</span>
+                    <span className="hero-feat-pill"> 100% Hand-Forged</span>
+                    <span className="hero-feat-pill"> Express Shipping</span>
+                    <span className="hero-feat-pill"> Quality Guarantee</span>
                   </div>
 
                   <div className="hero-actions">
@@ -954,7 +1072,7 @@ export default function WebsiteCatalog() {
                       }}
                       type="button"
                     >
-                      📦 Wholesale Inquiry
+                       Wholesale Inquiry
                     </button>
 
                     <button
@@ -965,7 +1083,7 @@ export default function WebsiteCatalog() {
                       }}
                       type="button"
                     >
-                      🛠️ Customize / OEM Order
+                       Customize / OEM Order
                     </button>
                   </div>
                 </div>
@@ -996,7 +1114,7 @@ export default function WebsiteCatalog() {
                         onClick={() => setCoverflowIndex(idx)}
                       >
                         <div className="coverflow-card-media">
-                          <img src={imgUrl} alt={prod.name} className="coverflow-card-img" />
+                          <img src={imgUrl} alt={prod.name || prod.article_no} className="coverflow-card-img" {...storefrontImageProps(Math.abs(diff) <= 1)} />
                           <div className="coverflow-card-overlay">
                             <h4 className="coverflow-card-title">{prod.name || prod.article_no}</h4>
                             <span className="coverflow-card-price">{formatUsdPrice(prod.selling_price)}</span>
@@ -1013,14 +1131,18 @@ export default function WebsiteCatalog() {
               <button
                 className="slider-arrow prev"
                 onClick={() => setCoverflowIndex((prev) => (prev - 1 + coverflowProducts.length) % coverflowProducts.length)}
+                aria-label="Previous product"
+                type="button"
               >
-                ❮
+                <span className="sr-only">Previous product</span>
               </button>
               <button
                 className="slider-arrow next"
                 onClick={() => setCoverflowIndex((prev) => (prev + 1) % coverflowProducts.length)}
+                aria-label="Next product"
+                type="button"
               >
-                ❯
+                <span className="sr-only">Next product</span>
               </button>
 
               <div className="slider-dots">
@@ -1038,9 +1160,9 @@ export default function WebsiteCatalog() {
           {/* Mobile Only Feature Pills (shown below slider & above Featured Collections) */}
           <div className="mobile-after-slider-bar">
             <div className="mobile-feature-pills-row">
-              <span className="mobile-feat-pill">✔ 100% Hand-Forged</span>
-              <span className="mobile-feat-pill">✈️ Express Shipping</span>
-              <span className="mobile-feat-pill">🛡️ Quality Guarantee</span>
+              <span className="mobile-feat-pill"> 100% Hand-Forged</span>
+              <span className="mobile-feat-pill"> Express Shipping</span>
+              <span className="mobile-feat-pill"> Quality Guarantee</span>
             </div>
           </div>
 
@@ -1064,7 +1186,7 @@ export default function WebsiteCatalog() {
                       }}
                     >
                       <div className="category-circle-img-wrap">
-                        <img src={item.img} alt={item.name} />
+                        <img src={item.img} alt={item.name} {...storefrontImageProps(false)} />
                       </div>
                       <span className="category-circle-name">{item.name}</span>
                     </div>
@@ -1148,7 +1270,7 @@ export default function WebsiteCatalog() {
                     >
                       <div className="faire-card-media-square">
                         {imgUrl ? (
-                          <img src={imgUrl} alt={product.name || product.article_no} className="faire-square-img" />
+                          <img src={imgUrl} alt={product.name || product.article_no} className="faire-square-img" {...storefrontImageProps(idx < 8)} />
                         ) : (
                           <div className="faire-no-img">
                             <span>{product.article_no || "Crafted Item"}</span>
@@ -1158,17 +1280,17 @@ export default function WebsiteCatalog() {
                         {(showBestseller || showNew) && tagStyle !== "inline-title" && (
                           <div className={`faire-card-badge-wrap ${tagStyle}`}>
                             <span className={`faire-badge-pill ${showBestseller ? "is-bestseller" : "is-new"}`}>
-                              {showBestseller ? "🔥 BESTSELLER" : "✨ NEW ARRIVAL"}
+                              {showBestseller ? " BESTSELLER" : " NEW ARRIVAL"}
                             </span>
                           </div>
                         )}
 
                         <button
-                          className={`faire-wishlist-heart ${isWishlisted ? "is-liked" : ""}`}
+                          className={`faire-wishlist-heart $<span className="sr-only">{isWishlisted ? "Saved" : "Save"}</span>`}
                           onClick={(e) => toggleWishlist(product.id, e)}
                           title="Add to Wishlist"
                         >
-                          {isWishlisted ? "♥" : "♡"}
+                          <span className="sr-only">{isWishlisted ? "Saved" : "Save"}</span>
                         </button>
 
                         <div className="faire-hover-actions">
@@ -1188,7 +1310,7 @@ export default function WebsiteCatalog() {
                         {(showBestseller || showNew) && tagStyle === "inline-title" && (
                           <div className="faire-inline-badge-row">
                             <span className={`faire-badge-pill inline-style ${showBestseller ? "is-bestseller" : "is-new"}`}>
-                              {showBestseller ? "🔥 BESTSELLER" : "✨ NEW ARRIVAL"}
+                              {showBestseller ? " BESTSELLER" : " NEW ARRIVAL"}
                             </span>
                           </div>
                         )}
@@ -1203,7 +1325,7 @@ export default function WebsiteCatalog() {
                         </h3>
 
                         <div className="faire-case-info">
-                          Case of 1 • {product.category || "Factory Knife"}
+                          Case of 1  {product.category || "Factory Knife"}
                         </div>
                       </div>
                     </div>
@@ -1252,13 +1374,13 @@ export default function WebsiteCatalog() {
               <span className="pay-badge">INVOICE PO</span>
             </div>
             <div className="footer-security-text">
-              🔒 256-Bit SSL Encrypted & Secured Checkout
+               256-Bit SSL Encrypted & Secured Checkout
             </div>
           </div>
         </div>
 
         <div className="shopify-footer-bottom">
-          <span>© {new Date().getFullYear()} {settings.brand_name || "Hisbenew Industries"}. All rights reserved.</span>
+          <span> {new Date().getFullYear()} {settings.brand_name || "Hisbenew Industries"}. All rights reserved.</span>
           <span>Precision Handmade Knife & Tool Manufacturing</span>
         </div>
       </footer>
@@ -1269,12 +1391,12 @@ export default function WebsiteCatalog() {
           <div className="shopify-cart-drawer" onClick={(e) => e.stopPropagation()}>
             <div className="shopify-drawer-header">
               <h3>Shopping Cart ({summary.count})</h3>
-              <button className="shopify-close-drawer-btn" onClick={() => setIsCartOpen(false)}>✕</button>
+              <button className="shopify-close-drawer-btn" onClick={() => setIsCartOpen(false)}></button>
             </div>
 
             <div className="shopify-free-shipping-box">
               {summary.subtotal >= 500 ? (
-                <span className="shipping-unlocked">🎉 You unlocked FREE Express Shipping!</span>
+                <span className="shipping-unlocked"> You unlocked FREE Express Shipping!</span>
               ) : (
                 <span>Add {formatUsdPrice(500 - summary.subtotal)} more for <strong>FREE Express Shipping</strong></span>
               )}
@@ -1289,7 +1411,7 @@ export default function WebsiteCatalog() {
             <div className="shopify-drawer-body">
               {cartItems.length === 0 ? (
                 <div className="shopify-empty-cart">
-                  <div className="empty-cart-badge-icon">🛍️</div>
+                  <div className="empty-cart-badge-icon" aria-hidden="true"></div>
                   <h4>Your Cart is Empty</h4>
                   <p>Discover our handcrafted chef knives, hunting blades & factory wholesale collections.</p>
                   <button
@@ -1299,7 +1421,7 @@ export default function WebsiteCatalog() {
                       document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth" });
                     }}
                   >
-                    Start Shopping ➔
+                    Start Shopping 
                   </button>
                 </div>
               ) : (
@@ -1307,7 +1429,7 @@ export default function WebsiteCatalog() {
                   <div key={item.id} className="shopify-cart-item">
                     <div className="shopify-item-thumb">
                       {item.image_url ? (
-                        <img src={getStaticUrl(item.image_url)} alt={item.name} />
+                        <img src={getStaticUrl(item.image_url)} alt={item.name} {...storefrontImageProps(false)} />
                       ) : (
                         <span>{item.article_no}</span>
                       )}
@@ -1352,7 +1474,7 @@ export default function WebsiteCatalog() {
                     setIsCheckoutOpen(true);
                   }}
                 >
-                  Proceed to Checkout ➔
+                  Proceed to Checkout 
                 </button>
               </div>
             )}
@@ -1365,13 +1487,13 @@ export default function WebsiteCatalog() {
         <div className="shopify-modal-overlay" onClick={() => setIsCheckoutOpen(false)}>
           <div className="shopify-checkout-modal" onClick={(e) => e.stopPropagation()}>
             <div className="shopify-checkout-header">
-              <h2>🔒 Secure Order Checkout</h2>
-              <button className="shopify-modal-close" onClick={() => setIsCheckoutOpen(false)}>✕</button>
+              <h2> Secure Order Checkout</h2>
+              <button className="shopify-modal-close" onClick={() => setIsCheckoutOpen(false)}></button>
             </div>
 
             {completedOrder ? (
               <div className="shopify-order-success">
-                <div className="success-icon">✓</div>
+                <div className="success-icon" aria-hidden="true"></div>
                 <h3>Order Placed Successfully!</h3>
                 <p>Order reference <strong>#{completedOrder.order_id}</strong> has been created in the system.</p>
                 <div className="order-receipt-box">
@@ -1452,7 +1574,7 @@ export default function WebsiteCatalog() {
                           checked={checkoutForm.paymentMethod === "card"}
                           onChange={(e) => setCheckoutForm({ ...checkoutForm, paymentMethod: e.target.value })}
                         />
-                        <span>💳 Credit / Debit Card</span>
+                        <span> Credit / Debit Card</span>
                       </label>
                       <label className="payment-radio">
                         <input
@@ -1462,7 +1584,7 @@ export default function WebsiteCatalog() {
                           checked={checkoutForm.paymentMethod === "invoice"}
                           onChange={(e) => setCheckoutForm({ ...checkoutForm, paymentMethod: e.target.value })}
                         />
-                        <span>📄 Invoice / Purchase Order</span>
+                        <span> Invoice / Purchase Order</span>
                       </label>
                     </div>
                   </div>
@@ -1500,12 +1622,12 @@ export default function WebsiteCatalog() {
           <div className="shopify-contact-modal" onClick={(e) => e.stopPropagation()}>
             <div className="shopify-modal-header">
               <h3>Contact Factory Support & Wholesale Sales</h3>
-              <button className="shopify-close-drawer-btn" onClick={() => setIsContactModalOpen(false)}>✕</button>
+              <button className="shopify-close-drawer-btn" onClick={() => setIsContactModalOpen(false)}></button>
             </div>
 
             {contactSubmitted ? (
               <div className="shopify-order-success">
-                <div className="success-icon">✓</div>
+                <div className="success-icon" aria-hidden="true"></div>
                 <h3>Message Sent Successfully!</h3>
                 <p>Thank you for reaching out. Our factory sales team will respond to <strong>{contactForm.email}</strong> within 24 hours.</p>
               </div>
@@ -1514,20 +1636,20 @@ export default function WebsiteCatalog() {
                 <div className="contact-info-card">
                   <h4>Factory & Headquarters</h4>
                   <div className="contact-info-item">
-                    <strong>📍 Factory Address:</strong>
+                    <strong> Factory Address:</strong>
                     <p>P/O Khaas Talwara, Sohdra, Tehsil Wazirabad, Wazirabad 52030, Pakistan</p>
                   </div>
                   <div className="contact-info-item">
-                    <strong>✉️ Direct Email:</strong>
+                    <strong> Direct Email:</strong>
                     <p>support@hisbenew.com / sales@hisbenew.com</p>
                   </div>
                   <div className="contact-info-item">
-                    <strong>📞 Phone & WhatsApp:</strong>
+                    <strong> Phone & WhatsApp:</strong>
                     <p>+92 (300) 123-4567</p>
                   </div>
                   <div className="contact-info-item">
-                    <strong>🕒 Business Hours:</strong>
-                    <p>Monday – Saturday: 9:00 AM – 6:00 PM (PKT)</p>
+                    <strong> Business Hours:</strong>
+                    <p>Monday - Saturday: 9:00 AM - 6:00 PM (PKT)</p>
                   </div>
                 </div>
 
@@ -1590,7 +1712,7 @@ export default function WebsiteCatalog() {
                   </div>
 
                   <button type="submit" className="shopify-checkout-btn">
-                    Send Inquiry to Factory ➔
+                    Send Inquiry to Factory 
                   </button>
                 </form>
               </div>
@@ -1607,7 +1729,7 @@ export default function WebsiteCatalog() {
             onClick={() => setIsChatOpen(true)}
             type="button"
           >
-            <span className="livechat-icon">💬</span>
+            <span className="livechat-icon" aria-hidden="true"></span>
             <span className="livechat-text">Chat with Hisbenew</span>
             {unreadChatCount > 0 ? (
               <span className="livechat-unread-pill">{unreadChatCount}</span>
@@ -1622,22 +1744,24 @@ export default function WebsiteCatalog() {
                 <span className="livechat-avatar">HI</span>
                 <div>
                   <strong>Hisbenew Live Support</strong>
-                  <span className="livechat-status"><span className="green-dot"></span> Online • Responds in &lt; 2 mins</span>
+                  <span className="livechat-status"><span className="green-dot"></span> Online / Responds in &lt; 2 mins</span>
                 </div>
               </div>
               <button
+                aria-label="Close live chat"
                 className="livechat-close-btn"
                 onClick={() => setIsChatOpen(false)}
+                title="Close chat"
                 type="button"
               >
-                ✕
+                <span aria-hidden="true">x</span>
               </button>
             </div>
 
             <div className="livechat-body">
               {chatMessages.length === 0 ? (
                 <div className="livechat-welcome-card">
-                  <div className="welcome-icon">👋</div>
+                  <div className="welcome-icon">HI</div>
                   <h4>Welcome to Hisbenew Crafts!</h4>
                   <p>Ask us anything about wholesale orders, custom blade forging, specs, or shipping.</p>
                   
@@ -1714,7 +1838,7 @@ export default function WebsiteCatalog() {
                   required
                 />
                 <button type="submit" disabled={chatSending}>
-                  {chatSending ? "..." : "Send ➔"}
+                  {chatSending ? "..." : "Send "}
                 </button>
               </div>
             </form>

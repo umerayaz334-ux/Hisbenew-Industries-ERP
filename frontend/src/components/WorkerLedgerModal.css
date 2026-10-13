@@ -1,8 +1,7 @@
 .worker-ledger-modal-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(15, 23, 42, 0.7);
-  backdrop-filter: blur(4px);
+  background-color: rgba(8, 14, 24, 0.72);
   z-index: 1200;
   display: flex;
   align-items: center;
@@ -12,13 +11,13 @@
 }
 
 .worker-ledger-modal {
-  background: var(--bg-card, #ffffff);
-  border: 1px solid var(--border-color, #e2e8f0);
-  border-radius: 16px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  background: #f6f7f9;
+  border: 1px solid #cfcfcf;
+  border-radius: 5px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
   width: 100%;
-  max-width: 1000px;
-  max-height: 90vh;
+  max-width: 1200px;
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -42,8 +41,8 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 1.5rem;
-  border-bottom: 1px solid var(--border-color, #e2e8f0);
-  background-color: var(--bg-body, #f8fafc);
+  border-bottom: 1px solid #d8d8d8;
+  background-color: #ffffff;
 }
 
 .wlm-kicker {
@@ -51,7 +50,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--color-primary, #3b82f6);
+  color: #666666;
   display: block;
   margin-bottom: 0.25rem;
 }
@@ -66,21 +65,23 @@
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0;
-  color: var(--text-color, #0f172a);
+  color: #222222;
 }
 
 .wlm-worker-select {
-  padding: 0.25rem 0.6rem;
-  border-radius: 6px;
-  border: 1px solid var(--border-color, #cbd5e1);
+  min-height: 40px;
+  padding: 0.35rem 0.65rem;
+  border-radius: 4px;
+  border: 1px solid #cfcfcf;
   font-size: 0.85rem;
-  background: var(--bg-card, #ffffff);
+  color: #222222;
+  background: #ffffff;
 }
 
 .wlm-sub {
   margin: 0.25rem 0 0 0;
   font-size: 0.875rem;
-  color: var(--text-muted, #64748b);
+  color: #666666;
 }
 
 .wlm-header-actions {
@@ -90,8 +91,9 @@
 }
 
 .wlm-btn {
+  min-height: 40px;
   padding: 0.5rem 1rem;
-  border-radius: 8px;
+  border-radius: 5px;
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
@@ -100,13 +102,13 @@
 }
 
 .wlm-btn-secondary {
-  background-color: var(--bg-hover, #f1f5f9);
-  color: var(--text-color, #334155);
-  border: 1px solid var(--border-color, #cbd5e1);
+  background-color: #ffffff;
+  color: #2f3338;
+  border: 1px solid #cfcfcf;
 }
 
 .wlm-btn-secondary:hover {
-  background-color: #e2e8f0;
+  background-color: #f1f2f3;
 }
 
 .wlm-btn-primary {
@@ -122,15 +124,15 @@
   background: none;
   border: none;
   font-size: 1.25rem;
-  color: var(--text-muted, #64748b);
+  color: #666666;
   cursor: pointer;
   padding: 0.35rem 0.6rem;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .wlm-close-btn:hover {
   background-color: rgba(0, 0, 0, 0.05);
-  color: var(--text-color, #0f172a);
+  color: #222222;
 }
 
 .wlm-summary-cards {
@@ -138,14 +140,14 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
   padding: 1.25rem 1.5rem;
-  background-color: var(--bg-card, #ffffff);
+  background-color: #f6f7f9;
 }
 
 .wlm-card {
   padding: 1rem;
-  border-radius: 12px;
-  border: 1px solid var(--border-color, #e2e8f0);
-  background: var(--bg-body, #f8fafc);
+  border-radius: 5px;
+  border: 1px solid #d8d8d8;
+  background: #ffffff;
   display: flex;
   flex-direction: column;
 }
@@ -153,7 +155,7 @@
 .wlm-card span {
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--text-muted, #64748b);
+  color: #666666;
 }
 
 .wlm-card strong {
@@ -165,7 +167,7 @@
 
 .wlm-card small {
   font-size: 0.75rem;
-  color: var(--text-muted, #94a3b8);
+  color: #777777;
 }
 
 .wlm-card-earned strong {
@@ -195,17 +197,17 @@
   flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.75rem 1.5rem;
-  background-color: var(--bg-body, #f8fafc);
-  border-top: 1px solid var(--border-color, #e2e8f0);
-  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  background-color: #f6f7f9;
+  border-top: 1px solid #d8d8d8;
+  border-bottom: 1px solid #d8d8d8;
 }
 
 .wlm-type-tabs {
   display: flex;
   gap: 0.35rem;
-  background-color: var(--bg-card, #e2e8f0);
+  background-color: #e9ebee;
   padding: 0.25rem;
-  border-radius: 8px;
+  border-radius: 5px;
 }
 
 .wlm-type-tabs button {
@@ -214,15 +216,15 @@
   background: none;
   font-size: 0.8rem;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
-  color: var(--text-muted, #64748b);
+  color: #555d66;
   transition: all 0.15s;
 }
 
 .wlm-type-tabs button.is-active {
-  background-color: var(--bg-card, #ffffff);
-  color: var(--text-color, #0f172a);
+  background-color: #ffffff;
+  color: #222222;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -234,11 +236,12 @@
 
 .wlm-search-input,
 .wlm-date-input {
+  min-height: 40px;
   padding: 0.35rem 0.6rem;
-  border-radius: 6px;
-  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: 4px;
+  border: 1px solid #cfcfcf;
   font-size: 0.8rem;
-  background: var(--bg-card, #ffffff);
+  background: #ffffff;
 }
 
 .wlm-clear-filter {
@@ -253,11 +256,13 @@
 .wlm-table-wrap {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
   padding: 0 1.5rem 1.5rem 1.5rem;
 }
 
 .wlm-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
   margin-top: 1rem;
   font-size: 0.875rem;
@@ -266,26 +271,81 @@
 .wlm-table th {
   position: sticky;
   top: 0;
-  background-color: var(--bg-body, #f8fafc);
+  background-color: #f6f7f9;
   text-align: left;
   padding: 0.75rem;
   font-weight: 700;
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-muted, #64748b);
-  border-bottom: 2px solid var(--border-color, #e2e8f0);
+  color: #525d69;
+  border-bottom: 1px solid #d8d8d8;
 }
 
 .wlm-table td {
   padding: 0.75rem;
-  border-bottom: 1px solid var(--border-color, #f1f5f9);
+  border-bottom: 1px solid #e2e6ea;
   vertical-align: top;
+}
+
+.wlm-table tbody tr:nth-child(odd) {
+  background: #ffffff;
 }
 
 .wlm-row-job:hover,
 .wlm-row-payout:hover {
-  background-color: var(--bg-hover, #f8fafc);
+  background-color: #f3f4f5;
+}
+
+.wlm-actions-heading,
+.wlm-actions-cell {
+  width: 54px;
+  text-align: center !important;
+}
+
+.wlm-actions-cell {
+  vertical-align: middle !important;
+}
+
+.wlm-delete-job-btn {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  background: #fff7f7;
+  color: #dc2626;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.wlm-delete-job-btn:hover:not(:disabled) {
+  border-color: #f87171;
+  background: #fee2e2;
+  transform: translateY(-1px);
+}
+
+.wlm-delete-job-btn:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+}
+
+.wlm-delete-job-btn:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.wlm-action-error {
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.875rem;
 }
 
 .wlm-date-cell {
@@ -315,18 +375,18 @@
 
 .wlm-entry-title {
   display: block;
-  color: var(--text-color, #0f172a);
+  color: #222222;
 }
 
 .wlm-entry-sub {
   display: block;
   font-size: 0.75rem;
-  color: var(--text-muted, #64748b);
+  color: #666666;
 }
 
 .wlm-entry-note {
   font-size: 0.75rem;
-  color: var(--text-muted, #94a3b8);
+  color: #777777;
   margin-top: 0.2rem;
   font-style: italic;
 }
@@ -347,7 +407,7 @@
 }
 
 .wlm-muted {
-  color: var(--text-muted, #94a3b8);
+  color: #777777;
 }
 
 .text-payable {
@@ -378,9 +438,67 @@
 }
 
 .wlm-empty-state p {
-  color: var(--text-muted, #64748b);
+  color: #666666;
   margin: 0;
   font-size: 0.875rem;
+}
+
+@media (max-width: 720px) {
+  .worker-ledger-modal-overlay {
+    padding: 0.5rem;
+  }
+
+  .worker-ledger-modal {
+    max-height: 96vh;
+    border-radius: 12px;
+  }
+
+  .wlm-header {
+    padding: 1rem;
+  }
+
+  .wlm-header-actions {
+    gap: 0.25rem;
+  }
+
+  .wlm-btn {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.78rem;
+  }
+
+  .wlm-summary-cards {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+  }
+
+  .wlm-card {
+    padding: 0.75rem;
+  }
+
+  .wlm-card strong {
+    font-size: 1.15rem;
+  }
+
+  .wlm-toolbar {
+    align-items: stretch;
+    padding: 0.75rem 1rem;
+  }
+
+  .wlm-type-tabs,
+  .wlm-filter-inputs {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .wlm-filter-inputs > * {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .wlm-table-wrap {
+    padding: 0 1rem 1rem;
+  }
 }
 
 /* Printable Styles */

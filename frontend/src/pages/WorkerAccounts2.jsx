@@ -55,6 +55,21 @@ const getTaskEarning = (task) =>
         Number(task.rate_per_piece || 0)
   );
 
+const createJobForm = (workerId = "", ratePerPiece = "", assignedQuantity = 1) => ({
+  worker_id: workerId,
+  product_mode: "inventory",
+  product_id: "",
+  custom_product_name: "",
+  custom_article_no: "",
+  step_name: "Polishing",
+  custom_operation: "",
+  assigned_quantity: assignedQuantity,
+  rate_per_piece: ratePerPiece,
+  due_date: getDefaultDueDateTime(),
+  notes: "",
+  status: "Pending",
+});
+
 const getInitials = (name) => {
   if (!name) return "W";
   const parts = name.trim().split(" ");
@@ -83,6 +98,8 @@ export default function WorkerAccounts2() {
 
   // Modals & Accordions
   const [showAddJobModal, setShowAddJobModal] = useState(false);
+  const [queuedJobs, setQueuedJobs] = useState([]);
+  const [jobDraftDirty, setJobDraftDirty] = useState(false);
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedLedgerWorker, setSelectedLedgerWorker] = useState(null);
@@ -105,19 +122,7 @@ export default function WorkerAccounts2() {
   const [actionBusy, setActionBusy] = useState("");
 
   // Form States
-  const [jobForm, setJobForm] = useState({
-    worker_id: "",
-    product_mode: "inventory",
-    product_id: "",
-    custom_product_name: "",
-    custom_article_no: "",
-    step_name: "Polishing",
-    custom_operation: "",
-    assigned_quantity: 1,
-    rate_per_piece: "",
-    due_date: getDefaultDueDateTime(),
-    notes: "",
-  });
+  const [jobForm, setJobForm] = useState(() => createJobForm());
 
   const [editJobForm, setEditJobForm] = useState({
     worker_id: "",
@@ -322,6 +327,7 @@ export default function WorkerAccounts2() {
   // Handlers
   const handleJobFormChange = (e) => {
     const { name, value } = e.target;
+    setJobDraftDirty(true);
     setJobForm((prev) => {
       const updated = { ...prev, [name]: value };
       if (name === "worker_id") {
@@ -332,6 +338,43 @@ export default function WorkerAccounts2() {
       }
       return updated;
     });
+  };
+
+  const addJobToQueue = () => {
+    if (!jobForm.worker_id) {
+      alert("Please select a worker.");
+      return;
+    }
+    if (Number(jobForm.assigned_quantity) < 1) {
+      alert("Quantity must be at least 1.");
+      return;
+    }
+    if (jobForm.rate_per_piece === "" || Number(jobForm.rate_per_piece) < 0) {
+      alert("Please enter a valid rate per piece.");
+      return;
+    }
+    if (jobForm.step_name === "Other" && !jobForm.custom_operation.trim()) {
+      alert("Please enter the custom operation name.");
+      return;
+    }
+
+    const stepName =
+      jobForm.step_name === "Other"
+        ? jobForm.custom_operation.trim()
+        : jobForm.step_name;
+    setQueuedJobs((prev) => [
+      ...prev,
+      {
+        ...jobForm,
+        queue_id: `${Date.now()}-${Math.random()}`,
+        step_name: stepName,
+      },
+    ]);
+    const worker = workers.find(
+      (item) => String(item.id) === String(jobForm.worker_id)
+    );
+    setJobForm(createJobForm(jobForm.worker_id, "", ""));
+    setJobDraftDirty(false);
   };
 
   const openEditWorkerModal = (w) => {
@@ -380,60 +423,122 @@ export default function WorkerAccounts2() {
       return;
     }
 
-    const stepName =
-      jobForm.step_name === "Other"
-        ? jobForm.custom_operation.trim() || "Manual Task"
-        : jobForm.step_name;
+    const draftShouldBeSaved = jobDraftDirty || queuedJobs.length === 0;
+    const jobsToSave = [
+      ...queuedJobs,
+      ...(draftShouldBeSaved
+        ? [
+            {
+              ...jobForm,
+              step_name:
+                jobForm.step_name === "Other"
+                  ? jobForm.custom_operation.trim()
+                  : jobForm.step_name,
+            },
+          ]
+        : []),
+    ];
+    const invalidJob = jobsToSave.find(
+      (job) =>
+        !job.step_name?.trim() ||
+        Number(job.assigned_quantity) < 1 ||
+        job.rate_per_piece === "" ||
+        Number(job.rate_per_piece) < 0
+    );
+    if (invalidJob) {
+      alert("Each job needs an operation, a quantity of at least 1, and a valid rate.");
+      return;
+    }
 
-    const worker = workers.find((w) => String(w.id) === String(jobForm.worker_id));
+    const worker = workers.find(
+      (item) => String(item.id) === String(jobForm.worker_id)
+    );
+    const failedJobs = [];
+    let createdCount = 0;
+    let completionFailedCount = 0;
 
     setActionBusy("save_job");
     try {
-      await api.post("/production/tasks", {
-        worker_id: Number(jobForm.worker_id),
-        product_id:
-          jobForm.product_mode === "inventory" && jobForm.product_id
-            ? Number(jobForm.product_id)
-            : null,
-        custom_product_name:
-          jobForm.product_mode === "custom"
-            ? jobForm.custom_product_name.trim() || null
-            : null,
-        custom_article_no:
-          jobForm.product_mode === "custom"
-            ? jobForm.custom_article_no.trim() || null
-            : null,
-        step_name: stepName,
-        assigned_quantity: Number(jobForm.assigned_quantity || 1),
-        rate_per_piece: Number(
-          jobForm.rate_per_piece === ""
-            ? worker?.rate_per_piece || 0
-            : jobForm.rate_per_piece
-        ),
-        due_date: jobForm.due_date ? new Date(jobForm.due_date).toISOString() : null,
-        notes: jobForm.notes.trim() || null,
-        worker_role: worker?.role || null,
-      });
+      for (const job of jobsToSave) {
+        let response;
+        try {
+          response = await api.post("/production/manual-tasks", {
+            worker_id: Number(jobForm.worker_id),
+            product_id:
+              job.product_mode === "inventory" && job.product_id
+                ? Number(job.product_id)
+                : null,
+            custom_product_name:
+              job.product_mode === "custom"
+                ? job.custom_product_name.trim() || null
+                : null,
+            custom_article_no:
+              job.product_mode === "custom"
+                ? job.custom_article_no.trim() || null
+                : null,
+            step_name: job.step_name.trim(),
+            assigned_quantity: Number(job.assigned_quantity),
+            rate_per_piece: Number(
+              job.rate_per_piece === ""
+                ? worker?.rate_per_piece || 0
+                : job.rate_per_piece
+            ),
+            due_date: job.due_date
+              ? new Date(job.due_date).toISOString()
+              : null,
+            notes: job.notes.trim() || null,
+            worker_role: worker?.role || null,
+          });
+        } catch (err) {
+          console.error("Save worker job error:", err);
+          failedJobs.push(job);
+          continue;
+        }
 
-      setNotice(`Job created successfully for ${worker?.name || "worker"}.`);
-      setShowAddJobModal(false);
-      setJobForm({
-        worker_id: selectedWorkerId !== "all" ? selectedWorkerId : "",
-        product_mode: "inventory",
-        product_id: "",
-        custom_product_name: "",
-        custom_article_no: "",
-        step_name: "Polishing",
-        custom_operation: "",
-        assigned_quantity: 1,
-        rate_per_piece: "",
-        due_date: getDefaultDueDateTime(),
-        notes: "",
-      });
+        createdCount += 1;
+        if (job.status === "Completed") {
+          const taskId = response.data?.task?.id;
+          if (!taskId) {
+            completionFailedCount += 1;
+            console.error("Created worker job response did not include a task ID.");
+            continue;
+          }
+          try {
+            await api.patch(`/production/tasks/${taskId}/complete`, {
+              completed_quantity: Number(job.assigned_quantity),
+              verify: true,
+            });
+          } catch (err) {
+            completionFailedCount += 1;
+            console.error("Failed to complete newly created worker job:", err);
+          }
+        }
+      }
+
+      const failedQueueIds = new Set(
+        failedJobs.map((job) => job.queue_id).filter(Boolean)
+      );
+      setQueuedJobs(queuedJobs.filter((job) => failedQueueIds.has(job.queue_id)));
+      if (draftShouldBeSaved && !failedJobs.includes(jobsToSave[jobsToSave.length - 1])) {
+        const defaultWorker = workers.find(
+          (item) => String(item.id) === String(jobForm.worker_id)
+        );
+        setJobForm(createJobForm(jobForm.worker_id, defaultWorker?.rate_per_piece || ""));
+        setJobDraftDirty(false);
+      }
+
+      if (failedJobs.length > 0) {
+        setNotice(
+          `Created ${createdCount} of ${jobsToSave.length} jobs. ${failedJobs.length} job(s) could not be created and remain available to retry.`
+        );
+      } else {
+        setNotice(
+          `${createdCount} job${createdCount === 1 ? "" : "s"} created for ${worker?.name || "worker"}${completionFailedCount ? `; ${completionFailedCount} could not be marked completed and remain pending` : ""}.`
+        );
+        setShowAddJobModal(false);
+        setQueuedJobs([]);
+      }
       await loadData();
-    } catch (err) {
-      console.error("Save job error:", err);
-      alert(err.response?.data?.detail || "Failed to create job.");
     } finally {
       setActionBusy("");
     }
@@ -473,7 +578,7 @@ export default function WorkerAccounts2() {
         });
       } else {
         await api.patch(`/production/tasks/${taskId}`, payload).catch(() => {
-          return api.post(`/production/tasks`, {
+          return api.post(`/production/manual-tasks`, {
             ...payload,
             worker_id: Number(editJobForm.worker_id),
           });
@@ -641,10 +746,14 @@ export default function WorkerAccounts2() {
               className="primary-btn"
               style={{ backgroundColor: "#2563eb", borderColor: "#2563eb" }}
               onClick={() => {
-                setJobForm((prev) => ({
-                  ...prev,
-                  worker_id: selectedWorkerId !== "all" ? selectedWorkerId : "",
-                }));
+                const workerId =
+                  selectedWorkerId !== "all" ? selectedWorkerId : "";
+                const worker = workers.find(
+                  (item) => String(item.id) === String(workerId)
+                );
+                setQueuedJobs([]);
+                setJobDraftDirty(false);
+                setJobForm(createJobForm(workerId, worker?.rate_per_piece || ""));
                 setShowAddJobModal(true);
               }}
               type="button"
@@ -910,7 +1019,11 @@ export default function WorkerAccounts2() {
                       </td>
                       <td>
                         <span className={`status-chip ${isStarted ? "advance" : "pending"}`}>
-                          {isStarted ? "In Progress" : "Ready"}
+                          {isStarted
+                            ? "In Progress"
+                            : t.status === "Ready"
+                            ? "Pending"
+                            : t.status || "Pending"}
                         </span>
                       </td>
                       <td>
@@ -1172,12 +1285,15 @@ export default function WorkerAccounts2() {
       {showAddJobModal && (
         <div className="confirm-overlay" onClick={() => setShowAddJobModal(false)}>
           <div
-            className="confirm-modal"
+            className="confirm-modal worker-job-modal"
             onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: "560px", width: "90%", padding: "1.5rem" }}
+            style={{ width: "calc(100vw - 32px)", padding: "1.25rem", maxHeight: "90vh", overflowY: "auto" }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
-              <h3 style={{ margin: 0, fontWeight: "700" }}>Add Worker Job</h3>
+              <div>
+                <h3 style={{ margin: 0, fontWeight: "700" }}>Add Worker Jobs</h3>
+                <small style={{ color: "#64748b" }}>Record work for this worker. Add a separate entry for each job and quantity.</small>
+              </div>
               <button
                 className="secondary-btn"
                 style={{ padding: "0 8px", minHeight: "28px" }}
@@ -1196,6 +1312,7 @@ export default function WorkerAccounts2() {
                   required
                   value={jobForm.worker_id}
                   onChange={handleJobFormChange}
+                  disabled={queuedJobs.length > 0}
                   style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
                 >
                   <option value="">-- Select Worker --</option>
@@ -1237,14 +1354,14 @@ export default function WorkerAccounts2() {
                 </div>
               )}
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.75rem" }}>
                 <div className="form-group">
                   <label style={{ fontWeight: "700", fontSize: "11px", textTransform: "uppercase" }}>Quantity (Pieces) *</label>
                   <input
                     type="number"
                     name="assigned_quantity"
                     min="1"
-                    required
+                    required={jobDraftDirty || queuedJobs.length === 0}
                     value={jobForm.assigned_quantity}
                     onChange={handleJobFormChange}
                     style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
@@ -1257,27 +1374,141 @@ export default function WorkerAccounts2() {
                     name="rate_per_piece"
                     min="0"
                     step="0.5"
-                    required
+                    required={jobDraftDirty || queuedJobs.length === 0}
                     placeholder="e.g. 50"
                     value={jobForm.rate_per_piece}
                     onChange={handleJobFormChange}
                     style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
                   />
                 </div>
+                <div className="form-group">
+                  <label style={{ fontWeight: "700", fontSize: "11px", textTransform: "uppercase" }}>Job Status *</label>
+                  <select
+                    name="status"
+                    value={jobForm.status}
+                    onChange={handleJobFormChange}
+                    style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                  >
+                    <option value="Pending">Pending</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
               </div>
+
+              {queuedJobs.length > 0 && (
+                <div>
+                  <div className="worker-job-queue-header">
+                    <span>Work</span>
+                    <span>Quantity</span>
+                    <span>Rate / piece</span>
+                    <span>Status</span>
+                    <span />
+                  </div>
+                  <div style={{ display: "grid", gap: "8px" }}>
+                    {queuedJobs.map((job) => (
+                      <div
+                        key={job.queue_id}
+                        className="worker-job-queue-row"
+                      >
+                        <strong>{job.step_name}</strong>
+                        <input
+                          aria-label={`Quantity for ${job.step_name}`}
+                          type="number"
+                          min="1"
+                          value={job.assigned_quantity}
+                          onChange={(e) =>
+                            setQueuedJobs((prev) =>
+                              prev.map((item) =>
+                                item.queue_id === job.queue_id
+                                  ? { ...item, assigned_quantity: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          className="worker-job-queue-input"
+                        />
+                        <input
+                          aria-label={`Rate per piece for ${job.step_name}`}
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          value={job.rate_per_piece}
+                          onChange={(e) =>
+                            setQueuedJobs((prev) =>
+                              prev.map((item) =>
+                                item.queue_id === job.queue_id
+                                  ? { ...item, rate_per_piece: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          className="worker-job-queue-input"
+                        />
+                        <select
+                          aria-label={`Status for ${job.step_name}`}
+                          value={job.status}
+                          onChange={(e) =>
+                            setQueuedJobs((prev) =>
+                              prev.map((item) =>
+                                item.queue_id === job.queue_id
+                                  ? { ...item, status: e.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          className="worker-job-queue-status"
+                        >
+                          <option value="Pending">Pending</option>
+                          <option value="Completed">Completed</option>
+                        </select>
+                        <button
+                          className="worker-job-remove-btn"
+                          onClick={() => setQueuedJobs((prev) => prev.filter((item) => item.queue_id !== job.queue_id))}
+                          type="button"
+                          aria-label={`Delete ${job.step_name} job`}
+                          title={`Delete ${job.step_name} job`}
+                        >
+                          <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="m19 6-1 14H6L5 6" />
+                            <path d="M10 11v5M14 11v5" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div style={{ backgroundColor: "#f1f5f9", padding: "10px", borderRadius: "8px" }}>
                 <small style={{ color: "#475569", fontWeight: "700" }}>
-                  Estimated Total Earnings: {formatCurrency(Number(jobForm.assigned_quantity || 0) * Number(jobForm.rate_per_piece || 0))}
+                  Estimated Total Earnings:{" "}
+                  {formatCurrency(
+                    queuedJobs.reduce(
+                      (total, job) =>
+                        total +
+                        Number(job.assigned_quantity || 0) *
+                          Number(job.rate_per_piece || 0),
+                      0
+                    ) +
+                      ((jobDraftDirty || queuedJobs.length === 0)
+                        ? Number(jobForm.assigned_quantity || 0) *
+                          Number(jobForm.rate_per_piece || 0)
+                        : 0)
+                  )}
                 </small>
               </div>
 
               <div className="confirm-actions" style={{ justifyContent: "flex-end", marginTop: "0.5rem" }}>
+                <button className="secondary-btn" onClick={addJobToQueue} disabled={actionBusy === "save_job"} type="button">
+                  + Add another job
+                </button>
                 <button className="secondary-btn" onClick={() => setShowAddJobModal(false)} type="button">
                   Cancel
                 </button>
                 <button className="primary-btn" style={{ backgroundColor: "#2563eb", borderColor: "#2563eb" }} disabled={actionBusy === "save_job"} type="submit">
-                  {actionBusy === "save_job" ? "Saving..." : "Save Job"}
+                  {actionBusy === "save_job" ? "Saving..." : `Record ${queuedJobs.length + (jobDraftDirty || queuedJobs.length === 0 ? 1 : 0)} Job${queuedJobs.length + (jobDraftDirty || queuedJobs.length === 0 ? 1 : 0) === 1 ? "" : "s"}`}
                 </button>
               </div>
             </form>
@@ -1496,6 +1727,7 @@ export default function WorkerAccounts2() {
           payments={payments}
           onClose={() => setSelectedLedgerWorker(null)}
           onSelectWorker={(w) => setSelectedLedgerWorker(w)}
+          onTasksChange={loadData}
         />
       )}
     </div>

@@ -74,7 +74,7 @@ const formatDate = (value) => {
 const formatDateTime = (value) => {
   if (!value) return "-";
   const formatted = formatUtcLocal(value);
-  return formatted === "â€”" ? "-" : formatted;
+  return formatted === "-" ? "-" : formatted;
 };
 
 const orderValue = (order) => {

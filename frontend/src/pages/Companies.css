@@ -623,10 +623,15 @@
 }
 
 .cmp-pin-eye-btn {
+  min-width: 34px;
   background: none;
   border: none;
+  color: #1c1917;
   cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
   padding: 0;
+  text-decoration: underline;
 }
 
 .cmp-btn-reset-pin {
@@ -639,6 +644,84 @@
   cursor: pointer;
 }
 
+.cmp-table-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+
+.cmp-btn-danger {
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.cmp-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: #991b1b;
+  color: #ffffff;
+  font-size: 12px;
+}
+
+
+.cmp-btn-danger:hover {
+  opacity: 0.78;
+}
+
+.cmp-btn-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.cmp-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fff7f7;
+}
+
+.cmp-danger-zone div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cmp-danger-zone strong,
+.cmp-delete-warning strong {
+  color: #7f1d1d;
+  font-size: 13px;
+}
+
+.cmp-danger-zone span,
+.cmp-delete-warning span {
+  color: #7f1d1d;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cmp-delete-modal .cmp-modal-header {
+  background: #fff7f7;
+}
+
+.cmp-delete-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+}
 /* Modals */
 .cmp-modal-backdrop {
   position: fixed;
@@ -714,6 +797,166 @@
   color: #78716c;
 }
 
+/* Create Company Modal */
+.cmp-create-company-modal {
+  max-width: 760px;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.cmp-create-company-modal .cmp-modal-header {
+  flex: 0 0 auto;
+  padding: 18px 24px;
+}
+
+.cmp-create-company-form {
+  overflow-y: auto;
+  padding: 20px 24px 0;
+  gap: 22px;
+  scrollbar-gutter: stable;
+}
+
+.cmp-create-company-form .cmp-modal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cmp-create-company-form .cmp-modal-section h3 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.25;
+  color: #1c1917;
+}
+
+.cmp-create-company-form .cmp-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.cmp-create-company-form .cmp-input-group input {
+  min-height: 46px;
+  font-size: 15px;
+  border-radius: 12px;
+}
+
+.cmp-create-company-form .cmp-modules-pills-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  background: #fafaf9;
+}
+
+.cmp-create-company-form .cmp-create-module-sections .cmp-modules-pills-grid {
+  max-height: none;
+  overflow: visible;
+}
+
+.cmp-create-company-form .cmp-mod-pill {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #44403c;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.cmp-create-company-form .cmp-mod-pill:hover {
+  background: #f8fafc;
+  border-color: #a8a29e;
+  color: #1c1917;
+}
+
+.cmp-create-company-form .cmp-mod-pill.selected {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e3a8a;
+}
+
+.cmp-create-company-form .cmp-mod-pill.selected:hover {
+  background: #dbeafe;
+  border-color: #60a5fa;
+}
+
+.cmp-create-company-form .cmp-mod-pill.is-locked {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.cmp-create-company-form .cmp-mod-pill input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2563eb;
+}
+
+.cmp-create-company-form .cmp-mod-pill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmp-create-company-form .cmp-modal-footer {
+  position: sticky;
+  bottom: 0;
+  margin: 0 -24px;
+  padding: 16px 24px 20px;
+  background: #ffffff;
+  box-shadow: 0 -10px 20px rgba(28, 25, 23, 0.06);
+}
+
+@media (max-width: 760px) {
+  .cmp-modal-backdrop {
+    padding: 12px;
+  }
+
+  .cmp-create-company-modal {
+    max-height: calc(100vh - 24px);
+  }
+
+  .cmp-create-company-modal .cmp-modal-header {
+    padding: 16px;
+  }
+
+  .cmp-create-company-form {
+    padding: 16px 16px 0;
+  }
+
+  .cmp-create-company-form .cmp-form-grid,
+  .cmp-create-company-form .cmp-modules-pills-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cmp-create-company-form .cmp-modal-footer {
+    margin: 0 -16px;
+    padding: 14px 16px 16px;
+  }
+
+  .cmp-module-section-header {
+    flex-direction: column;
+  }
+
+  .cmp-module-section-actions {
+    justify-content: flex-start;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .cmp-module-section-count {
+    text-align: left;
+  }
+}
 /* Redesigned Modules Tab */
 .cmp-modules-topbar {
   display: flex;
@@ -779,6 +1022,102 @@
   gap: 12px;
 }
 
+.cmp-module-sections,
+.cmp-create-module-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cmp-create-module-sections {
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.cmp-module-section-card {
+  overflow: hidden;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.cmp-module-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #fafaf9;
+  border-bottom: 1px solid #e7e5e4;
+}
+
+.cmp-module-section-header h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #1c1917;
+}
+
+.cmp-module-section-header p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #78716c;
+}
+
+.cmp-module-section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 190px;
+}
+
+.cmp-module-section-count {
+  width: 100%;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  color: #57534e;
+}
+
+.cmp-module-section-button {
+  border: 1px solid #e7e5e4;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #44403c;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 9px;
+}
+
+.cmp-module-section-button:hover {
+  border-color: #1c1917;
+  color: #1c1917;
+}
+
+.cmp-module-section-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.cmp-module-section-card .cmp-modules-grid {
+  padding: 12px;
+}
+
+.cmp-module-section-card .cmp-modules-pills-grid {
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  padding: 12px;
+}
+
 .cmp-module-card {
   background: #ffffff;
   border: 1px solid #e7e5e4;
@@ -801,6 +1140,15 @@
 .cmp-module-card.is-enabled {
   border-color: #1c1917;
   background: #fafaf9;
+}
+
+.cmp-module-card.is-locked {
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
+.cmp-module-card.is-locked .cmp-toggle-switch {
+  opacity: 0.55;
 }
 
 .cmp-mod-card-top {

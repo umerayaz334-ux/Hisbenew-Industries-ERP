@@ -12,6 +12,7 @@ const statusOptions = [
 ];
 
 const createEmptyForm = () => ({
+  received_payout_usd: "",
   payout_amount_usd: "",
   payout_received_date: "",
   payout_status: "Not Received",
@@ -126,7 +127,7 @@ function getStatusLabel(status) {
 }
 
 function PayoutRow({ isSaving, onEdit, onMarkPaid, order }) {
-  const payoutAmount = Number(
+  const payoutAmount = order.payout_status === "Received" ? Number(order.received_payout_usd || 0) : Number(
     order.payout_amount_usd ||
       order.expected_payout_usd ||
       order.received_payout_usd ||
@@ -147,6 +148,8 @@ function PayoutRow({ isSaving, onEdit, onMarkPaid, order }) {
       </div>
 
       <div className="payouts-amount-cell">
+        <small>Estimated: USD {formatAmount(order.expected_payout_usd)}</small>
+        <small>Actual received: USD {formatAmount(order.received_payout_usd)}</small>
         <span className="payouts-mobile-label">Payout</span>
         {amountMissing ? (
           <button
@@ -321,7 +324,7 @@ function Payouts() {
     );
 
     return {
-      outstanding: Math.max(totalPayouts - totalReceived, 0),
+      outstanding: orders.reduce((sum, order) => sum + (order.payout_status === "Received" ? 0 : Math.max(Number(order.expected_payout_usd || 0) - Number(order.received_payout_usd || 0), 0)), 0),
       totalPayouts,
       totalReceived,
       orders: orders.length,
@@ -424,7 +427,7 @@ function Payouts() {
       expected_payout_date: order.expected_payout_date || null,
       payment_source: values.payment_source.trim() || null,
       payout_status: values.payout_status,
-      received_payout_usd: payoutIsReceived ? payoutAmount : 0,
+      received_payout_usd: payoutIsReceived ? Number(values.received_payout_usd || 0) : 0,
       remaining_payout_usd: null,
       exchange_rate: Number(order.exchange_rate || 0),
       received_pkr: Number(order.received_pkr || 0),
@@ -441,11 +444,8 @@ function Payouts() {
   const openEdit = (order, nextStatus = null) => {
     setEditingOrder(order);
     setForm({
-      payout_amount_usd:
-        order.payout_amount_usd ||
-        order.expected_payout_usd ||
-        order.received_payout_usd ||
-        "",
+      received_payout_usd: order.received_payout_usd || "",
+      payout_amount_usd: order.expected_payout_usd ?? "",
       payout_received_date: order.payout_received_date
         ? order.payout_received_date.slice(0, 10)
         : "",
@@ -474,7 +474,7 @@ function Payouts() {
     event.preventDefault();
     if (!editingOrder) return;
 
-    const amount = Number(form.payout_amount_usd || 0);
+    const amount = Number(form.received_payout_usd || 0);
     if (
       ["Received", "Partially Received"].includes(form.payout_status) &&
       amount <= 0
@@ -512,55 +512,9 @@ function Payouts() {
     }
   };
 
-  const markPaid = async (order) => {
-    const payoutAmount = Number(
-      order.payout_amount_usd ||
-        order.expected_payout_usd ||
-        order.received_payout_usd ||
-        0
-    );
-
-    if (payoutAmount <= 0) {
-      openEdit(order, "Received");
-      setFormError(
-        `Add the payout amount for order #${order.order_no} before marking it paid.`
-      );
-      return;
-    }
-
-    const values = {
-      payout_amount_usd: payoutAmount,
-      payout_received_date: order.payout_received_date
-        ? order.payout_received_date.slice(0, 10)
-        : localDateValue(),
-      payout_status: "Received",
-      payment_source: order.payment_source || "",
-      payout_notes: order.payout_notes || "",
-    };
-
-    setSavingOrderId(order.id);
-    try {
-      const response = await api.put(
-        `/orders/${order.id}/payout`,
-        buildPayload(order, values)
-      );
-      setNotice({
-        type: "success",
-        text:
-          response.data.payout_status === "Received"
-            ? `Order #${order.order_no} is marked paid.`
-            : `Order #${order.order_no} remains partial because an expected balance is still due.`,
-      });
-      await fetchOrders({ quiet: true });
-    } catch (error) {
-      console.error("Mark payout paid error:", error);
-      setNotice({
-        type: "error",
-        text: error.response?.data?.detail || "Unable to mark the payout paid.",
-      });
-    } finally {
-      setSavingOrderId(null);
-    }
+  const markPaid = (order) => {
+    openEdit(order, "Received");
+    setForm((current) => ({ ...current, payout_received_date: current.payout_received_date || localDateValue() }));
   };
 
   return (
@@ -802,8 +756,12 @@ function Payouts() {
               )}
 
               <div className="payouts-form-grid">
+                <label className="payouts-field">
+                  <span>Actual received (USD)</span>
+                  <input min="0" name="received_payout_usd" onChange={handleFormChange} step="0.01" type="number" value={form.received_payout_usd} />
+                </label>
                 <label className="payouts-field is-highlighted">
-                  <span>Payout amount (USD)</span>
+                  <span>Estimated net value (USD)</span>
                   <input
                     autoFocus
                     min="0"

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import api from "../api/api";
 import "./SuperAdminDashboard.css";
 
+
 const formatTime = (value) => {
   if (!value) return "Just now";
   const date = new Date(value);
@@ -69,14 +70,13 @@ export default function SuperAdminDashboard({ authenticatedUser, onNavigate, onS
   }, [companySearch, tenants]);
 
   const greetingName = authenticatedUser?.name || authenticatedUser?.username || "Admin";
-
   return (
     <div className="faire-dashboard">
       {/* Faire Serif Greeting Header */}
       <header className="faire-header">
         <h1 className="faire-greeting">Good day, {greetingName}!</h1>
         <button className="faire-link-btn" onClick={() => onNavigate?.("Companies")} type="button">
-          See all companies →
+          See all companies
         </button>
       </header>
 
@@ -98,7 +98,7 @@ export default function SuperAdminDashboard({ authenticatedUser, onNavigate, onS
             <button className="faire-text-action" onClick={() => onNavigate?.("Companies")} type="button">
               + Create new company
             </button>
-            <span className="faire-dot-sep">•</span>
+            <span className="faire-dot-sep">-</span>
             <button className="faire-text-action" onClick={() => onNavigate?.("Users")} type="button">
               Manage system users & PINs
             </button>
@@ -113,7 +113,7 @@ export default function SuperAdminDashboard({ authenticatedUser, onNavigate, onS
             <h2>Analytics snapshot</h2>
           </div>
           <button className="faire-link-btn" onClick={() => onNavigate?.("Companies")} type="button">
-            Go to companies directory →
+            Go to companies directory
           </button>
         </div>
 
@@ -122,7 +122,7 @@ export default function SuperAdminDashboard({ authenticatedUser, onNavigate, onS
             <span className="faire-metric-label">Total Companies</span>
             <div className="faire-metric-num">{loading ? "..." : tenants.length}</div>
             <span className="faire-trend-pill faire-pill-green">
-              ↑ {activeCompanies} Active
+              + {activeCompanies} Active
             </span>
           </div>
 
@@ -130,7 +130,7 @@ export default function SuperAdminDashboard({ authenticatedUser, onNavigate, onS
             <span className="faire-metric-label">Platform Users</span>
             <div className="faire-metric-num">{loading ? "..." : companyUsers.length}</div>
             <span className="faire-trend-pill faire-pill-green">
-              ↑ {companyAdmins.length} Admins
+              + {companyAdmins.length} Admins
             </span>
           </div>
 
@@ -140,7 +140,7 @@ export default function SuperAdminDashboard({ authenticatedUser, onNavigate, onS
               {loading ? "..." : `${Math.round((activeCompanies / (tenants.length || 1)) * 100)}%`}
             </div>
             <span className="faire-trend-pill faire-pill-green">
-              ↑ 100% Operational
+              + 100% Operational
             </span>
           </div>
 
@@ -202,7 +202,7 @@ export default function SuperAdminDashboard({ authenticatedUser, onNavigate, onS
                       title={`Enter ${tenant.company_name} portal`}
                       type="button"
                     >
-                      Enter Portal ↗
+                      Enter Portal
                     </button>
                   </div>
                 </div>
@@ -219,7 +219,7 @@ export default function SuperAdminDashboard({ authenticatedUser, onNavigate, onS
               <span className="faire-subtext">Realtime audit events & page views</span>
             </div>
             <button className="faire-link-btn" onClick={() => onNavigate?.("Users")} type="button">
-              Manage users →
+              Manage users
             </button>
           </div>
 

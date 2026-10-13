@@ -1,0 +1,143 @@
+"""Run with SKIP_DATABASE_INITIALIZATION=1 and a disposable DATABASE_URL."""
+import unittest
+from datetime import datetime
+from unittest.mock import Mock
+from fastapi import HTTPException
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+from fastapi.testclient import TestClient
+from unittest.mock import patch
+from app.database import Base
+from app.models import Customer, Product, Tenant, User, Order, MuseSubmission, OrderItem, StockMovement
+from app.muse_api import MuseOrder, MusePayout, enqueue, process_queue, match_customer, rotate_key, authenticate
+from app.main import create_order_record, sync_order_payout_accounting
+
+
+class MuseTests(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+        # Explicit BEGIN gives SQLite real outer transactions around savepoints.
+        @event.listens_for(self.engine, "connect")
+        def connect(connection, record):
+            connection.isolation_level = None
+        @event.listens_for(self.engine, "begin")
+        def begin(connection):
+            connection.exec_driver_sql("BEGIN")
+        Base.metadata.create_all(self.engine)
+        self.db = Session(self.engine)
+        self.db.add_all([Tenant(id=1, company_name="One", slug="one"), Tenant(id=2, company_name="Two", slug="two")])
+        self.db.commit()
+        self.db.info["tenant_id"] = 1
+        self.db.add(Product(article_no="SKU-1", name="Test", factory_stock=20))
+        self.db.commit()
+
+    def tearDown(self):
+        self.db.close()
+        self.engine.dispose()
+
+    def order(self, **changes):
+        data = dict(order_no="M-1", order_date="2026-10-10T00:00:00Z", customer_name="Jane", company_name="Shop", phone="+1 (212) 555-0123", shipping_address="NY, USA", estimated_net_usd=82.1, items=[dict(article_no="SKU-1", quantity=2, unit_price_usd=50)])
+        data.update(changes)
+        return MuseOrder(**data)
+
+    def process(self, creator=create_order_record, sync=sync_order_payout_accounting):
+        self.db.commit()
+        process_queue(self.engine, creator, sync)
+        self.db.expire_all()
+
+    def test_order_repeat_customer_and_payout(self):
+        payload = self.order()
+        first = enqueue(payload, "order", self.db)
+        self.assertEqual(first["id"], enqueue(payload, "order", self.db)["id"])
+        self.process()
+        self.assertEqual(self.db.query(MuseSubmission).first().status, "Applied")
+        self.assertEqual(self.db.query(Customer).count(), 1)
+        self.assertEqual(self.db.query(OrderItem).count(), 1)
+        self.assertEqual(self.db.query(Product).first().reserved_stock, 2)
+        enqueue(self.order(order_no="M-2", phone="0012125550123"), "order", self.db)
+        self.process()
+        self.assertEqual(self.db.query(Customer).count(), 1)
+        paid = MusePayout(order_no="M-1", actual_paid_usd=80, paid_at="2026-10-11T08:00:00+05:00")
+        enqueue(paid, "payout", self.db)
+        self.process()
+        order = self.db.query(Order).filter_by(order_no="M-1").one()
+        self.assertEqual((order.expected_payout_usd, order.received_payout_usd, order.remaining_payout_usd, order.payout_status), (82.1, 80, 0, "Received"))
+        from app.models import AccountingTransaction
+        self.assertEqual(self.db.query(AccountingTransaction).count(), 1)
+        enqueue(paid, "payout", self.db)
+        self.process()
+        self.assertEqual(self.db.query(AccountingTransaction).count(), 1)
+
+    def test_unknown_product_and_retry(self):
+        result = enqueue(self.order(items=[dict(article_no="MISSING", quantity=1, unit_price_usd=10)]), "order", self.db)
+        self.process()
+        self.assertEqual(self.db.get(MuseSubmission, result["id"]).status, "Failed")
+        self.assertEqual(self.db.query(Customer).count(), 0)
+        enqueue(self.order(), "order", self.db)
+        self.process()
+        self.assertEqual(self.db.query(Order).count(), 1)
+
+    def test_rollback_after_inner_commit(self):
+        enqueue(self.order(), "order", self.db)
+        def broken(payload, db, **kwargs):
+            create_order_record(payload, db, **kwargs)
+            raise RuntimeError("Simulated failure after commit")
+        self.process(creator=broken)
+        self.assertEqual(self.db.query(Order).count(), 0)
+        self.assertEqual(self.db.query(Customer).count(), 0)
+        self.assertEqual(self.db.query(StockMovement).count(), 0)
+
+    def test_ambiguous_customer_and_tenant_isolation(self):
+        self.db.add_all([Customer(name="Jane", company_name="Shop", phone="12125550123"), Customer(name="Other", phone="12125550123")])
+        self.db.commit()
+        with self.assertRaises(HTTPException):
+            match_customer(self.order(), self.db)
+        self.db.add(Customer(tenant_id=2, name="Elsewhere", phone="999"))
+        self.db.commit()
+        with self.assertRaises(HTTPException):
+            match_customer(self.order(customer_id=3), self.db)
+
+    def test_key_rotation_and_permissions(self):
+        admin = User(name="Admin", role="admin", tenant_id=1)
+        self.db.add(admin)
+        self.db.commit()
+        key = rotate_key(self.db, admin, 1)["api_key"]
+        self.assertEqual(authenticate(self.db, key)[1], 1)
+        rotate_key(self.db, admin, 1)
+        with self.assertRaises(HTTPException):
+            authenticate(self.db, key)
+        admin.role = "worker"
+        with self.assertRaises(HTTPException):
+            rotate_key(self.db, admin, 1)
+
+    def test_http_auth_scope_and_validation(self):
+        from app import main
+        admin = User(name="Admin", role="admin", tenant_id=1)
+        self.db.add(admin)
+        self.db.commit()
+        key = rotate_key(self.db, admin, 1)["api_key"]
+        def scoped_db(request: main.Request):
+            with Session(self.engine) as db:
+                db.info["tenant_id"] = request.state.tenant_id
+                yield db
+        main.app.dependency_overrides[main.get_db] = scoped_db
+        try:
+            with patch.object(main, "SessionLocal", lambda: Session(self.engine)):
+                client = TestClient(main.app)
+                self.assertEqual(client.post("/integrations/muse/orders", json=self.order().model_dump(mode="json")).status_code, 401)
+                headers = {"Authorization": f"Bearer {key}", "X-ERP-Tenant-Id": "2"}
+                response = client.post("/integrations/muse/orders", headers=headers, json=self.order().model_dump(mode="json"))
+                self.assertEqual(response.status_code, 202, response.text)
+                self.assertEqual(client.get("/orders", headers=headers).status_code, 401)
+                response = client.post("/integrations/muse/payouts", headers=headers, json={"order_no":"M-1", "actual_paid_usd":-1, "paid_at":"2026-10-10T00:00:00Z"})
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(client.get("/integrations/muse/submissions", headers=headers).json()[0]["status"], "Pending")
+            self.db.expire_all()
+            self.assertEqual(self.db.query(MuseSubmission).one().tenant_id, 1)
+        finally:
+            main.app.dependency_overrides.pop(main.get_db, None)
+
+
+if __name__ == "__main__":
+    unittest.main()

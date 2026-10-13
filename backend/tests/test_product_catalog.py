@@ -14,6 +14,8 @@ from app.product_catalog import (
     ProductCatalogError,
     build_product_catalog_pdf,
     create_catalog_download_token,
+    decode_catalog_download_token,
+    validate_catalog_discount,
     import_faire_products,
     parse_faire_workbook,
     verify_catalog_download_token,
@@ -151,7 +153,7 @@ class ProductCatalogTests(unittest.TestCase):
         self.assertAlmostEqual(existing.cost_price, 55)
         self.assertAlmostEqual(existing.selling_price, 110)
 
-    def test_pdf_contains_category_sku_and_both_prices(self):
+    def test_pdf_contains_cover_sku_and_both_prices(self):
         product = Product(
             article_no="PDF-SKU-1",
             name="Artisan Damascus Chef Knife",
@@ -164,12 +166,40 @@ class ProductCatalogTests(unittest.TestCase):
         reader = PdfReader(io.BytesIO(pdf_content))
         text = "\n".join(page.extract_text() or "" for page in reader.pages)
         self.assertGreaterEqual(len(reader.pages), 2)
-        self.assertIn("KITCHEN KNIVES", text)
+        self.assertNotIn("KITCHEN KNIVES", text)
+        self.assertIn("Handmade by artisans.", text)
         self.assertIn("SKU PDF-SKU-1", text)
-        self.assertIn("WHOLESALE", text)
-        self.assertIn("MSRP", text)
+        self.assertIn("Wholesale", text)
+        self.assertIn("Retail", text)
         self.assertIn("$39.99", text)
         self.assertIn("$79.98", text)
+
+    def test_discount_rounding_and_product_prices_unchanged(self):
+        product = Product(article_no="SALE", name="Sale knife", cost_price=39.99, selling_price=79.98)
+        content = build_product_catalog_pdf([product], self.upload_dir, discount_percent=15)
+        text = "\n".join(p.extract_text() for p in PdfReader(io.BytesIO(content)).pages)
+        self.assertIn("$33.99", text)
+        self.assertIn("$67.98", text)
+        self.assertEqual(product.cost_price, 39.99)
+        self.assertEqual(product.selling_price, 79.98)
+        free = build_product_catalog_pdf([product], self.upload_dir, discount_percent=100)
+        self.assertIn("$0.00", PdfReader(io.BytesIO(free)).pages[1].extract_text())
+
+    def test_discount_validation_and_signed_round_trip(self):
+        for invalid in [-1, 101, "NaN", "Infinity", None, "bad"]:
+            with self.assertRaises(ProductCatalogError):
+                validate_catalog_discount(invalid)
+        token = create_catalog_download_token(42, [3, 1], discount_percent="12.5")
+        user, ids, discount = decode_catalog_download_token(token, include_discount=True)
+        self.assertEqual((user, ids, float(discount)), (42, [1, 3], 12.5))
+        self.assertEqual(decode_catalog_download_token(create_catalog_download_token(42)), (42, None))
+
+    def test_categories_do_not_create_separate_pages(self):
+        products = [Product(article_no=f"SKU-{i}", name=f"Product {i}", category=f"Category {i}", cost_price=10, selling_price=20) for i in range(17)]
+        reader = PdfReader(io.BytesIO(build_product_catalog_pdf(products, self.upload_dir)))
+        self.assertEqual(len(reader.pages), 3)
+        self.assertIn("SKU SKU-8", reader.pages[1].extract_text())
+        self.assertIn("SKU SKU-9", reader.pages[2].extract_text())
 
     def test_invalid_workbook_is_rejected(self):
         with self.assertRaises(ProductCatalogError):

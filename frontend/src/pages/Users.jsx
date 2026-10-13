@@ -103,6 +103,20 @@ const ROLE_LABELS = {
   unassigned: "Assign role later",
 };
 
+const ROLE_OPTIONS = [
+  { value: "unassigned", label: "Assign role later" },
+  { value: "admin", label: "Administrator" },
+  { value: "manager", label: "Manager" },
+  { value: "warehouse", label: "Warehouse / Fulfillment" },
+  { value: "worker", label: "Worker" },
+  { value: "service_taker", label: "Service taker (manage in Service Takers)", disabled: true },
+];
+
+const PLATFORM_ROLE_OPTIONS = [
+  { value: "super_admin", label: "Super admin" },
+  ...ROLE_OPTIONS,
+];
+
 const roleLabel = (role) => ROLE_LABELS[role] || role;
 
 const DEFAULT_PRIVACY_SETTINGS = {
@@ -219,12 +233,13 @@ const EMPTY_ACCESS_OPTIONS = {
       "Settings",
     ],
     worker: ["Dashboard", "My Tasks", "Worker Payouts", "Manufacturing", "Production", "Messages", "Settings"],
-    service_taker: [
-      "Service Dashboard",
-      "Service Products",
-      "Service Inbound",
-      "Service Shipments",
-      "Service Charges",
+        service_taker: [
+      'Service Dashboard',
+      'Service Products',
+      'Service Inbound',
+      'Service Shipments',
+      'Service Manufacturing',
+      'Service Charges',
     ],
     unassigned: ["Dashboard"],
   },
@@ -397,7 +412,12 @@ export default function Users({ authenticatedUser }) {
   const [accessRequestUpdatingId, setAccessRequestUpdatingId] = useState(null);
   const [approvingAccessRequest, setApprovingAccessRequest] = useState(null);
   const [approvalNote, setApprovalNote] = useState("");
-  const isSuperAdmin = authenticatedUser?.role === "super_admin";
+  const isSuperAdmin = authenticatedUser?.role === "super_admin" && !authenticatedUser?.impersonatedBySuperAdmin;
+  const availableRoleOptions = useMemo(
+    () => (isSuperAdmin ? PLATFORM_ROLE_OPTIONS : ROLE_OPTIONS),
+    [isSuperAdmin]
+  );
+  const roleNeedsCompany = isSuperAdmin && role !== "super_admin";
 
   const loadUsers = async () => {
     const response = await api.get("/users");
@@ -581,6 +601,12 @@ export default function Users({ authenticatedUser }) {
       setTenantId(defaultTenantId);
     }
   }, [defaultTenantId, isSuperAdmin, tenantId]);
+
+  useEffect(() => {
+    if (!isSuperAdmin && roleFilter === "super_admin") {
+      setRoleFilter("all");
+    }
+  }, [isSuperAdmin, roleFilter]);
   const getRoleDefaults = useCallback((nextRole) =>
     accessOptions.role_defaults?.[nextRole] ||
     EMPTY_ACCESS_OPTIONS.role_defaults[nextRole] ||
@@ -603,24 +629,27 @@ export default function Users({ authenticatedUser }) {
   };
 
   const resetForm = (nextRole = "unassigned") => {
+    const safeRole = availableRoleOptions.some((option) => option.value === nextRole)
+      ? nextRole
+      : "unassigned";
     setName("");
     setUsername("");
-    setRole(nextRole);
+    setRole(safeRole);
     setPin("0000");
     setPhone("");
     setEmail("");
     setIsActive(true);
     setWorkerId(null);
-    setTenantId(defaultTenantId);
+    setTenantId(isSuperAdmin && safeRole !== "super_admin" ? defaultTenantId : "");
     setSessionExpiryMinutes(0);
     setCustomerPrivacySettings(
       privacyDefaultsForRole(
-        nextRole,
+        safeRole,
         accessOptions.privacy_role_defaults || PRIVACY_ROLE_DEFAULTS
       )
     );
     setAllowedPages([
-      ...getRoleDefaults(nextRole),
+      ...getRoleDefaults(safeRole),
     ]);
     setEditingUserId(null);
     setError("");
@@ -644,7 +673,10 @@ export default function Users({ authenticatedUser }) {
   };
 
   const startApproveAccessRequest = (requestItem) => {
-    const nextRole = suggestedRoleForAccessRequest(requestItem);
+    const suggestedRole = suggestedRoleForAccessRequest(requestItem);
+    const nextRole = availableRoleOptions.some((option) => option.value === suggestedRole)
+      ? suggestedRole
+      : "unassigned";
     setApprovingAccessRequest(requestItem);
     setEditingUserId(null);
     setName(requestItem.full_name || "");
@@ -655,7 +687,7 @@ export default function Users({ authenticatedUser }) {
     setEmail(requestItem.work_email || "");
     setIsActive(true);
     setWorkerId(null);
-    setTenantId(requestItem.tenant_id ? String(requestItem.tenant_id) : defaultTenantId);
+    setTenantId(isSuperAdmin && nextRole !== "super_admin" && requestItem.tenant_id ? String(requestItem.tenant_id) : isSuperAdmin && nextRole !== "super_admin" ? defaultTenantId : "");
     setSessionExpiryMinutes(0);
     setApprovalNote("");
     setCustomerPrivacySettings(
@@ -672,30 +704,33 @@ export default function Users({ authenticatedUser }) {
   };
 
   const startEdit = (user) => {
+    const nextRole = availableRoleOptions.some((option) => option.value === user.role)
+      ? user.role
+      : "unassigned";
     setEditingUserId(user.id);
     setName(user.name || "");
     setUsername(user.username || "");
-    setRole(user.role);
+    setRole(nextRole);
     setPin("");
     setPhone(user.phone || "");
     setEmail(user.email || "");
     setIsActive(Boolean(user.is_active));
     setWorkerId(user.worker_id || null);
-    setTenantId(user.tenant_id ? String(user.tenant_id) : defaultTenantId);
+    setTenantId(isSuperAdmin && nextRole !== "super_admin" && user.tenant_id ? String(user.tenant_id) : isSuperAdmin && nextRole !== "super_admin" ? defaultTenantId : "");
     setSessionExpiryMinutes(
       normalizeSessionExpiryMinutes(user.session_expiry_minutes)
     );
     setCustomerPrivacySettings(
       normalizePrivacySettings(
         user.customer_privacy_settings,
-        user.role,
+        nextRole,
         accessOptions.privacy_role_defaults || PRIVACY_ROLE_DEFAULTS
       )
     );
     setAllowedPages(
       Array.isArray(user.allowed_pages)
         ? normalizePageList(user.allowed_pages)
-        : [...getRoleDefaults(user.role)]
+        : [...getRoleDefaults(nextRole)]
     );
     setError("");
     setCustomerPrivacyError("");
@@ -704,17 +739,23 @@ export default function Users({ authenticatedUser }) {
   };
 
   const changeRole = (nextRole) => {
-    setRole(nextRole);
-    setAllowedPages([...getRoleDefaults(nextRole)]);
+    const safeRole = availableRoleOptions.some((option) => option.value === nextRole)
+      ? nextRole
+      : "unassigned";
+    setRole(safeRole);
+    setAllowedPages([...getRoleDefaults(safeRole)]);
     setCustomerPrivacySettings(
       privacyDefaultsForRole(
-        nextRole,
+        safeRole,
         accessOptions.privacy_role_defaults || PRIVACY_ROLE_DEFAULTS
       )
     );
     setCustomerPrivacyError("");
     setCustomerPrivacySavingKey("");
-    if (nextRole !== "worker") setWorkerId(null);
+    if (isSuperAdmin) {
+      setTenantId(safeRole === "super_admin" ? "" : tenantId || defaultTenantId);
+    }
+    if (safeRole !== "worker") setWorkerId(null);
   };
 
   const togglePage = (page) => {
@@ -792,6 +833,10 @@ export default function Users({ authenticatedUser }) {
       setError("PIN must be exactly 4 digits.");
       return;
     }
+    if (role === "super_admin" && !isSuperAdmin) {
+      setError("Only platform Super Admin can assign the Super admin role.");
+      return;
+    }
 
     const allowedChoiceSet = new Set(pageChoicesForRole);
     const selectedAllowedPages = normalizePageList(["Dashboard", ...allowedPages]).filter(
@@ -810,7 +855,7 @@ export default function Users({ authenticatedUser }) {
       is_active: isActive,
       worker_id: role === "worker" ? workerId : null,
     };
-    if (isSuperAdmin && tenantId) payload.tenant_id = Number(tenantId);
+    if (roleNeedsCompany && tenantId) payload.tenant_id = Number(tenantId);
     if (!editingUserId || pin) payload.pin = pin;
     if (approvingAccessRequest && !editingUserId) {
       payload.admin_note = approvalNote.trim() || null;
@@ -1047,13 +1092,11 @@ export default function Users({ authenticatedUser }) {
               value={roleFilter}
             >
               <option value="all">All roles</option>
-              <option value="super_admin">Super admin</option>
-              <option value="admin">Administrator</option>
-              <option value="manager">Manager</option>
-              <option value="warehouse">Warehouse</option>
-              <option value="worker">Worker</option>
-              <option value="service_taker">Service taker</option>
-              <option value="unassigned">Assign role later</option>
+              {availableRoleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.value === "warehouse" ? "Warehouse" : option.label}
+                </option>
+              ))}
             </select>
             <select
               aria-label="Filter users by status"
@@ -1319,16 +1362,14 @@ export default function Users({ authenticatedUser }) {
                       onChange={(event) => changeRole(event.target.value)}
                       value={role}
                     >
-                      <option value="unassigned">Assign role later</option>
-                      <option value="super_admin">Super admin</option>
-                      <option value="admin">Administrator</option>
-                      <option value="manager">Manager</option>
-                      <option value="warehouse">Warehouse / Fulfillment</option>
-                      <option value="worker">Worker</option>
-                      <option disabled value="service_taker">Service taker (manage in Service Takers)</option>
+                      {availableRoleOptions.map((option) => (
+                        <option disabled={option.disabled} key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
-                  {isSuperAdmin && (
+                  {roleNeedsCompany && (
                     <label>
                       Company
                       <select

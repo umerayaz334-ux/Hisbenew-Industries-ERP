@@ -27,6 +27,23 @@ const getUrlHostname = (value) => {
   }
 };
 
+let authExpiredNotified = false;
+
+const isLoginRequest = (url = "") => String(url || "").includes("/login");
+
+const notifyAuthExpired = (detail = "Your session expired. Please sign in again.") => {
+  if (typeof window === "undefined" || authExpiredNotified) return;
+  authExpiredNotified = true;
+  try {
+    window.localStorage.removeItem("erpUser");
+  } catch {}
+  window.dispatchEvent(
+    new CustomEvent("erp:auth-expired", {
+      detail: { message: detail },
+    })
+  );
+};
+
 const getBrowserNetworkApiBase = () => {
   if (typeof window === "undefined") return "";
 
@@ -107,10 +124,16 @@ const resolveApiBaseUrl = () => {
 
 export const API_BASE_URL = resolveApiBaseUrl();
 
-export const getStaticUrl = (path) => {
+export const getStaticUrl = (path, options = {}) => {
   if (!path) return null;
   if (path.startsWith("http")) return path;
-  return `${API_BASE_URL}${path}`;
+  const baseUrl = `${API_BASE_URL}${path}`;
+  const width = options?.w || options?.width;
+  if (width) {
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    return `${baseUrl}${separator}w=${width}`;
+  }
+  return baseUrl;
 };
 
 export const getAuditHeaders = () => {
@@ -185,6 +208,19 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && !isLoginRequest(error?.config?.url)) {
+      error.__authExpired = true;
+      notifyAuthExpired(
+        error.response?.data?.detail || "Your session expired. Please sign in again."
+      );
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;
 

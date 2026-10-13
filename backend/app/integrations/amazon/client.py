@@ -94,6 +94,7 @@ class AmazonSpApiClient:
         ),
     ) -> requests.Response:
         last_error: AmazonIntegrationError | None = None
+        refreshed_forbidden_token = False
         for attempt in range(maximum_attempts):
             access_token = get_lwa_access_token(
                 self.account,
@@ -152,6 +153,16 @@ class AmazonSpApiClient:
                     duration_ms=duration_ms,
                 )
             elif response.status_code == 403:
+                # SP-API also returns 403 Unauthorized for expired access tokens.
+                # Refresh once before treating this as a permissions failure.
+                if not refreshed_forbidden_token and attempt + 1 < maximum_attempts:
+                    refreshed_forbidden_token = True
+                    last_error = AmazonAuthorizationError(
+                        "Amazon rejected the access token; refreshing authorization.",
+                        error_code=code,
+                        http_status=response.status_code,
+                    )
+                    continue
                 raise AmazonPermissionError(
                     permission_message,
                     error_code=code,

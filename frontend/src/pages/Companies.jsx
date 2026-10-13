@@ -11,7 +11,8 @@ const ROLE_LABELS = {
 };
 
 const ROLE_OPTIONS = ["admin", "manager", "warehouse", "worker", "unassigned"];
-const ALWAYS_ALLOWED_PAGES = ["Dashboard", "Settings", "Users"];
+const ALWAYS_ALLOWED_PAGES = ["Dashboard"];
+const DEFAULT_TENANT_SLUG = "hisbenew";
 const EXCLUDED_COMPANY_USER_PAGES = new Set([
   "Companies",
   "Add Company",
@@ -22,6 +23,69 @@ const EXCLUDED_COMPANY_USER_PAGES = new Set([
   "Service Charges",
   "My Tasks",
 ]);
+const MODULE_SECTION_DEFINITIONS = [
+  {
+    key: "administration",
+    title: "Administration",
+    description: "Users, reports, settings, website, quotes, messages, and deployment.",
+    pages: ["Dashboard", "Users", "Settings", "Reports", "Website", "Deployment", "Quotes", "TempData", "Messages", "Copy Clipboard"],
+  },
+  {
+    key: "orders-accounts",
+    title: "Orders & Accounts",
+    description: "Customers, orders, payouts, billing, accounting, and follow ups.",
+    pages: ["Customers", "Orders", "Payouts", "Billings", "Accounting", "Follow Ups"],
+  },
+  {
+    key: "products-stock",
+    title: "Products & Stock",
+    description: "Products, inventory, labels, suppliers, and inspiration boards.",
+    pages: ["Products", "Inventory", "Label Printer", "Suppliers", "Inspiration"],
+  },
+  {
+    key: "workers-production",
+    title: "Workers & Production",
+    description: "Manufacturing, production, workers, payouts, and task workspaces.",
+    pages: ["Manufacturing", "Production", "Workers", "Worker Payouts", "My Tasks"],
+  },
+  {
+    key: "warehouse-fulfillment",
+    title: "Warehouse & Fulfillment",
+    description: "Shipping, balances, dispatch, warehouse shipments, and stock movement.",
+    pages: ["Shipping", "Shipping Balance", "Warehouse / Fulfillment", "Warehouse Dispatch", "Warehouse Shipments", "Warehouse Stock"],
+  },
+  {
+    key: "service-takers",
+    title: "Service Takers",
+        description: 'Client portal features for products, local orders, inbound, shipments, and charges.',
+    pages: ['Service Takers', 'Service Dashboard', 'Service Products', 'Service Inbound', 'Service Shipments', 'Service Manufacturing', 'Service Charges'],
+  },
+  {
+    key: "amazon",
+    title: "Amazon",
+    description: "Seller Central settings, listings, FBA orders, inbound, finances, and pricing.",
+    pages: ["Amazon Settings", "Amazon Listings", "Amazon FBA Orders", "Amazon FBA Inbound", "Amazon Finances", "Amazon Pricing"],
+  },
+  {
+    key: "school",
+    title: "School ERP",
+    description: "School workspace access for enabled education features.",
+    pages: ["School ERP"],
+  },
+];
+
+const FALLBACK_MODULE_SECTION = {
+  key: "other",
+  title: "Other Features",
+  description: "Additional company features not assigned to a standard section.",
+  pages: [],
+};
+
+const MODULE_SECTION_BY_PAGE = new Map(
+  MODULE_SECTION_DEFINITIONS.flatMap((section) =>
+    section.pages.map((page) => [page, section])
+  )
+);
 
 const emptyCompanyForm = {
   company_name: "",
@@ -55,6 +119,33 @@ const toSlug = (value) =>
 
 const usernameFromName = (value) => toSlug(value).replace(/-/g, ".");
 const moduleLabel = (module) => module?.page_name || module?.name || module?.slug || "Module";
+const isAlwaysOnModule = (module) => module?.page_name === "Dashboard" || module?.slug === "dashboard";
+const moduleSectionFor = (module) =>
+  MODULE_SECTION_BY_PAGE.get(module?.page_name || module?.name) || FALLBACK_MODULE_SECTION;
+
+const buildModuleSections = (moduleList = []) => {
+  const groups = new Map(
+    [...MODULE_SECTION_DEFINITIONS, FALLBACK_MODULE_SECTION].map((section) => [
+      section.key,
+      { ...section, modules: [] },
+    ])
+  );
+
+  moduleList.forEach((module) => {
+    const section = moduleSectionFor(module);
+    groups.get(section.key)?.modules.push(module);
+  });
+
+  return Array.from(groups.values()).filter((section) => section.modules.length > 0);
+};
+
+const countEnabledModules = (moduleList = []) =>
+  moduleList.filter((module) => isAlwaysOnModule(module) || Boolean(module.enabled)).length;
+
+const countSelectedCreateModules = (moduleList = [], selectedSlugs = []) => {
+  const selected = new Set(selectedSlugs);
+  return moduleList.filter((module) => isAlwaysOnModule(module) || selected.has(module.slug)).length;
+};
 const roleLabel = (role) => ROLE_LABELS[role] || role || "User";
 const formatActivityTime = (value) => {
   if (!value) return "Just now";
@@ -152,6 +243,10 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
   const [saving, setSaving] = useState(false);
   const [userSaving, setUserSaving] = useState(false);
   const [moduleSavingSlug, setModuleSavingSlug] = useState("");
+  const [deleteCompanyTarget, setDeleteCompanyTarget] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingCompany, setDeletingCompany] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const createPanelRef = useRef(null);
@@ -162,24 +257,20 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
   );
 
   const selectedModules = selectedTenantId ? modulesByTenant[selectedTenantId] || [] : [];
+  const selectedModuleSections = useMemo(
+    () => buildModuleSections(selectedModules),
+    [selectedModules]
+  );
 
-  const filteredModules = useMemo(() => {
+  const createModuleSections = useMemo(
+    () => buildModuleSections(modules),
+    [modules]
+  );
+
+  const filteredModuleSections = useMemo(() => {
     let result = selectedModules;
-    if (moduleCategoryFilter === "core") {
-      result = result.filter((m) => {
-        const name = (m.page_name || m.name || m.slug || "").toLowerCase();
-        return !name.includes("school") && !name.includes("amazon") && !name.includes("website") && !name.includes("service");
-      });
-    } else if (moduleCategoryFilter === "integrations") {
-      result = result.filter((m) => {
-        const name = (m.page_name || m.name || m.slug || "").toLowerCase();
-        return name.includes("amazon") || name.includes("website") || name.includes("service");
-      });
-    } else if (moduleCategoryFilter === "school") {
-      result = result.filter((m) => {
-        const name = (m.page_name || m.name || m.slug || "").toLowerCase();
-        return name.includes("school");
-      });
+    if (moduleCategoryFilter !== "all") {
+      result = result.filter((module) => moduleSectionFor(module).key === moduleCategoryFilter);
     }
     if (moduleSearch.trim()) {
       const q = moduleSearch.trim().toLowerCase();
@@ -190,8 +281,13 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
           (m.slug || "").toLowerCase().includes(q)
       );
     }
-    return result;
+    return buildModuleSections(result);
   }, [moduleCategoryFilter, moduleSearch, selectedModules]);
+
+  const filteredModuleCount = filteredModuleSections.reduce(
+    (total, section) => total + section.modules.length,
+    0
+  );
   const selectedCompanyUsers = useMemo(
     () => users.filter((user) => Number(user.tenant_id) === Number(selectedTenantId)),
     [selectedTenantId, users]
@@ -251,7 +347,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
     return nextUsers;
   }, [isSuperAdmin]);
 
-  const loadCompanies = useCallback(async () => {
+  const loadCompanies = useCallback(async (preferredTenantId = selectedTenantId) => {
     if (!isSuperAdmin) {
       setLoading(false);
       return;
@@ -279,7 +375,10 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
           ? current.module_slugs
           : nextModules.filter((module) => module.enabled !== false).map((module) => module.slug),
       }));
-      const nextSelectedId = selectedTenantId || nextTenants[0]?.id || null;
+      const nextSelectedId =
+        preferredTenantId && nextTenants.some((tenant) => Number(tenant.id) === Number(preferredTenantId))
+          ? preferredTenantId
+          : nextTenants[0]?.id || null;
       setSelectedTenantId(nextSelectedId);
       if (nextSelectedId) await loadTenantModules(nextSelectedId);
     } catch (loadError) {
@@ -362,11 +461,34 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
     });
   };
 
-  const toggleCreateModule = (slug) => {
+  const toggleCreateModule = (module) => {
+    if (!module?.slug || isAlwaysOnModule(module)) return;
     setCompanyForm((current) => {
       const selected = new Set(current.module_slugs);
-      if (selected.has(slug)) selected.delete(slug);
-      else selected.add(slug);
+      if (selected.has(module.slug)) selected.delete(module.slug);
+      else selected.add(module.slug);
+      modules.forEach((candidate) => {
+        if (isAlwaysOnModule(candidate) && candidate.slug) selected.add(candidate.slug);
+      });
+      return { ...current, module_slugs: Array.from(selected) };
+    });
+  };
+
+  const setCreateModuleSection = (sectionModules, enabled) => {
+    setCompanyForm((current) => {
+      const selected = new Set(current.module_slugs);
+      sectionModules.forEach((module) => {
+        if (!module?.slug) return;
+        if (isAlwaysOnModule(module)) {
+          selected.add(module.slug);
+          return;
+        }
+        if (enabled) selected.add(module.slug);
+        else selected.delete(module.slug);
+      });
+      modules.forEach((candidate) => {
+        if (isAlwaysOnModule(candidate) && candidate.slug) selected.add(candidate.slug);
+      });
       return { ...current, module_slugs: Array.from(selected) };
     });
   };
@@ -540,7 +662,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
   };
 
   const toggleTenantModule = async (module) => {
-    if (!selectedTenant) return;
+    if (!selectedTenant || !module?.slug || isAlwaysOnModule(module)) return;
     setModuleSavingSlug(module.slug);
     setError("");
     setSuccess("");
@@ -549,11 +671,108 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
         enabled: !module.enabled,
       });
       setModulesByTenant((current) => ({ ...current, [selectedTenant.id]: response.data || [] }));
+      await loadUsers();
     } catch (saveError) {
       console.error("Company module update error:", saveError);
       setError(saveError.response?.data?.detail || "Unable to update module access.");
     } finally {
       setModuleSavingSlug("");
+    }
+  };
+
+  const setTenantModuleSection = async (sectionModules, enabled) => {
+    if (!selectedTenant) return;
+    const modulesToUpdate = sectionModules.filter((module) => module?.slug && !isAlwaysOnModule(module));
+    if (modulesToUpdate.length === 0) return;
+    const savingKey = `section:${modulesToUpdate.map((module) => module.slug).join("|")}`;
+    setModuleSavingSlug(savingKey);
+    setError("");
+    setSuccess("");
+    try {
+      const nextModules = Object.fromEntries(
+        selectedModules.map((module) => [
+          module.slug,
+          isAlwaysOnModule(module) ? true : Boolean(module.enabled),
+        ])
+      );
+      modulesToUpdate.forEach((module) => {
+        nextModules[module.slug] = enabled;
+      });
+      const response = await api.put(`/tenants/${selectedTenant.id}/modules`, {
+        modules: nextModules,
+      });
+      setModulesByTenant((current) => ({ ...current, [selectedTenant.id]: response.data || [] }));
+      await loadUsers();
+      setSuccess(`${enabled ? "Enabled" : "Disabled"} ${modulesToUpdate.length} modules for ${selectedTenant.company_name}.`);
+    } catch (saveError) {
+      console.error("Company module section update error:", saveError);
+      setError(saveError.response?.data?.detail || "Unable to update module access.");
+    } finally {
+      setModuleSavingSlug("");
+    }
+  };
+  const companyCanBeDeleted = (tenant) =>
+    Boolean(tenant) &&
+    tenant.slug !== DEFAULT_TENANT_SLUG &&
+    Number(authenticatedUser?.tenant_id) !== Number(tenant.id);
+
+  const openDeleteCompanyModal = (tenant) => {
+    if (!companyCanBeDeleted(tenant)) return;
+    setDeleteCompanyTarget(tenant);
+    setDeleteConfirmation("");
+    setDeleteError("");
+    setError("");
+    setSuccess("");
+  };
+
+  const closeDeleteCompanyModal = () => {
+    if (deletingCompany) return;
+    setDeleteCompanyTarget(null);
+    setDeleteConfirmation("");
+    setDeleteError("");
+  };
+
+  const deleteSelectedCompany = async (event) => {
+    event.preventDefault();
+    if (!deleteCompanyTarget) return;
+
+    const typedName = deleteConfirmation.trim();
+    if (typedName !== deleteCompanyTarget.company_name) {
+      setDeleteError("Type the exact company name to confirm deletion.");
+      return;
+    }
+
+    setDeletingCompany(true);
+    setDeleteError("");
+    setError("");
+    setSuccess("");
+    try {
+      const deletedTenantId = deleteCompanyTarget.id;
+      const deletedTenantName = deleteCompanyTarget.company_name;
+      await api.delete(`/tenants/${deletedTenantId}`, {
+        data: { confirmation: typedName },
+      });
+
+      const nextTenant = tenants.find(
+        (tenant) => Number(tenant.id) !== Number(deletedTenantId)
+      );
+      setDeleteCompanyTarget(null);
+      setDeleteConfirmation("");
+      setModulesByTenant((current) => {
+        const next = { ...current };
+        delete next[deletedTenantId];
+        return next;
+      });
+      setSelectedTenantId(nextTenant?.id || null);
+      await loadCompanies(nextTenant?.id || null);
+      setSuccess(`${deletedTenantName} and all company data were deleted.`);
+    } catch (deleteRequestError) {
+      console.error("Company delete error:", deleteRequestError);
+      setDeleteError(
+        deleteRequestError.response?.data?.detail || "Unable to delete this company."
+      );
+    } finally {
+      setDeletingCompany(false);
     }
   };
 
@@ -579,7 +798,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
     return (
       <div className="cmp-wrapper">
         <section className="cmp-unauthorized-card">
-          <div className="cmp-unauthorized-icon">🔒</div>
+          <div className="cmp-unauthorized-icon">Lock</div>
           <h1>Super Admin Authorization Required</h1>
           <p>Multi-tenant company administration, module access control, and cross-tenant user management are restricted to Super Admin role.</p>
         </section>
@@ -624,7 +843,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {searchQuery && (
-            <button className="cmp-clear-btn" onClick={() => setSearchQuery("")}>×</button>
+            <button className="cmp-clear-btn" onClick={() => setSearchQuery("")}>x</button>
           )}
         </div>
 
@@ -680,7 +899,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
             <div className="cmp-loading-card">Loading tenant directory...</div>
           ) : filteredTenants.length === 0 ? (
             <div className="cmp-empty-card">
-              <div className="cmp-empty-icon">🏢</div>
+              <div className="cmp-empty-icon">CO</div>
               <h3>No Companies Found</h3>
               <p>No tenant records match your current filter settings.</p>
               <button className="cmp-btn-secondary" onClick={() => { setSearchQuery(""); setStatusFilter("all"); }}>Reset Filters</button>
@@ -728,9 +947,9 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
                         title={`Enter ${tenant.company_name} Portal`}
                         type="button"
                       >
-                        Enter Portal ↗
+                        Enter Portal
                       </button>
-                      <button className="cmp-btn-manage" onClick={(e) => { e.stopPropagation(); selectTenant(tenant.id); }}>
+                      <button className="cmp-btn-manage" onClick={(e) => { e.stopPropagation(); selectTenant(tenant.id); }} type="button">
                         {isSelected ? "Managing" : "Select"}
                       </button>
                     </div>
@@ -748,7 +967,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
                     <th>Status</th>
                     <th>Contact Info</th>
                     <th>Users</th>
-                    <th>Portal Access</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -783,9 +1002,9 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
                               title={`Enter ${tenant.company_name} Portal`}
                               type="button"
                             >
-                              Enter Portal ↗
+                              Enter Portal
                             </button>
-                            <button className="cmp-btn-sm" onClick={(e) => { e.stopPropagation(); selectTenant(tenant.id); }}>
+                            <button className="cmp-btn-sm" onClick={(e) => { e.stopPropagation(); selectTenant(tenant.id); }} type="button">
                               {isSelected ? "Managing" : "Manage"}
                             </button>
                           </div>
@@ -821,7 +1040,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
                     onClick={() => onSwitchToCompanyPortal?.(selectedTenant)}
                     type="button"
                   >
-                    Enter Portal ↗
+                    Enter Portal
                   </button>
                 </div>
 
@@ -908,6 +1127,22 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
                       {saving ? "Saving Changes..." : "Save Company Details"}
                     </button>
                   </div>
+
+                  <div className="cmp-danger-zone">
+                    <div>
+                      <strong>Delete company and data</strong>
+                      <span>Removes this tenant plus its users, products, orders, stock, suppliers, payments, files, and audit-linked data.</span>
+                    </div>
+                    <button
+                      className="cmp-btn-danger"
+                      disabled={!companyCanBeDeleted(selectedTenant)}
+                      onClick={() => openDeleteCompanyModal(selectedTenant)}
+                      title={companyCanBeDeleted(selectedTenant) ? `Delete ${selectedTenant.company_name} and its data` : "Protected company cannot be deleted"}
+                      type="button"
+                    >
+                      Delete company
+                    </button>
+                  </div>
                 </form>
               )}
 
@@ -924,7 +1159,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
                         onChange={(e) => setModuleSearch(e.target.value)}
                       />
                       {moduleSearch && (
-                        <button className="cmp-clear-btn" onClick={() => setModuleSearch("")}>×</button>
+                        <button className="cmp-clear-btn" onClick={() => setModuleSearch("")}>x</button>
                       )}
                     </div>
 
@@ -936,68 +1171,98 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
                       >
                         All ({selectedModules.length})
                       </button>
-                      <button
-                        className={`cmp-mod-pill ${moduleCategoryFilter === "core" ? "is-active" : ""}`}
-                        onClick={() => setModuleCategoryFilter("core")}
-                        type="button"
-                      >
-                        Core ERP
-                      </button>
-                      <button
-                        className={`cmp-mod-pill ${moduleCategoryFilter === "integrations" ? "is-active" : ""}`}
-                        onClick={() => setModuleCategoryFilter("integrations")}
-                        type="button"
-                      >
-                        Integrations
-                      </button>
-                      <button
-                        className={`cmp-mod-pill ${moduleCategoryFilter === "school" ? "is-active" : ""}`}
-                        onClick={() => setModuleCategoryFilter("school")}
-                        type="button"
-                      >
-                        School
-                      </button>
+                      {selectedModuleSections.map((section) => (
+                        <button
+                          className={`cmp-mod-pill ${moduleCategoryFilter === section.key ? "is-active" : ""}`}
+                          key={section.key}
+                          onClick={() => setModuleCategoryFilter(section.key)}
+                          type="button"
+                        >
+                          {section.title} ({section.modules.length})
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  <div className="cmp-modules-grid">
-                    {filteredModules.length === 0 ? (
+                  <div className="cmp-module-sections">
+                    {filteredModuleCount === 0 ? (
                       <div className="cmp-empty-compact">No modules matching search.</div>
                     ) : (
-                      filteredModules.map((module) => {
-                        const isSaving = moduleSavingSlug === module.slug;
-                        const isEnabled = Boolean(module.enabled);
+                      filteredModuleSections.map((section) => {
+                        const sectionModules = section.modules || [];
+                        const enabledCount = countEnabledModules(sectionModules);
+                        const togglableModules = sectionModules.filter((module) => !isAlwaysOnModule(module));
+                        const savingKey = `section:${togglableModules.map((module) => module.slug).join("|")}`;
+                        const isSectionSaving = moduleSavingSlug === savingKey;
                         return (
-                          <div
-                            className={`cmp-module-card ${isEnabled ? "is-enabled" : ""}`}
-                            key={module.slug}
-                            onClick={() => toggleTenantModule(module)}
-                          >
-                            <div className="cmp-mod-card-top">
-                              <div className="cmp-mod-icon">
-                                {getModuleIconSvg(moduleLabel(module))}
+                          <section className="cmp-module-section-card" key={section.key}>
+                            <header className="cmp-module-section-header">
+                              <div>
+                                <h4>{section.title}</h4>
+                                <p>{section.description}</p>
                               </div>
-                              <div className="cmp-toggle-switch">
-                                <input
-                                  checked={isEnabled}
-                                  disabled={isSaving}
-                                  onChange={() => {}}
-                                  type="checkbox"
-                                />
-                                <span className="cmp-toggle-slider" />
+                              <div className="cmp-module-section-actions">
+                                <span className="cmp-module-section-count">{enabledCount}/{sectionModules.length} enabled</span>
+                                <button
+                                  className="cmp-module-section-button"
+                                  disabled={!togglableModules.length || Boolean(moduleSavingSlug)}
+                                  onClick={() => setTenantModuleSection(sectionModules, true)}
+                                  type="button"
+                                >
+                                  Enable all
+                                </button>
+                                <button
+                                  className="cmp-module-section-button"
+                                  disabled={!togglableModules.length || Boolean(moduleSavingSlug)}
+                                  onClick={() => setTenantModuleSection(sectionModules, false)}
+                                  type="button"
+                                >
+                                  Disable all
+                                </button>
                               </div>
-                            </div>
+                            </header>
 
-                            <div className="cmp-mod-card-body">
-                              <strong className="cmp-mod-title">{moduleLabel(module)}</strong>
-                              <div className="cmp-mod-tags">
-                                <span className={`cmp-mod-status-badge ${isEnabled ? "is-active" : ""}`}>
-                                  {isEnabled ? "Enabled" : "Disabled"}
-                                </span>
-                                <code className="cmp-mod-slug">{module.slug}</code>
-                              </div>
+                            <div className="cmp-modules-grid">
+                              {sectionModules.map((module) => {
+                                const isAlwaysOn = isAlwaysOnModule(module);
+                                const isSaving = moduleSavingSlug === module.slug || isSectionSaving;
+                                const isEnabled = isAlwaysOn || Boolean(module.enabled);
+                                return (
+                                  <div
+                                    className={`cmp-module-card ${isEnabled ? "is-enabled" : ""} ${isAlwaysOn ? "is-locked" : ""}`}
+                                    key={module.slug}
+                                    onClick={() => !isAlwaysOn && !isSaving && toggleTenantModule(module)}
+                                    title={isAlwaysOn ? "Dashboard always stays enabled" : `Toggle ${moduleLabel(module)}`}
+                                  >
+                                    <div className="cmp-mod-card-top">
+                                      <div className="cmp-mod-icon">
+                                        {getModuleIconSvg(moduleLabel(module))}
+                                      </div>
+                                      <div className="cmp-toggle-switch">
+                                        <input
+                                          checked={isEnabled}
+                                          disabled={isSaving || isAlwaysOn}
+                                          onChange={() => {}}
+                                          type="checkbox"
+                                        />
+                                        <span className="cmp-toggle-slider" />
+                                      </div>
+                                    </div>
+
+                                    <div className="cmp-mod-card-body">
+                                      <strong className="cmp-mod-title">{moduleLabel(module)}</strong>
+                                      <div className="cmp-mod-tags">
+                                        <span className={`cmp-mod-status-badge ${isEnabled ? "is-active" : ""}`}>
+                                          {isAlwaysOn ? "Always on" : isEnabled ? "Enabled" : "Disabled"}
+                                        </span>
+                                        <code className="cmp-mod-slug">{module.slug}</code>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          </div>
+                          </section>
                         );
                       })
                     )}
@@ -1034,15 +1299,15 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
                             <div className="cmp-pin-display-box">
                               <span className="cmp-pin-label">PIN:</span>
                               <code className="cmp-pin-code">
-                                {isRevealed ? (user.pin || "0000") : "••••"}
+                                {isRevealed ? (user.pin || "0000") : "****"}
                               </code>
                               <button
                                 className="cmp-pin-eye-btn"
                                 onClick={() => toggleRevealPin(user.id)}
-                                title={isRevealed ? "Hide PIN" : "Reveal PIN"}
+                                title={isRevealed ? "Hide" : "Show"}
                                 type="button"
                               >
-                                {isRevealed ? "🙈" : "👁️"}
+                                {isRevealed ? "Hide" : "Show"}
                               </button>
                             </div>
 
@@ -1153,8 +1418,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
                           </div>
                           <div className="cmp-act-meta">
                             <span>Actor: {log.actor_user_name || "Unknown"}</span>
-                            <span>•</span>
-                            <span>Entity: {log.page || log.entity_type || "Company"}</span>
+                            <span>-</span>`n                            <span>Entity: {log.page || log.entity_type || "Company"}</span>
                           </div>
                         </div>
                       ))
@@ -1165,7 +1429,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
             </div>
           ) : (
             <div className="cmp-workstation-placeholder">
-              <div className="cmp-ph-icon">👈</div>
+              <div className="cmp-ph-icon">Select</div>
               <h3>Select a Company</h3>
               <p>Choose any tenant from the directory to configure modules, edit details, manage passwords, or enter tenant portal.</p>
             </div>
@@ -1173,6 +1437,55 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
         </div>
       </div>
 
+      {/* Modal: Delete Company */}
+      {deleteCompanyTarget && (
+        <div className="cmp-modal-backdrop" onClick={closeDeleteCompanyModal}>
+          <div className="cmp-modal-card cmp-modal-sm cmp-delete-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cmp-modal-header">
+              <div>
+                <h2>Delete company and data?</h2>
+                <p>This permanently removes <strong>{deleteCompanyTarget.company_name}</strong> and its tenant records.</p>
+              </div>
+              <button className="cmp-close-btn" disabled={deletingCompany} onClick={closeDeleteCompanyModal} type="button">&times;</button>
+            </div>
+
+            <form className="cmp-modal-body" onSubmit={deleteSelectedCompany}>
+              <div className="cmp-delete-warning">
+                <strong>Permanent deletion</strong>
+                <span>Deletes company users, products, customers, orders, stock, suppliers, payments, worker data, files, and related activity records. This cannot be undone.</span>
+              </div>
+
+              {deleteError && <div className="cmp-toast cmp-toast-error">{deleteError}</div>}
+
+              <label className="cmp-input-group">
+                <span>Type company name to confirm</span>
+                <input
+                  autoFocus
+                  onChange={(e) => {
+                    setDeleteConfirmation(e.target.value);
+                    setDeleteError("");
+                  }}
+                  placeholder={deleteCompanyTarget.company_name}
+                  value={deleteConfirmation}
+                />
+              </label>
+
+              <div className="cmp-modal-footer">
+                <button className="cmp-btn-secondary" disabled={deletingCompany} onClick={closeDeleteCompanyModal} type="button">
+                  Cancel
+                </button>
+                <button
+                  className="cmp-btn-danger"
+                  disabled={deletingCompany || deleteConfirmation.trim() !== deleteCompanyTarget.company_name}
+                  type="submit"
+                >
+                  {deletingCompany ? "Deleting..." : "Delete company and data"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* Modal: Reset User PIN */}
       {pinModalUser && (
         <div className="cmp-modal-backdrop" onClick={() => setPinModalUser(null)}>
@@ -1182,7 +1495,7 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
                 <h2>Update / Reset User PIN</h2>
                 <p>Set a new 4-digit security PIN for <strong>{pinModalUser.name}</strong> (@{pinModalUser.username || pinModalUser.name})</p>
               </div>
-              <button className="cmp-close-btn" onClick={() => setPinModalUser(null)}>×</button>
+              <button className="cmp-close-btn" onClick={() => setPinModalUser(null)}>x</button>
             </div>
 
             <form className="cmp-modal-body" onSubmit={handleSaveUserPin}>
@@ -1216,16 +1529,16 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
       {/* Modal: Create Company */}
       {showCreateModal && (
         <div className="cmp-modal-backdrop" onClick={() => setShowCreateModal(false)}>
-          <div className="cmp-modal-card" onClick={(e) => e.stopPropagation()}>
+          <div className="cmp-modal-card cmp-create-company-modal" onClick={(e) => e.stopPropagation()}>
             <div className="cmp-modal-header">
               <div>
                 <h2>Create New Company Tenant</h2>
                 <p>Provision a new enterprise tenant with admin credentials & modules</p>
               </div>
-              <button className="cmp-close-btn" onClick={() => setShowCreateModal(false)}>×</button>
+              <button className="cmp-close-btn" onClick={() => setShowCreateModal(false)}>x</button>
             </div>
 
-            <form className="cmp-modal-body" onSubmit={createCompany}>
+            <form className="cmp-modal-body cmp-create-company-form" onSubmit={createCompany}>
               <div className="cmp-modal-section">
                 <h3>Basic Information</h3>
                 <div className="cmp-form-grid">
@@ -1297,18 +1610,56 @@ export default function Companies({ authenticatedUser, focusCreate = false, onSw
 
               <div className="cmp-modal-section">
                 <h3>Enabled ERP Modules</h3>
-                <div className="cmp-modules-pills-grid">
-                  {modules.map((m) => {
-                    const isSelected = companyForm.module_slugs.includes(m.slug);
+                <div className="cmp-create-module-sections">
+                  {createModuleSections.map((section) => {
+                    const sectionModules = section.modules || [];
+                    const selectedCount = countSelectedCreateModules(sectionModules, companyForm.module_slugs);
+                    const canBulkToggle = sectionModules.some((module) => !isAlwaysOnModule(module));
                     return (
-                      <label className={`cmp-mod-pill ${isSelected ? "selected" : ""}`} key={m.slug}>
-                        <input
-                          checked={isSelected}
-                          onChange={() => toggleCreateModule(m.slug)}
-                          type="checkbox"
-                        />
-                        <span>{moduleLabel(m)}</span>
-                      </label>
+                      <section className="cmp-module-section-card" key={section.key}>
+                        <header className="cmp-module-section-header">
+                          <div>
+                            <h4>{section.title}</h4>
+                            <p>{section.description}</p>
+                          </div>
+                          <div className="cmp-module-section-actions">
+                            <span className="cmp-module-section-count">{selectedCount}/{sectionModules.length} selected</span>
+                            <button
+                              className="cmp-module-section-button"
+                              disabled={!canBulkToggle}
+                              onClick={() => setCreateModuleSection(sectionModules, true)}
+                              type="button"
+                            >
+                              Enable all
+                            </button>
+                            <button
+                              className="cmp-module-section-button"
+                              disabled={!canBulkToggle}
+                              onClick={() => setCreateModuleSection(sectionModules, false)}
+                              type="button"
+                            >
+                              Disable all
+                            </button>
+                          </div>
+                        </header>
+                        <div className="cmp-modules-pills-grid">
+                          {sectionModules.map((m) => {
+                            const isAlwaysOn = isAlwaysOnModule(m);
+                            const isSelected = isAlwaysOn || companyForm.module_slugs.includes(m.slug);
+                            return (
+                              <label className={`cmp-mod-pill ${isSelected ? "selected" : ""} ${isAlwaysOn ? "is-locked" : ""}`} key={m.slug}>
+                                <input
+                                  checked={isSelected}
+                                  disabled={isAlwaysOn}
+                                  onChange={() => toggleCreateModule(m)}
+                                  type="checkbox"
+                                />
+                                <span>{moduleLabel(m)}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </section>
                     );
                   })}
                 </div>

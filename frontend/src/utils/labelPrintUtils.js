@@ -20,6 +20,7 @@ export const ACTIVE_LAYER_STORAGE_KEY = "erpLabelPrinterActiveLayer";
 export const DESIGN_CLIPBOARD_STORAGE_KEY = "erpLabelPrinterDesignClipboard";
 export const PRINTER_CONNECTION_MODE_STORAGE_KEY = "erpLabelPrinterConnectionMode";
 export const LOCAL_PRINT_BRIDGE_URL_STORAGE_KEY = "erpLabelPrinterLocalBridgeUrl";
+export const DIRECT_PRINTER_STORAGE_KEY = "erpLabelPrinterDirectPrinter";
 export const DEFAULT_LOCAL_PRINT_BRIDGE_URL = "http://127.0.0.1:8000";
 
 export const SAVED_DESIGN_FIELDS = [
@@ -34,14 +35,27 @@ export const SAVED_DESIGN_FIELDS = [
   "titleAlign",
   "skuAlign",
   "priceAlign",
+  "brandBold",
+  "titleBold",
+  "skuBold",
+  "priceBold",
   "brandScale",
   "titleScale",
   "skuScale",
   "priceScale",
+  "brandStretchX",
+  "brandStretchY",
+  "titleStretchX",
+  "titleStretchY",
+  "skuStretchX",
+  "skuStretchY",
+  "priceStretchX",
+  "priceStretchY",
   "barcodeScale",
   "barcodeHeightScale",
   "layerOrder",
   "layerOffsets",
+  "positions",
 ];
 
 export const COPY_STYLE_FIELDS = SAVED_DESIGN_FIELDS.filter(
@@ -49,15 +63,107 @@ export const COPY_STYLE_FIELDS = SAVED_DESIGN_FIELDS.filter(
 );
 
 export const TEXT_LAYERS = [
-  { id: "brand", label: "Brand", field: "brand", alignField: "brandAlign", scaleField: "brandScale", visibleField: "showBrand" },
-  { id: "title", label: "Handmade category", field: "title", alignField: "titleAlign", scaleField: "titleScale" },
-  { id: "sku", label: "SKU number", field: "sku", alignField: "skuAlign", scaleField: "skuScale" },
-  { id: "price", label: "Price / note", field: "price", alignField: "priceAlign", scaleField: "priceScale", visibleField: "showPrice" },
+  { id: "brand", label: "Brand", field: "brand", alignField: "brandAlign", boldField: "brandBold", scaleField: "brandScale", visibleField: "showBrand" },
+  { id: "title", label: "Handmade category", field: "title", alignField: "titleAlign", boldField: "titleBold", scaleField: "titleScale" },
+  { id: "sku", label: "SKU number", field: "sku", alignField: "skuAlign", boldField: "skuBold", scaleField: "skuScale" },
+  { id: "price", label: "Price / note", field: "price", alignField: "priceAlign", boldField: "priceBold", scaleField: "priceScale", visibleField: "showPrice" },
 ];
 
 export const DEFAULT_LAYER_ORDER = ["brand", "title", "price", "image", "barcode", "sku"];
 
+export const DEFAULT_LAYER_POSITIONS = {
+  brand: { x: 7, y: 8, w: 42, h: 12 },
+  title: { x: 9, y: 20, w: 82, h: 20 },
+  price: { x: 7, y: 64, w: 34, h: 12 },
+  image: { x: 68, y: 7, w: 24, h: 24 },
+  barcode: { x: 20, y: 48, w: 60, h: 18 },
+  sku: { x: 20, y: 70, w: 60, h: 16 },
+};
+
+const LAYER_STRETCH_FIELDS = {
+  brand: { x: "brandStretchX", y: "brandStretchY" },
+  title: { x: "titleStretchX", y: "titleStretchY" },
+  price: { x: "priceStretchX", y: "priceStretchY" },
+  sku: { x: "skuStretchX", y: "skuStretchY" },
+};
+
+const LAYER_BOLD_FIELDS = {
+  brand: "brandBold",
+  title: "titleBold",
+  sku: "skuBold",
+  price: "priceBold",
+};
+
+const LAYER_FONT_WEIGHTS = {
+  brand: { bold: 800, regular: 500 },
+  title: { bold: 900, regular: 600 },
+  sku: { bold: 900, regular: 600 },
+  price: { bold: 800, regular: 500 },
+};
+
 export const isPlainObject = (value) => value && typeof value === "object" && !Array.isArray(value);
+
+export const clampNumber = (value, min, max, fallback = min) => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+};
+
+export const normalizeLayerPosition = (position, fallback) => {
+  const base = isPlainObject(position) ? position : {};
+  const width = clampNumber(base.w, 8, 100, fallback.w);
+  const height = clampNumber(base.h, 6, 100, fallback.h);
+  return {
+    x: clampNumber(base.x, 0, 100 - width, fallback.x),
+    y: clampNumber(base.y, 0, 100 - height, fallback.y),
+    w: width,
+    h: height,
+  };
+};
+
+export const normalizeLayerPositions = (positions = {}) =>
+  Object.fromEntries(
+    DEFAULT_LAYER_ORDER.map((layerId) => [
+      layerId,
+      normalizeLayerPosition(positions?.[layerId], DEFAULT_LAYER_POSITIONS[layerId]),
+    ])
+  );
+
+export const getLayerPosition = (item, layerId) =>
+  normalizeLayerPosition(item?.positions?.[layerId], DEFAULT_LAYER_POSITIONS[layerId]);
+
+export const getLayerStretch = (item, layerId) => {
+  const fields = LAYER_STRETCH_FIELDS[layerId];
+  return {
+    x: fields?.x ? clampNumber(item?.[fields.x], 0.25, 4, 1) : 1,
+    y: fields?.y ? clampNumber(item?.[fields.y], 0.25, 4, 1) : 1,
+  };
+};
+
+export const getLayerBold = (item, layerId) => {
+  const field = LAYER_BOLD_FIELDS[layerId];
+  return field ? item?.[field] !== false : false;
+};
+
+export const getLayerFontWeight = (item, layerId) => {
+  const weights = LAYER_FONT_WEIGHTS[layerId];
+  if (!weights) return 700;
+  return getLayerBold(item, layerId) ? weights.bold : weights.regular;
+};
+
+export const getLayerPositionStyle = (item, layerId) => {
+  const position = getLayerPosition(item, layerId);
+  const stretch = getLayerStretch(item, layerId);
+  return {
+    left: `${position.x}%`,
+    top: `${position.y}%`,
+    width: `${position.w}%`,
+    height: `${position.h}%`,
+    "--layer-stretch-x": stretch.x,
+    "--layer-stretch-y": stretch.y,
+    "--layer-font-weight": getLayerFontWeight(item, layerId),
+  };
+};
 
 export const readStoredJson = (key, fallback) => {
   if (typeof window === "undefined") return fallback;
@@ -238,6 +344,7 @@ export const createBarcodeSvg = (value, height = 48, scale = 1, heightScale = 1)
       background: "#ffffff",
       lineColor: "#000000",
     });
+    svg.setAttribute("preserveAspectRatio", "none");
     return svg.outerHTML;
   } catch {
     return "";
@@ -264,14 +371,27 @@ export const createQueueItem = (product = null) => ({
   titleAlign: "center",
   skuAlign: "center",
   priceAlign: "left",
+  brandBold: true,
+  titleBold: true,
+  skuBold: true,
+  priceBold: true,
   brandScale: 1,
   titleScale: 1.3,
   skuScale: 1.55,
   priceScale: 1,
+  brandStretchX: 1,
+  brandStretchY: 1,
+  titleStretchX: 1,
+  titleStretchY: 1,
+  skuStretchX: 1,
+  skuStretchY: 1,
+  priceStretchX: 1,
+  priceStretchY: 1,
   barcodeScale: 1,
   barcodeHeightScale: 1,
   layerOrder: [...DEFAULT_LAYER_ORDER],
   layerOffsets: {},
+  positions: normalizeLayerPositions(),
 });
 
 export const getLabelPrintCount = (item) =>
@@ -279,6 +399,46 @@ export const getLabelPrintCount = (item) =>
 
 export const getBarcodeHeightScale = (item) =>
   Math.max(0.55, Math.min(2, Number(item?.barcodeHeightScale || 1)));
+
+export const getLabelRenderMetrics = (size, item = {}) => {
+  const width = Math.max(1, Number(size?.width || 50));
+  const height = Math.max(1, Number(size?.height || 25));
+  const scale = Math.min(5.4, 360 / width, 300 / height);
+  const previewWidth = Math.max(180, width * scale);
+  const previewHeight = Math.max(90, height * scale);
+  const pxPerMmX = previewWidth / width;
+  const pxPerMmY = previewHeight / height;
+  const compact = height <= 30;
+  const textBaseSize = Math.max(9, Math.min(18, height * 0.42));
+  const independentTextBaseSize = Math.max(9, Math.min(18, textBaseSize * 1.3));
+  const titleSize = Math.max(7, textBaseSize * Number(item?.titleScale || 1));
+  const brandSize = Math.max(6, independentTextBaseSize * 0.48 * Number(item?.brandScale || 1));
+  const skuSize = Math.max(7, independentTextBaseSize * 0.78 * Number(item?.skuScale || 1));
+  const priceSize = Math.max(6, independentTextBaseSize * 0.62 * Number(item?.priceScale || 1));
+  const barcodeHeight = Math.max(20, Math.min(54, previewHeight * (compact ? 0.21 : 0.19)));
+  const barcodeScale = Math.max(0.45, Math.min(1.8, Number(item?.barcodeScale || 1)));
+  const barcodeHeightScale = getBarcodeHeightScale(item);
+
+  return {
+    width,
+    height,
+    scale,
+    previewWidth,
+    previewHeight,
+    pxPerMmX,
+    pxPerMmY,
+    compact,
+    titleSize,
+    brandSize,
+    skuSize,
+    priceSize,
+    barcodeHeight,
+    barcodeScale,
+    barcodeHeightScale,
+    toMmX: (valuePx) => Number(valuePx || 0) / pxPerMmX,
+    toMmY: (valuePx) => Number(valuePx || 0) / pxPerMmY,
+  };
+};
 
 export const normalizeStoredLabelItem = (item) => {
   if (!isPlainObject(item)) return null;
@@ -301,8 +461,13 @@ export const normalizeStoredLabelItem = (item) => {
     showPrice: Boolean(item.showPrice),
     showBarcode: item.showBarcode !== false,
     showImage: Boolean(item.showImage),
+    brandBold: item.brandBold !== false,
+    titleBold: item.titleBold !== false,
+    skuBold: item.skuBold !== false,
+    priceBold: item.priceBold !== false,
     layerOrder: getLayerOrder(item),
     layerOffsets: isPlainObject(item.layerOffsets) ? item.layerOffsets : {},
+    positions: normalizeLayerPositions(item.positions),
   };
 };
 
@@ -359,6 +524,7 @@ export const applyLabelDesignToItem = (baseItem, savedLayout) => {
     layerOffsets: isPlainObject(savedLayout.layerOffsets)
       ? { ...savedLayout.layerOffsets }
       : baseItem.layerOffsets,
+    positions: normalizeLayerPositions(savedLayout.positions || baseItem.positions),
   };
 };
 
@@ -374,17 +540,17 @@ export const createLabelPrinterItemForProduct = (
 };
 
 export const buildPrintDocument = (items, size, printRotation = "clockwise") => {
-  const width = Number(size.width);
-  const height = Number(size.height);
+  const pageMetrics = getLabelRenderMetrics(size);
+  const { width, height } = pageMetrics;
   const isRotated = printRotation === "clockwise" || printRotation === "counterclockwise";
   const pageWidth = isRotated ? height : width;
   const pageHeight = isRotated ? width : height;
-  const compact = height <= 30;
+
   const labels = items.flatMap((item) =>
     Array.from({ length: getLabelPrintCount(item) }, () => {
-      const barcodeHeightScale = getBarcodeHeightScale(item);
+      const metrics = getLabelRenderMetrics(size, item);
       const barcode = item.showBarcode
-        ? createBarcodeSvg(item.barcode, compact ? 36 : 58, item.barcodeScale || 1, barcodeHeightScale)
+        ? createBarcodeSvg(item.barcode, metrics.barcodeHeight, metrics.barcodeScale, metrics.barcodeHeightScale)
         : "";
       const imageUrl = item.showImage && item.imageUrl ? getStaticUrl(item.imageUrl) : "";
       const sku = item.sku || item.subtitle || item.barcode || "LABEL";
@@ -397,9 +563,22 @@ export const buildPrintDocument = (items, size, printRotation = "clockwise") => 
         if (layerId === "barcode") content = item.showBarcode ? `<div class="barcode">${barcode}</div>` : "";
         if (layerId === "sku") content = item.showBarcode ? `<small class="sku align-${item.skuAlign || "center"}">${escapeHtml(sku)}</small>` : "";
         if (!content) return "";
-        return `<div class="layer align-${getLayerAlignment(item, layerId)}" style="margin-top:${getLayerOffset(item, layerId)}mm">${content}</div>`;
+        const position = getLayerPosition(item, layerId);
+        const stretch = getLayerStretch(item, layerId);
+        const style = `left:${position.x}%;top:${position.y}%;width:${position.w}%;height:${position.h}%;--layer-stretch-x:${stretch.x};--layer-stretch-y:${stretch.y};--layer-font-weight:${getLayerFontWeight(item, layerId)};`;
+        return `<div class="layer layer-${layerId} align-${getLayerAlignment(item, layerId)}" style="${style}"><span class="label-object">${content}</span></div>`;
       }).join("");
-      return `<section class="print-sheet ${isRotated ? `rotate-${printRotation}` : ""}"><article class="label ${compact ? "compact" : ""}" style="--brand-scale:${Number(item.brandScale || 1)};--title-scale:${Number(item.titleScale || 1)};--sku-scale:${Number(item.skuScale || 1)};--price-scale:${Number(item.priceScale || 1)};--barcode-scale:${Number(item.barcodeScale || 1)};--barcode-height-scale:${barcodeHeightScale}">${layerMarkup}</article></section>`;
+      const labelStyle = [
+        `--label-brand-size:${metrics.toMmY(metrics.brandSize)}mm`,
+        `--label-title-size:${metrics.toMmY(metrics.titleSize)}mm`,
+        `--label-sku-size:${metrics.toMmY(metrics.skuSize)}mm`,
+        `--label-price-size:${metrics.toMmY(metrics.priceSize)}mm`,
+        `--label-price-pad-y:${metrics.toMmY(3)}mm`,
+        `--label-price-pad-x:${metrics.toMmX(6)}mm`,
+        `--barcode-scale:${metrics.barcodeScale}`,
+        `--barcode-height-scale:${metrics.barcodeHeightScale}`,
+      ].join(";");
+      return `<section class="print-sheet ${isRotated ? `rotate-${printRotation}` : ""}"><article class="label ${metrics.compact ? "compact" : ""}" style="${labelStyle};">${layerMarkup}</article></section>`;
     })
   );
 
@@ -411,33 +590,33 @@ export const buildPrintDocument = (items, size, printRotation = "clockwise") => 
         <style>
           * { box-sizing: border-box; }
           @page { size: ${pageWidth}mm ${pageHeight}mm; margin: 0; }
-          html, body { margin: 0; padding: 0; background: #fff; color: #102b29; font-family: Arial, Helvetica, sans-serif; }
+          html, body { margin: 0; padding: 0; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; }
           .print-sheet { width: ${pageWidth}mm; height: ${pageHeight}mm; overflow: hidden; break-after: page; page-break-after: always; }
           .print-sheet:last-child { break-after: auto; page-break-after: auto; }
-          .label { width: ${width}mm; height: ${height}mm; padding: 1.45mm; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: .45mm; }
+          .label { position: relative; width: ${width}mm; height: ${height}mm; overflow: hidden; display: block; background: #fff; color: #000; }
           .rotate-clockwise .label { transform: translateX(${height}mm) rotate(90deg); transform-origin: top left; }
           .rotate-counterclockwise .label { transform: translateY(${width}mm) rotate(-90deg); transform-origin: top left; }
-          .layer { min-width: 0; }
-          .label-image { height: 9mm; display: grid; overflow: hidden; place-items: center; }
-          .label-image img { width: 100%; height: 100%; object-fit: contain; }
-          .brand, .title, .sku { width: 100%; }
-          .brand { color: #5f716d; font-size: calc(5px * var(--brand-scale)); font-weight: 700; letter-spacing: .06em; line-height: 1; }
-          .title { font-size: calc(9px * var(--title-scale)); line-height: 1.08; overflow: hidden; }
-          .price { align-self: flex-start; border-radius: .7mm; background: #e6f0ea; color: #17473e; padding: .45mm .9mm; font-size: calc(6px * var(--price-scale)); font-weight: 700; line-height: 1; }
-          .barcode { min-width: 0; display: grid; justify-items: center; }
-          .barcode svg { width: min(100%, calc(78% * var(--barcode-scale, 1))); max-height: calc(16mm * var(--barcode-scale, 1) * var(--barcode-height-scale, 1)); }
-          .sku { color: #000; font-size: calc(7px * var(--sku-scale)); font-weight: 900; letter-spacing: .05em; line-height: 1; }
-          .compact { padding: 1.15mm; gap: .3mm; }
-          .compact .label-image { height: 6mm; }
-          .compact .brand { font-size: calc(4px * var(--brand-scale)); }
-          .compact .title { font-size: calc(7px * var(--title-scale)); }
-          .compact .sku { font-size: calc(6px * var(--sku-scale)); }
-          .compact .price { font-size: calc(5px * var(--price-scale)); }
-          .compact .barcode svg { max-height: calc(9mm * var(--barcode-scale, 1) * var(--barcode-height-scale, 1)); }
+          .layer { position: absolute; min-width: 0; display: grid; align-items: center; overflow: hidden; line-height: 1; }
+          .layer-brand, .layer-title, .layer-price, .layer-sku { overflow: visible; }
+          .layer.align-left { justify-items: start; text-align: left; }
+          .layer.align-center { justify-items: center; text-align: center; }
+          .layer.align-right { justify-items: end; text-align: right; }
+          .label-object { position: relative; display: inline-grid; width: max-content; max-width: none; min-width: 0; min-height: 0; place-items: center; overflow: visible; line-height: 1; }
+          .layer-barcode .label-object, .layer-image .label-object { width: 100%; height: 100%; }
+          .label-image, .barcode { width: 100%; height: 100%; display: grid; overflow: hidden; place-items: center; }
+          .label-image img, .barcode svg { width: 100%; height: 100%; max-height: 100%; object-fit: contain; }
+          .brand, .title, .sku { display: block; width: auto; max-width: none; overflow: visible; color: #000; line-height: 1.18; white-space: nowrap; }
+          .brand { color: #566965; font-size: var(--label-brand-size); font-weight: var(--layer-font-weight, 800); letter-spacing: .05em; }
+          .title { font-size: var(--label-title-size); font-weight: var(--layer-font-weight, 900); }
+          .sku { font-size: var(--label-sku-size); font-weight: var(--layer-font-weight, 900); letter-spacing: .04em; }
+          .price { display: inline-block; width: auto; max-width: none; border-radius: .6mm; background: #e6f0ea; color: #17473e; padding: var(--label-price-pad-y) var(--label-price-pad-x); font-size: var(--label-price-size); font-weight: var(--layer-font-weight, 800); line-height: 1.18; overflow: visible; text-overflow: clip; white-space: nowrap; }
+          .brand, .title, .price, .sku { transform: scale(var(--layer-stretch-x, 1), var(--layer-stretch-y, 1)); transform-origin: center center; }
+          .layer.align-left .brand, .layer.align-left .title, .layer.align-left .price, .layer.align-left .sku { transform-origin: left center; }
+          .layer.align-right .brand, .layer.align-right .title, .layer.align-right .price, .layer.align-right .sku { transform-origin: right center; }
           .align-left { text-align: left; }
           .align-center { text-align: center; }
           .align-right { text-align: right; }
-          @media screen { body { display: grid; justify-content: center; gap: 14px; padding: 14px; background: #e8edeb; } .label { background: #fff; box-shadow: 0 5px 18px rgba(16,43,41,.14); } }
+          @media screen { body { display: grid; justify-content: center; gap: 14px; padding: 14px; background: #e8edeb; } .label { box-shadow: 0 5px 18px rgba(16,43,41,.14); } }
           @media print { body { display: block; } .label { box-shadow: none; } }
         </style>
       </head>
