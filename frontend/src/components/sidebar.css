@@ -172,7 +172,7 @@
   display: block;
   padding: 6px 9px 3px;
   color: #69737d;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.45px;
   text-transform: uppercase;
@@ -192,7 +192,7 @@
   display: flex;
   width: 100%;
   min-width: 0;
-  min-height: 34px;
+  min-height: 38px;
   align-items: center;
   gap: 8px;
   padding: 0 8px;
@@ -201,7 +201,7 @@
   background: transparent;
   color: #303030;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1.35;
@@ -426,7 +426,7 @@
 
 .sidebar-user-copy strong {
   color: #202020;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 900;
 }
 
@@ -754,12 +754,12 @@
 }
 
 .menu-button {
-  min-height: 32px;
+  min-height: 36px;
   gap: 7px;
   padding: 0 9px 0 12px;
   border-radius: 6px;
   color: #303030;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -856,10 +856,10 @@
 }
 
 .menu-button {
-  min-height: 36px;
+  min-height: 38px;
   gap: 8px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -1622,8 +1622,8 @@
 .menu-button {
   border-radius: 8px;
   color: #57534e;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   padding: 0 10px;
   transition: all 0.15s ease;
 }

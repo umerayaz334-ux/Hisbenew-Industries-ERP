@@ -5077,23 +5077,33 @@ function Shipping({ userRole }) {
                                   {isMenuOpen && (
                                     <>
                                       <div
-                                        className="shipping-status-menu-backdrop"
-                                        onClick={() => setEtaMenuRecordId(null)}
+                                        className="shipping-status-menu-backdrop shipping-eta-menu-backdrop"
+                                        onMouseDown={(event) => {
+                                          // Close only for true outside clicks; ignore date-picker UI.
+                                          if (event.target === event.currentTarget) {
+                                            setEtaMenuRecordId(null);
+                                          }
+                                        }}
                                       />
                                       <div
                                         className="shipping-eta-dropdown-menu"
                                         role="dialog"
                                         aria-label="Estimated delivery"
+                                        onMouseDown={(event) => event.stopPropagation()}
+                                        onClick={(event) => event.stopPropagation()}
                                       >
                                         <label className="shipping-eta-date-field">
                                           <span>Estimated delivery</span>
                                           <input
+                                            autoFocus
                                             onChange={(event) =>
                                               setEtaDraftById((previous) => ({
                                                 ...previous,
                                                 [record.id]: event.target.value,
                                               }))
                                             }
+                                            onClick={(event) => event.stopPropagation()}
+                                            onMouseDown={(event) => event.stopPropagation()}
                                             type="date"
                                             value={draftValue}
                                           />
