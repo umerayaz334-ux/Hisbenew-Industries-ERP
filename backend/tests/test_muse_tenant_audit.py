@@ -99,6 +99,7 @@ class MuseTenantAudit(unittest.TestCase):
             response = client.post('/integrations/muse/payouts', headers=self.headers(1), json={
                 'order_no': 'PRIVATE-ORDER', 'actual_paid_usd': 80, 'paid_at': '2026-10-11T08:00:00Z'})
             payout_id = response.json()['id']
+            # Same platform order number is allowed in another company.
             collision = self.post_order(client, 1, 'PRIVATE-ORDER', 'SKU-1')
             self.process()
             bodies = {'products': {'article_no': 'INJECT', 'name': 'Test', 'unit_price_usd': 1},
@@ -110,13 +111,15 @@ class MuseTenantAudit(unittest.TestCase):
                 response = client.post(route, headers=self.headers(1), json={}) if 'retry' in route or route.endswith('/key') else client.get(route, headers=self.headers(1))
                 self.assertEqual(response.status_code, 401, route)
         with Session(self.engine) as db:
-            for submission_id in (foreign_sku, foreign_customer, payout_id, collision):
+            for submission_id in (foreign_sku, foreign_customer, payout_id):
                 self.assertEqual(db.get(MuseSubmission, submission_id).status, 'Failed')
-            self.assertEqual(db.query(Order).count(), 1)
-            self.assertNotEqual(db.query(Order).one().payout_status, 'Received')
+            self.assertEqual(db.get(MuseSubmission, collision).status, 'Applied')
+            self.assertEqual(db.query(Order).count(), 2)
+            self.assertEqual({row.tenant_id for row in db.query(Order).all()}, {1, 2})
+            self.assertEqual(db.query(Order).filter_by(tenant_id=2).one().payout_status, 'Not Received')
             self.assertEqual(db.query(AccountingTransaction).count(), 0)
-            self.assertEqual(db.query(Product).filter_by(article_no='SKU-1').one().reserved_stock, 0)
-            self.assertEqual(db.query(Customer).filter_by(tenant_id=1).count(), 0)
+            self.assertEqual(db.query(Product).filter_by(article_no='SKU-1', tenant_id=1).one().reserved_stock, 2)
+            self.assertEqual(db.query(Customer).filter_by(tenant_id=1).count(), 1)
 
     def test_rotation_and_disabled_identity_isolation(self):
         with Session(self.engine) as db:

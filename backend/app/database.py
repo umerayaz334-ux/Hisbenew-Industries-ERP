@@ -1267,6 +1267,16 @@ def migrate_database():
                     "front_room_stock INTEGER DEFAULT 0 NOT NULL"
                 )
             )
+            # Per-tenant order numbers (SQLite path mirrors this later in migrate_database).
+            connection.execute(text("DROP INDEX IF EXISTS ix_orders_order_no"))
+            connection.execute(text("DROP INDEX IF EXISTS orders_order_no_key"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_orders_order_no ON orders(order_no)"))
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_tenant_order_no "
+                    "ON orders(tenant_id, order_no)"
+                )
+            )
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS raw_pin VARCHAR"))
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_privacy_settings TEXT"))
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_expiry_minutes INTEGER DEFAULT 0"))
@@ -2353,3 +2363,33 @@ def migrate_database():
             connection.commit()
         except Exception as e:
             print(f"Error creating performance indexes: {e}")
+
+        # Order numbers must be unique per company, not globally across tenants.
+        # Global uniqueness caused Muse/CSV imports in one company to fail when
+        # another company already used the same Faire/platform order number.
+        try:
+            order_unique_indexes = []
+            for row in connection.execute(text("PRAGMA index_list(orders)")):
+                index_name = row[1]
+                is_unique = bool(row[2])
+                if not is_unique:
+                    continue
+                index_columns = [
+                    info[2] for info in connection.execute(text(f'PRAGMA index_info("{index_name}")'))
+                ]
+                if index_columns == ["order_no"]:
+                    order_unique_indexes.append(index_name)
+            for index_name in order_unique_indexes:
+                safe_name = str(index_name or "").replace('"', "")
+                if safe_name:
+                    connection.execute(text(f'DROP INDEX IF EXISTS "{safe_name}"'))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_orders_order_no ON orders(order_no)"))
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_tenant_order_no "
+                    "ON orders(tenant_id, order_no)"
+                )
+            )
+            connection.commit()
+        except Exception as e:
+            print(f"Error migrating orders order_no uniqueness to tenant scope: {e}")

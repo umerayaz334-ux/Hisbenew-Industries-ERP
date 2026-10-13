@@ -116,7 +116,11 @@ def ingest_order(payload, db, create_order_record):
     existing = db.query(Order).filter_by(order_no=payload.order_no).first()
     if existing:
         if existing.import_batch_key != "muse-api":
-            raise HTTPException(409, "Order number belongs to an existing non-Muse order")
+            raise HTTPException(
+                409,
+                "Order number already exists in this company from a non-Muse import; "
+                "use a new order number or manage that order in Orders.",
+            )
         return order_result(existing)
     items = []
     for item in payload.items:
@@ -189,6 +193,19 @@ def submission_result(row):
             "processed_at": row.processed_at}
 
 
+def processing_error_message(exc: Exception) -> str:
+    if isinstance(exc, HTTPException):
+        return str(exc.detail)
+    if isinstance(exc, IntegrityError):
+        detail = str(getattr(exc, "orig", exc)).lower()
+        if "orders" in detail and "order_no" in detail:
+            return "Order number already exists in this company"
+        if "products" in detail and "article_no" in detail:
+            return "Article number already exists in this company"
+        return "This record conflicts with existing company data; fix the order number or SKU and retry."
+    return "Processing failed; contact your administrator and retry."
+
+
 def process_queue(engine, create_order, sync_accounting):
     from sqlalchemy.orm import Session
     from sqlalchemy import select, update
@@ -221,9 +238,10 @@ def process_queue(engine, create_order, sync_accounting):
             logging.getLogger(__name__).exception("Muse submission %s failed", submission_id)
             with Session(engine) as db:
                 row = db.get(MuseSubmission, submission_id)
-                if row and row.status == "Pending":
+                # Claim rolls back to Pending on failure; also recover stuck Processing rows.
+                if row and row.status in {"Pending", "Processing"}:
                     row.status = "Failed"
-                    row.error = str(exc.detail) if isinstance(exc, HTTPException) else "Processing failed; contact your administrator and retry."
+                    row.error = processing_error_message(exc)
                     db.commit()
 
 

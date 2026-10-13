@@ -156,7 +156,11 @@ class MuseTests(unittest.TestCase):
                     other.add(Product(article_no="PRIVATE", name="Other company"))
                     other.commit()
                 self.assertNotIn("PRIVATE", [p["article_no"] for p in client.get(products_url, headers=headers).json()])
-                self.assertEqual(client.post(products_url, headers=headers, json={**product_data, "article_no": "PRIVATE"}).status_code, 409)
+                # Same SKU is allowed in another company; it must not leak across tenants.
+                response = client.post(products_url, headers=headers, json={**product_data, "article_no": "PRIVATE", "name": "Owned here"})
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json()["name"], "Owned here")
+                self.assertIn("PRIVATE", [p["article_no"] for p in client.get(products_url, headers=headers).json()])
                 response = client.post("/integrations/muse/orders", headers=headers, json=self.order().model_dump(mode="json"))
                 self.assertEqual(response.status_code, 202, response.text)
                 self.assertEqual(client.get("/orders", headers=headers).status_code, 401)

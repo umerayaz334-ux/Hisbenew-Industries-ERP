@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 import asyncio
@@ -176,65 +177,9 @@ def serve_optimized_upload_image(file_path: str, request: Request, w: int | None
     Lightning-fast image delivery with on-the-fly WebP compression,
     intelligent resolution downscaling, disk caching, and strong browser caching headers.
     """
-    raw_path = Path(STATIC_DIR) / "uploads" / file_path
-    if not raw_path.exists() or not raw_path.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
+    from .services.image_delivery import serve_upload
+    return serve_upload(UPLOAD_DIR, Path(STATIC_DIR) / "optimized", file_path, request, w)
 
-    ext = raw_path.suffix.lower()
-    if ext not in {".png", ".jpg", ".jpeg", ".webp"}:
-        return FileResponse(
-            path=str(raw_path),
-            headers={"Cache-Control": "public, max-age=31536000, immutable"},
-        )
-
-    # Determine target resolution
-    max_dim = 1000
-    if w and w > 0:
-        max_dim = min(int(w), 1200)
-
-    # Check for optimized WebP cache
-    opt_dir = Path(STATIC_DIR) / "optimized"
-    opt_path = opt_dir / f"{raw_path.stem}_w{max_dim}.webp"
-
-    try:
-        if not opt_path.exists() or opt_path.stat().st_mtime < raw_path.stat().st_mtime:
-            opt_dir.mkdir(parents=True, exist_ok=True)
-            from PIL import Image
-
-            with Image.open(raw_path) as im:
-                if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
-                    im = im.convert("RGBA")
-                else:
-                    im = im.convert("RGB")
-
-                # Resize to target dimension
-                if max(im.size) > max_dim:
-                    resample_filter = Image.Resampling.BILINEAR if max_dim <= 200 else Image.Resampling.LANCZOS
-                    im.thumbnail((max_dim, max_dim), resample_filter)
-
-                # Quality 78 and method 4 for 10x faster generation and minimal size
-                im.save(str(opt_path), "WEBP", quality=78, method=4)
-
-        # Check ETag / If-None-Match for instantaneous 304 response
-        file_stat = opt_path.stat()
-        etag = f'"{int(file_stat.st_mtime)}-{file_stat.st_size}"'
-        if request.headers.get("if-none-match") == etag:
-            return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "public, max-age=31536000, immutable"})
-
-        return FileResponse(
-            path=str(opt_path),
-            media_type="image/webp",
-            headers={
-                "Cache-Control": "public, max-age=31536000, immutable",
-                "ETag": etag,
-                "X-Image-Optimized": "true",
-            },
-        )
-    except Exception:
-        return FileResponse(
-            path=str(raw_path),
-            headers={"Cache-Control": "public, max-age=86400"},
-        )
 
 app.include_router(school_router)
 app.include_router(amazon_router)
@@ -1931,10 +1876,24 @@ def save_uploaded_file(upload: UploadFile) -> str:
     safe_name = sanitize_upload_filename(upload.filename or "upload")
     extension = validate_upload_extension(safe_name, upload.content_type)
     final_filename = f"{uuid.uuid4().hex}{extension}"
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     file_path = UPLOAD_DIR / final_filename
-    with file_path.open("wb") as file:
-        shutil.copyfileobj(upload.file, file)
-    return f"/static/uploads/{final_filename}".replace("\\", "/")
+    temporary = UPLOAD_DIR / f".{final_filename}.part"
+    try:
+        with temporary.open("xb") as file:
+            shutil.copyfileobj(upload.file, file)
+        if extension.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
+            from PIL import Image
+            try:
+                with Image.open(temporary) as image:
+                    image.verify()
+            except Exception as exc:
+                raise HTTPException(400, "Invalid or damaged image. Upload a valid image file.") from exc
+        os.replace(temporary, file_path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return f"/static/uploads/{final_filename}"
+
 
 
 def fulfillment_document_extension(filename: str, content_type: str | None) -> str:
@@ -17263,7 +17222,11 @@ def create_order_record(
         payout_received_date=order.payout_received_date,
     )
     db.add(new_order)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Order number exists")
     db.refresh(new_order)
 
     for item in order.items:

@@ -92,10 +92,13 @@ class CustomPage(Base):
 
 class Product(Base):
     __tablename__ = "products"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "article_no", name="uq_products_tenant_article_no"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
-    article_no = Column(String, unique=True, index=True, nullable=False)
+    article_no = Column(String, index=True, nullable=False)
     name = Column(String, nullable=False)
     category = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
@@ -1331,10 +1334,13 @@ class InspirationItem(Base):
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "order_no", name="uq_orders_tenant_order_no"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
-    order_no = Column(String, unique=True, index=True, nullable=False)
+    order_no = Column(String, index=True, nullable=False)
 
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     import_customer_name = Column(String, nullable=True)
