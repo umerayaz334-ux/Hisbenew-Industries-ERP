@@ -185,6 +185,36 @@ def _usb_port_missing(port_name: str) -> bool:
         return False
 
 
+def _clear_work_offline_attribute(printer_name: str) -> None:
+    """Clear sticky WORK_OFFLINE so USB replug shows connected on live immediately."""
+    win32print = _win32print()
+    work_offline_flag = int(getattr(win32print, "PRINTER_ATTRIBUTE_WORK_OFFLINE", 0x00000400))
+    try:
+        handle = win32print.OpenPrinter(printer_name, {"DesiredAccess": win32print.PRINTER_ALL_ACCESS})
+    except Exception:
+        try:
+            handle = win32print.OpenPrinter(printer_name)
+        except Exception:
+            return
+    try:
+        info = win32print.GetPrinter(handle, 2)
+        if not isinstance(info, Mapping):
+            return
+        attributes = int(info.get("Attributes") or 0)
+        if not (attributes & work_offline_flag):
+            return
+        updated = dict(info)
+        updated["Attributes"] = attributes & ~work_offline_flag
+        win32print.SetPrinter(handle, 2, updated, 0)
+    except Exception:
+        pass
+    finally:
+        try:
+            win32print.ClosePrinter(handle)
+        except Exception:
+            pass
+
+
 def _printer_connection_status(printer_name: str) -> dict:
     win32print = _win32print()
     try:
@@ -218,18 +248,20 @@ def _printer_connection_status(printer_name: str) -> dict:
     port_name = str(info.get("pPortName") or info.get("PortName") or "") if isinstance(info, Mapping) else ""
     blocking_statuses = _status_matches(win32print, status_value, BLOCKING_PRINTER_STATUS_FLAGS)
     active_statuses = _status_matches(win32print, status_value, NON_BLOCKING_PRINTER_STATUS_FLAGS)
-    work_offline = bool(
+    attr_work_offline = bool(
         attributes & int(getattr(win32print, "PRINTER_ATTRIBUTE_WORK_OFFLINE", 0x00000400))
     )
     wmi_offline, wmi_detail = _wmi_printer_offline(printer_name)
     usb_gone = _usb_port_missing(port_name)
 
-    if work_offline and "Offline" not in blocking_statuses:
-        blocking_statuses.append("Offline")
-    if wmi_offline and "Offline" not in blocking_statuses:
-        blocking_statuses.append("Offline")
-    if usb_gone and "Offline" not in blocking_statuses:
-        blocking_statuses.append("Offline")
+    # USB port + WMI are the truth for plug/unplug. Sticky WORK_OFFLINE alone must not
+    # keep live stuck on "Not connected" after the cable is plugged back in.
+    hardware_offline = wmi_offline or usb_gone
+    if hardware_offline:
+        if "Offline" not in blocking_statuses:
+            blocking_statuses.append("Offline")
+    elif attr_work_offline:
+        _clear_work_offline_attribute(printer_name)
 
     status_labels = blocking_statuses + active_statuses
     detail = ""
@@ -237,12 +269,13 @@ def _printer_connection_status(printer_name: str) -> dict:
         detail = f"USB port {port_name} removed — printer is not connected."
     elif wmi_detail:
         detail = wmi_detail
-    elif work_offline:
-        detail = "Marked offline in Windows after USB/cable disconnect."
 
+    is_connected = not blocking_statuses and not hardware_offline
     return {
-        "is_connected": not blocking_statuses,
-        "status": (", ".join(status_labels) if status_labels else "Ready") if not blocking_statuses else "Not connected",
+        "is_connected": is_connected,
+        "status": "Ready" if is_connected and not status_labels else (
+            "Not connected" if not is_connected else ", ".join(status_labels)
+        ),
         "status_detail": detail,
         "jobs": jobs,
     }

@@ -1039,15 +1039,9 @@ function LabelPrinter() {
         const currentMissing = current && !printers.some((printer) => printer.name === current);
         // Prefer a newly plugged USB thermal when the current selection is empty or offline.
         if (detectHotplug && newlyConnected.length) {
-          const currentStillOnline =
-            current &&
-            printers.some(
-              (printer) => printer.name === current && printer.supports_direct_labels && printer.is_connected !== false
-            );
-          if (!currentStillOnline) {
-            directPrinterRef.current = newlyConnected[0].name;
-            return newlyConnected[0].name;
-          }
+          // Always reselect the thermal that just came back online after USB plug-in.
+          directPrinterRef.current = newlyConnected[0].name;
+          return newlyConnected[0].name;
         }
         if (detectHotplug && (currentOffline || currentMissing)) {
           const preferred = pickPreferredLabelPrinter(printers, "");

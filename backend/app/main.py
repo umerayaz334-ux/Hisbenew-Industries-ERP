@@ -12926,6 +12926,15 @@ def _print_agent_python() -> str:
 
 def _print_agent_process_running(pid: int | None = None) -> bool:
     if pid:
+        if os.name == "nt":
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            output = (result.stdout or "").strip().lower()
+            return bool(output) and "no tasks" not in output and str(pid) in output
         try:
             os.kill(pid, 0)
             return True
@@ -12948,20 +12957,57 @@ def _print_agent_process_running(pid: int | None = None) -> bool:
     return True
 
 
+def _stop_all_local_print_agents() -> None:
+    """Stop every printer_agent.py so a stale duplicate cannot overwrite live status."""
+    if PRINT_AGENT_PID_FILE.exists():
+        try:
+            stored_pid = int(PRINT_AGENT_PID_FILE.read_text(encoding="utf-8").strip() or "0")
+        except (OSError, ValueError):
+            stored_pid = 0
+        if stored_pid > 0:
+            try:
+                os.kill(stored_pid, 9 if os.name != "nt" else 0)
+            except OSError:
+                pass
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/F", "/PID", str(stored_pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+        try:
+            PRINT_AGENT_PID_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    if os.name == "nt":
+        # Kill any other leftover agent interpreters (system Python duplicates).
+        subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'printer_agent\\.py' } | "
+                "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+
+
 def _start_local_print_agent(erp_api: str | None = None) -> dict:
     if not PRINT_AGENT_SCRIPT.exists():
         raise HTTPException(status_code=404, detail="Local print agent script was not found.")
 
-    if _print_agent_process_running():
-        return {
-            "status": "already_running",
-            "pid": int(PRINT_AGENT_PID_FILE.read_text(encoding="utf-8").strip()),
-            "erp_api": (erp_api or "").strip() or None,
-            "script": str(PRINT_AGENT_SCRIPT),
-        }
+    clean_api = str(erp_api or "").strip().rstrip("/")
+    # Always restart a single agent so USB reconnect uses current detection code
+    # and no second process can push stale offline status to live.
+    _stop_all_local_print_agents()
+    time.sleep(0.3)
 
     env = os.environ.copy()
-    clean_api = str(erp_api or "").strip().rstrip("/")
     if clean_api:
         env["ERP_API"] = clean_api
 
