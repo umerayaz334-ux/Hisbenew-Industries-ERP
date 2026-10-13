@@ -707,6 +707,22 @@ function Shipping({ userRole }) {
   const [etaMenuPosition, setEtaMenuPosition] = useState(null);
   const etaDateInputRef = useRef(null);
 
+  useEffect(() => {
+    if (!etaMenuRecordId) return undefined;
+    const timer = window.setTimeout(() => {
+      const input = etaDateInputRef.current;
+      if (!input) return;
+      input.focus();
+      if (typeof input.showPicker === "function") {
+        try {
+          input.showPicker();
+        } catch {
+          /* ignore browsers that reject programmatic pickers */
+        }
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [etaMenuRecordId]);
 
   const [copiedOrderId, setCopiedOrderId] = useState(null);
 
@@ -1471,15 +1487,15 @@ function Shipping({ userRole }) {
       }
       if (anchorEl?.getBoundingClientRect) {
         const rect = anchorEl.getBoundingClientRect();
-        const menuWidth = 260;
+        const menuWidth = 220;
         const left = Math.min(
           Math.max(12, rect.right - menuWidth),
           window.innerWidth - menuWidth - 12,
         );
-        const top = Math.min(rect.bottom + 8, window.innerHeight - 180);
+        const top = Math.min(rect.bottom + 8, window.innerHeight - 160);
         setEtaMenuPosition({ top, left, width: menuWidth });
       } else {
-        setEtaMenuPosition({ top: 120, left: 120, width: 260 });
+        setEtaMenuPosition({ top: 120, left: 120, width: 220 });
       }
       return record.id;
     });
@@ -5129,17 +5145,26 @@ function Shipping({ userRole }) {
                                       <strong className="shipping-eta-portal-title">
                                         Estimated delivery
                                       </strong>
-                                      <label className="shipping-eta-date-field">
-                                        <span>Date</span>
+                                      <label className="shipping-eta-date-field shipping-eta-date-field--icon">
                                         <input
                                           ref={etaDateInputRef}
-                                          autoFocus
+                                          aria-label="Pick estimated delivery date"
                                           onChange={(event) =>
                                             setEtaDraftById((previous) => ({
                                               ...previous,
                                               [record.id]: event.target.value,
                                             }))
                                           }
+                                          onClick={(event) => {
+                                            const input = event.currentTarget;
+                                            if (typeof input.showPicker === "function") {
+                                              try {
+                                                input.showPicker();
+                                              } catch {
+                                                /* native click still opens where supported */
+                                              }
+                                            }
+                                          }}
                                           onKeyDown={(event) => {
                                             if (event.key === "Escape") {
                                               closeEstimatedDeliveryMenu();
@@ -5149,59 +5174,10 @@ function Shipping({ userRole }) {
                                           value={draftValue}
                                         />
                                       </label>
-                                      <button
-                                        className="shipping-eta-open-calendar"
-                                        onClick={() => {
-                                          const input = etaDateInputRef.current;
-                                          if (!input) return;
-                                          input.focus();
-                                          if (typeof input.showPicker === "function") {
-                                            try {
-                                              input.showPicker();
-                                            } catch {
-                                              input.click();
-                                            }
-                                          } else {
-                                            input.click();
-                                          }
-                                        }}
-                                        type="button"
-                                      >
-                                        Open calendar
-                                      </button>
                                       <div className="shipping-eta-menu-actions">
                                         <button
                                           disabled={isUpdating || !hasDate}
                                           onClick={() =>
-                                            handleEstimatedDeliveryChange(record, {
-                                              clear: true,
-                                            })
-                                          }
-                                          type="button"
-                                        >
-                                          Clear
-                                        </button>
-                                        <button
-                                          className="shipping-eta-save"
-                                          disabled={isUpdating || !draftValue}
-                                          onClick={() =>
-                                            handleEstimatedDeliveryChange(record)
-                                          }
-                                          type="button"
-                                        >
-                                          {isUpdating ? "Saving…" : "Save"}
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </>,
-                                  document.body,
-                                )}
-                            </div>
-                          );
-                        })()}
-                      </td>
-
-                      <td className="shipping-weight-cell" data-label="Weight">) =>
                                             handleEstimatedDeliveryChange(record, {
                                               clear: true,
                                             })
