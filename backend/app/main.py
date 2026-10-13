@@ -12219,6 +12219,7 @@ def dashboard_stats(
     response: Response,
     db: Session = Depends(get_db),
 ):
+    """Dashboard payload — same fields/features, faster scoped queries."""
     response.headers["Cache-Control"] = (
         "no-store, no-cache, must-revalidate, max-age=0"
     )
@@ -12229,73 +12230,174 @@ def dashboard_stats(
     privacy = access_privacy_context(request, db)
     now = datetime.now()
     today = now.date()
+    week_start = today - timedelta(days=7)
+    sales_start = today - timedelta(days=6)
+    fourteen_days_start = today - timedelta(days=13)
+    week_start_dt = datetime.combine(week_start, datetime.min.time())
+    sales_start_dt = datetime.combine(sales_start, datetime.min.time())
+    fourteen_days_start_dt = datetime.combine(
+        fourteen_days_start, datetime.min.time()
+    )
+    today_start_dt = datetime.combine(today, datetime.min.time())
+    tomorrow_start_dt = today_start_dt + timedelta(days=1)
 
-    products = db.query(Product).all()
-    orders = (
-        db.query(Order)
-        .options(selectinload(Order.items).joinedload(OrderItem.product))
+    deducted_statuses = list(STOCK_DEDUCTED_SHIPPING_STATUSES)
+    shipping_status_lower = func.lower(func.coalesce(Order.shipping_status, ""))
+
+    # --- Fast SQL aggregates (preserve same totals) ---
+    total_products = int(db.query(func.count(Product.id)).scalar() or 0)
+    (
+        total_factory_stock,
+        total_usa_stock,
+        total_front_room_stock,
+        total_reserved_stock,
+    ) = db.query(
+        func.coalesce(func.sum(Product.factory_stock), 0),
+        func.coalesce(func.sum(Product.usa_stock), 0),
+        func.coalesce(func.sum(Product.front_room_stock), 0),
+        func.coalesce(func.sum(Product.reserved_stock), 0),
+    ).one()
+    available_stock_expr = (
+        func.coalesce(Product.factory_stock, 0)
+        + func.coalesce(Product.usa_stock, 0)
+        + func.coalesce(Product.front_room_stock, 0)
+        - func.coalesce(Product.reserved_stock, 0)
+    )
+    low_stock_threshold = func.coalesce(Product.low_stock_alert, 10)
+    low_stock_count = int(
+        db.query(func.count(Product.id))
+        .filter(available_stock_expr <= low_stock_threshold)
+        .scalar()
+        or 0
+    )
+
+    total_orders = int(db.query(func.count(Order.id)).scalar() or 0)
+    new_orders_today = int(
+        db.query(func.count(Order.id))
+        .filter(
+            Order.order_date >= today_start_dt,
+            Order.order_date < tomorrow_start_dt,
+        )
+        .scalar()
+        or 0
+    )
+    shipped_orders = int(
+        db.query(func.count(Order.id))
+        .filter(shipping_status_lower.in_(deducted_statuses))
+        .scalar()
+        or 0
+    )
+    pending_shipping_orders = int(
+        db.query(func.count(Order.id))
+        .filter(~shipping_status_lower.in_(deducted_statuses))
+        .scalar()
+        or 0
+    )
+    shipping_cost_pending = int(
+        db.query(func.count(Shipping.id))
+        .filter(
+            or_(
+                Shipping.shipping_cost.is_(None),
+                Shipping.shipping_cost == 0,
+            )
+        )
+        .scalar()
+        or 0
+    )
+
+    total_workers = int(db.query(func.count(Worker.id)).scalar() or 0)
+    active_workers = int(
+        db.query(func.count(Worker.id))
+        .filter(Worker.is_active == True)
+        .scalar()
+        or 0
+    )
+    inactive_workers = max(total_workers - active_workers, 0)
+    workflow_steps = int(db.query(func.count(WorkflowStep.id)).scalar() or 0)
+    manufacturing_required_items = int(
+        db.query(func.count(OrderItem.id))
+        .filter(OrderItem.manufacturing_required == True)
+        .scalar()
+        or 0
+    )
+
+    weekly_payout_received = float(
+        db.query(func.coalesce(func.sum(Order.received_payout_usd), 0))
+        .filter(Order.payout_received_date >= week_start_dt)
+        .scalar()
+        or 0
+    )
+    weekly_pending_payouts = int(
+        db.query(func.count(Order.id))
+        .filter(
+            Order.remaining_payout_usd > 0,
+            or_(
+                Order.order_date >= week_start_dt,
+                Order.expected_payout_date >= week_start_dt,
+            ),
+        )
+        .scalar()
+        or 0
+    )
+
+    production_total_batches = int(
+        db.query(func.count(ProductionBatch.id)).scalar() or 0
+    )
+    production_total_tasks = int(
+        db.query(func.count(ProductionTask.id)).scalar() or 0
+    )
+    production_ready_tasks = int(
+        db.query(func.count(ProductionTask.id))
+        .filter(ProductionTask.status == "Ready")
+        .scalar()
+        or 0
+    )
+    production_in_progress_tasks = int(
+        db.query(func.count(ProductionTask.id))
+        .filter(ProductionTask.status == "In Progress")
+        .scalar()
+        or 0
+    )
+    production_completed_tasks = int(
+        db.query(func.count(ProductionTask.id))
+        .filter(ProductionTask.status == "Completed")
+        .scalar()
+        or 0
+    )
+    weekly_completed_tasks = int(
+        db.query(func.count(ProductionTask.id))
+        .filter(
+            ProductionTask.status == "Completed",
+            ProductionTask.actual_completion_time >= week_start_dt,
+        )
+        .scalar()
+        or 0
+    )
+    weekly_assigned_tasks = int(
+        db.query(func.count(ProductionTask.id))
+        .filter(ProductionTask.created_at >= week_start_dt)
+        .scalar()
+        or 0
+    )
+
+    # Batch status counts still use effective_batch_status (feature-preserving).
+    production_batches = (
+        db.query(ProductionBatch)
+        .options(selectinload(ProductionBatch.tasks))
         .all()
     )
-    workflow_steps = db.query(WorkflowStep).all()
-    workers = db.query(Worker).all()
-    shipping_records = db.query(Shipping).all()
-    regular_bills = db.query(RegularBill).all()
-    dashboard_amazon_account = (
-        db.query(AmazonAccount).order_by(AmazonAccount.id.asc()).first()
-    )
-    amazon_orders = (
-        db.query(AmazonOrder)
-        .filter(AmazonOrder.amazon_account_id == dashboard_amazon_account.id)
-        .all()
-        if dashboard_amazon_account
-        else []
-    )
-
-    production_batches = db.query(ProductionBatch).all()
-    production_tasks = db.query(ProductionTask).all()
     production_batch_statuses = [
         effective_batch_status(batch) for batch in production_batches
     ]
 
-    total_factory_stock = sum(p.factory_stock for p in products)
-    total_usa_stock = sum(p.usa_stock for p in products)
-    total_front_room_stock = sum((p.front_room_stock or 0) for p in products)
-    total_reserved_stock = sum(p.reserved_stock for p in products)
-
-    low_stock_count = sum(
-        1 for p in products
-        if (
-            (p.factory_stock or 0)
-            + (p.usa_stock or 0)
-            + (p.front_room_stock or 0)
-            - (p.reserved_stock or 0)
-        ) <= (p.low_stock_alert if p.low_stock_alert is not None else 10)
+    # Regular bills — Active only (same alert rules).
+    regular_bills = (
+        db.query(RegularBill).filter(RegularBill.status == "Active").all()
     )
-
-    new_orders_today = sum(
-        1 for o in orders
-        if o.order_date and o.order_date.date() == today
-    )
-
-    pending_shipping_orders = sum(
-        1 for o in orders
-        if not is_stock_deducted_shipping_status(o.shipping_status)
-    )
-
-    shipped_orders = sum(
-        1 for o in orders
-        if is_stock_deducted_shipping_status(o.shipping_status)
-    )
-
-    shipping_cost_pending = sum(
-        1 for s in shipping_records
-        if s.shipping_cost is None or s.shipping_cost == 0
-    )
-
     regular_bill_alerts = []
     for bill in regular_bills:
         due_status, days_until_due = regular_bill_due_status(bill, now)
-        if bill.status == "Active" and days_until_due is not None and days_until_due <= (bill.reminder_days or 0):
+        if days_until_due is not None and days_until_due <= (bill.reminder_days or 0):
             regular_bill_alerts.append({
                 "id": bill.id,
                 "name": bill.name,
@@ -12309,7 +12411,6 @@ def dashboard_stats(
                 "due_status": due_status,
                 "payment_method": bill.payment_method,
             })
-
     regular_bill_alert_count = len(regular_bill_alerts)
     overdue_regular_bills_count = sum(
         1 for bill in regular_bill_alerts if bill["days_until_due"] < 0
@@ -12322,13 +12423,6 @@ def dashboard_stats(
         key=lambda item: item["days_until_due"],
     )[:6]
 
-    manufacturing_required_items = (
-        db.query(func.count(OrderItem.id))
-        .filter(OrderItem.manufacturing_required == True)
-        .scalar()
-        or 0
-    )
-
     if now.hour < 12:
         greeting = "Good Morning"
     elif now.hour < 17:
@@ -12336,10 +12430,6 @@ def dashboard_stats(
     else:
         greeting = "Good Evening"
 
-    week_start = today - timedelta(days=7)
-    sales_start = today - timedelta(days=6)
-    fourteen_days_start = today - timedelta(days=13)
-    sales_14_days_total = 0.0
     sales_last_7_days = {
         sales_start + timedelta(days=offset): {
             "order_count": 0,
@@ -12352,6 +12442,21 @@ def dashboard_stats(
         }
         for offset in range(7)
     }
+
+    dashboard_amazon_account = (
+        db.query(AmazonAccount).order_by(AmazonAccount.id.asc()).first()
+    )
+    # Sales/charts only need recent Amazon orders (same chart window as before).
+    amazon_orders = (
+        db.query(AmazonOrder)
+        .filter(
+            AmazonOrder.amazon_account_id == dashboard_amazon_account.id,
+            AmazonOrder.purchase_date >= fourteen_days_start_dt,
+        )
+        .all()
+        if dashboard_amazon_account
+        else []
+    )
     dashboard_amazon_orders = [
         order
         for order in amazon_orders
@@ -12369,12 +12474,7 @@ def dashboard_stats(
         for order in dashboard_amazon_orders
         if str(order.amazon_order_id or "").strip()
     }
-    product_by_id = {product.id: product for product in products}
-    product_by_sku = {
-        str(product.article_no or "").strip().casefold(): product
-        for product in products
-        if str(product.article_no or "").strip()
-    }
+
     amazon_mappings = (
         db.query(AmazonProductMapping)
         .filter(AmazonProductMapping.amazon_account_id == dashboard_amazon_account.id)
@@ -12383,6 +12483,29 @@ def dashboard_stats(
         else []
     )
     amazon_mapping_by_id = {mapping.id: mapping for mapping in amazon_mappings}
+
+    # ERP orders for 14-day sales + top sellers (with line items).
+    orders = (
+        db.query(Order)
+        .options(
+            selectinload(Order.items).joinedload(OrderItem.product),
+            joinedload(Order.customer),
+        )
+        .filter(Order.order_date >= fourteen_days_start_dt)
+        .all()
+    )
+    product_by_id = {}
+    product_by_sku = {}
+    for order in orders:
+        for item in order.items:
+            product = item.product
+            if not product:
+                continue
+            product_by_id[product.id] = product
+            sku = str(product.article_no or "").strip()
+            if sku:
+                product_by_sku[sku.casefold()] = product
+
     dashboard_amazon_order_ids = {
         order.id
         for order in dashboard_amazon_orders
@@ -12390,6 +12513,11 @@ def dashboard_stats(
         and order.purchase_date.date() in sales_last_7_days
     }
     amazon_items_by_order_id = {}
+    missing_product_ids = {
+        mapping.product_id
+        for mapping in amazon_mappings
+        if mapping.product_id and mapping.product_id not in product_by_id
+    }
     if dashboard_amazon_order_ids:
         for item in (
             db.query(AmazonOrderItem)
@@ -12404,6 +12532,19 @@ def dashboard_stats(
                 item.amazon_order_database_id,
                 [],
             ).append(item)
+            if item.product_id and item.product_id not in product_by_id:
+                missing_product_ids.add(item.product_id)
+
+    if missing_product_ids:
+        for product in (
+            db.query(Product)
+            .filter(Product.id.in_(missing_product_ids))
+            .all()
+        ):
+            product_by_id[product.id] = product
+            sku = str(product.article_no or "").strip()
+            if sku:
+                product_by_sku[sku.casefold()] = product
 
     top_selling_products = {}
 
@@ -12452,10 +12593,8 @@ def dashboard_stats(
         entry["sales_amount"] += max(float(sales_amount or 0), 0)
         entry["platforms"].add(str(platform or "ERP").strip() or "ERP")
 
-    pending_shipping_list = []
+    sales_14_days_total = 0.0
     recent_week_orders = []
-    weekly_payout_received = 0.0
-    weekly_pending_payouts = 0
 
     for order in orders:
         order_day = order.order_date.date() if order.order_date else None
@@ -12509,23 +12648,6 @@ def dashboard_stats(
                         platform=platform_label,
                     )
 
-        if not is_stock_deducted_shipping_status(order.shipping_status):
-            customer_label, _customer_company_label = privacy_order_customer_labels(
-                order,
-                order.customer,
-                is_unassigned_import_customer(order.customer),
-                privacy,
-                "Shipping",
-            )
-            pending_shipping_list.append({
-                "order_id": order.id,
-                "order_no": order.order_no,
-                "customer_name": customer_label,
-                "platform": order.platform,
-                "total_amount": order.total_amount,
-                "shipping_status": order.shipping_status,
-            })
-
         if order.order_date and order.order_date.date() >= sales_start:
             customer_label, _customer_company_label = privacy_order_customer_labels(
                 order,
@@ -12545,15 +12667,6 @@ def dashboard_stats(
                 "status": order.status,
                 "payout_status": order.payout_status,
             })
-
-        if order.payout_received_date and order.payout_received_date.date() >= week_start:
-            weekly_payout_received += order.received_payout_usd or 0
-
-        if (order.remaining_payout_usd or 0) > 0 and (
-            (order.order_date and order.order_date.date() >= week_start)
-            or (order.expected_payout_date and order.expected_payout_date.date() >= week_start)
-        ):
-            weekly_pending_payouts += 1
 
     for amazon_order in dashboard_amazon_orders:
         order_day = (
@@ -12635,13 +12748,57 @@ def dashboard_stats(
         )[:6]
     ]
 
+    # Pending shipping list — same shape, only fetch the 8 shown.
+    pending_shipping_rows = (
+        db.query(Order)
+        .options(joinedload(Order.customer))
+        .filter(~shipping_status_lower.in_(deducted_statuses))
+        .order_by(Order.id.desc())
+        .limit(8)
+        .all()
+    )
+    pending_shipping_list = []
+    for order in pending_shipping_rows:
+        customer_label, _customer_company_label = privacy_order_customer_labels(
+            order,
+            order.customer,
+            is_unassigned_import_customer(order.customer),
+            privacy,
+            "Shipping",
+        )
+        pending_shipping_list.append({
+            "order_id": order.id,
+            "order_no": order.order_no,
+            "customer_name": customer_label,
+            "platform": order.platform,
+            "total_amount": order.total_amount,
+            "shipping_status": order.shipping_status,
+        })
+
+    # Production task panels — same fields/limits, scoped queries.
+    production_tasks = (
+        db.query(ProductionTask)
+        .options(
+            joinedload(ProductionTask.batch),
+            joinedload(ProductionTask.worker),
+        )
+        .filter(
+            or_(
+                ProductionTask.status.in_(["Ready", "In Progress"]),
+                ProductionTask.timing_status == "Late",
+                ProductionTask.created_at >= week_start_dt,
+                ProductionTask.expected_completion_time >= week_start_dt,
+                ProductionTask.actual_completion_time >= week_start_dt,
+            )
+        )
+        .all()
+    )
+
     active_production_tasks = []
     tasks_completing_today = []
     late_production_tasks = []
     todo_tasks = []
     today_tasks = []
-    weekly_completed_tasks = 0
-    weekly_assigned_tasks = 0
 
     for task in production_tasks:
         task_source_type = task.batch.source_type if task.batch else "Workflow"
@@ -12722,12 +12879,6 @@ def dashboard_stats(
                 "delay_reason": task.delay_reason,
             })
 
-        if task.status == "Completed" and task.actual_completion_time and task.actual_completion_time.date() >= week_start:
-            weekly_completed_tasks += 1
-
-        if task.created_at and task.created_at.date() >= week_start:
-            weekly_assigned_tasks += 1
-
         if task.status != "Completed" and (
             (task.expected_completion_time and task.expected_completion_time.date() >= week_start)
             or (task.created_at and task.created_at.date() >= week_start)
@@ -12748,6 +12899,23 @@ def dashboard_stats(
                 "timing_status": task.timing_status,
             })
 
+    production_late_tasks_count = int(
+        db.query(func.count(ProductionTask.id))
+        .filter(ProductionTask.timing_status == "Late")
+        .scalar()
+        or 0
+    )
+    production_completing_today_count = int(
+        db.query(func.count(ProductionTask.id))
+        .filter(
+            ProductionTask.status != "Completed",
+            ProductionTask.expected_completion_time >= today_start_dt,
+            ProductionTask.expected_completion_time < tomorrow_start_dt,
+        )
+        .scalar()
+        or 0
+    )
+
     todo_tasks = sorted(
         todo_tasks,
         key=lambda item: item["expected_completion_time"] or now,
@@ -12760,15 +12928,32 @@ def dashboard_stats(
         reverse=True,
     )[:6]
 
+    # Worker overview — same shape/limit as before (first 8 workers by id).
+    workers = (
+        db.query(Worker)
+        .order_by(Worker.id.asc())
+        .limit(8)
+        .all()
+    )
+    active_task_by_worker = {}
+    if workers:
+        worker_ids = [worker.id for worker in workers]
+        for task in (
+            db.query(ProductionTask)
+            .options(joinedload(ProductionTask.batch))
+            .filter(
+                ProductionTask.worker_id.in_(worker_ids),
+                ProductionTask.status.in_(["Ready", "In Progress"]),
+            )
+            .order_by(ProductionTask.id.asc())
+            .all()
+        ):
+            if task.worker_id not in active_task_by_worker:
+                active_task_by_worker[task.worker_id] = task
+
     worker_overview = []
     for worker in workers:
-        worker_active_task = None
-
-        for task in production_tasks:
-            if task.worker_id == worker.id and task.status in ["Ready", "In Progress"]:
-                worker_active_task = task
-                break
-
+        worker_active_task = active_task_by_worker.get(worker.id)
         worker_overview.append({
             "worker_id": worker.id,
             "worker_name": worker.name,
@@ -12783,13 +12968,13 @@ def dashboard_stats(
         "company_name": "Hisbenew Industries",
         "greeting": greeting,
 
-        "total_products": len(products),
-        "total_orders": len(orders),
+        "total_products": total_products,
+        "total_orders": total_orders,
         "new_orders_today": new_orders_today,
 
-        "total_workers": len(workers),
-        "active_workers": sum(1 for w in workers if w.is_active),
-        "inactive_workers": sum(1 for w in workers if not w.is_active),
+        "total_workers": total_workers,
+        "active_workers": active_workers,
+        "inactive_workers": inactive_workers,
 
         "total_factory_stock": total_factory_stock,
         "total_usa_stock": total_usa_stock,
@@ -12797,29 +12982,29 @@ def dashboard_stats(
         "total_reserved_stock": total_reserved_stock,
 
         "low_stock_count": low_stock_count,
-        "workflow_steps": len(workflow_steps),
+        "workflow_steps": workflow_steps,
 
         "manufacturing_required_items": manufacturing_required_items,
 
         "pending_shipping_orders": pending_shipping_orders,
         "shipped_orders": shipped_orders,
- "shipping_cost_pending": shipping_cost_pending,
+        "shipping_cost_pending": shipping_cost_pending,
         "upcoming_regular_bills": regular_bill_alerts,
         "upcoming_regular_bills_count": regular_bill_alert_count,
         "overdue_regular_bills_count": overdue_regular_bills_count,
         "regular_bills_due_amount": regular_bills_due_amount,
 
-        "production_total_batches": len(production_batches),
+        "production_total_batches": production_total_batches,
         "production_pending_batches": production_batch_statuses.count("Pending"),
         "production_in_progress_batches": production_batch_statuses.count("In Progress"),
         "production_completed_batches": production_batch_statuses.count("Completed"),
 
-        "production_total_tasks": len(production_tasks),
-        "production_ready_tasks": sum(1 for t in production_tasks if t.status == "Ready"),
-        "production_in_progress_tasks": sum(1 for t in production_tasks if t.status == "In Progress"),
-        "production_completed_tasks": sum(1 for t in production_tasks if t.status == "Completed"),
-        "production_late_tasks": len(late_production_tasks),
-        "production_completing_today": len(tasks_completing_today),
+        "production_total_tasks": production_total_tasks,
+        "production_ready_tasks": production_ready_tasks,
+        "production_in_progress_tasks": production_in_progress_tasks,
+        "production_completed_tasks": production_completed_tasks,
+        "production_late_tasks": production_late_tasks_count,
+        "production_completing_today": production_completing_today_count,
 
         "weekly_payout_received": weekly_payout_received,
         "weekly_completed_tasks": weekly_completed_tasks,
@@ -12871,6 +13056,7 @@ def dashboard_stats(
         "website": website_dashboard_summary(db, tenant_scope_id),
         "amazon": amazon_dashboard_summary(db, privacy),
     }
+
 
 # Products API
 @app.get("/products", response_model=list[ProductOut])
