@@ -152,6 +152,59 @@ class AmazonAutoSyncTests(unittest.TestCase):
         )
         db.close()
 
+    def test_orphaned_pending_jobs_are_reclaimed(self):
+        db = self.session_factory()
+        account = db.query(AmazonAccount).one()
+        now = datetime.utcnow()
+        orphan = AmazonSyncJob(
+            amazon_account_id=account.id,
+            job_type="Finances Sync",
+            status="Pending",
+            priority=10,
+            attempt_count=1,
+            maximum_attempts=5,
+            scheduled_at=now - timedelta(days=20),
+            updated_at=now - timedelta(days=20),
+            next_retry_at=now - timedelta(days=20),
+            error_code="lwa_timeout",
+            error_message="Amazon authorization timed out. Please try again.",
+        )
+        db.add(orphan)
+        db.commit()
+        orphan_id = orphan.id
+        db.close()
+
+        def complete_job(job_id):
+            job_db = self.session_factory()
+            job = job_db.query(AmazonSyncJob).filter(
+                AmazonSyncJob.id == job_id
+            ).one()
+            job.status = "Completed"
+            job_db.commit()
+            job_db.close()
+
+        with (
+            patch(
+                "app.integrations.amazon.autosync.SessionLocal",
+                self.session_factory,
+            ),
+            patch(
+                "app.integrations.amazon.autosync.process_amazon_job",
+                side_effect=complete_job,
+            ) as process_job,
+        ):
+            self.assertEqual(run_due_amazon_retries(), 1)
+
+        process_job.assert_called_once_with(orphan_id)
+        db = self.session_factory()
+        self.assertEqual(
+            db.query(AmazonSyncJob).filter(
+                AmazonSyncJob.id == orphan_id
+            ).one().status,
+            "Completed",
+        )
+        db.close()
+
 
 if __name__ == "__main__":
     unittest.main()

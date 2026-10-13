@@ -65,10 +65,37 @@
   border: 1px solid #fca5a5;
 }
 
+.amazon-finances-top-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .amazon-finances-top-meta small {
   color: var(--finance-muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.amazon-finances-sync-btn {
+  border: 1px solid #0f172a;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.amazon-finances-sync-btn:hover:not(:disabled) {
+  background: #1e293b;
+}
+
+.amazon-finances-sync-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .amazon-finances-notice {

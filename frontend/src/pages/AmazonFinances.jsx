@@ -170,6 +170,72 @@ function AmazonFinances({ authenticatedUser }) {
     return () => window.clearTimeout(timer);
   }, [isAdmin, loadWorkspace]);
 
+  const lastFinanceSync = useMemo(() => {
+    const completed = jobs.find(
+      (job) =>
+        job.job_type === "Finances Sync" &&
+        String(job.status || "").toLowerCase() === "completed"
+    );
+    return (
+      completed ||
+      jobs.find((job) => job.job_type === "Finances Sync") ||
+      jobs[0] ||
+      null
+    );
+  }, [jobs]);
+
+  const syncFinances = async () => {
+    setBusy("sync-finances");
+    setMessage("");
+    setError("");
+    try {
+      const [financeResponse, balanceResponse] = await Promise.all([
+        api.post("/amazon/finances/sync", { days: 30, mode: "incremental" }),
+        api.post("/amazon/finances/balance/sync"),
+      ]);
+      setMessage(
+        `Finance sync queued (job #${financeResponse.data?.id || "—"}) and balance sync queued (job #${balanceResponse.data?.id || "—"}).`
+      );
+      for (let attempt = 0; attempt < 24; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2500));
+        await loadWorkspace({ quiet: true });
+        const latestJobs = (
+          await api.get("/amazon/finances/jobs", { params: { limit: 10 } })
+        ).data || [];
+        const trackedIds = new Set(
+          [financeResponse.data?.id, balanceResponse.data?.id].filter(Boolean)
+        );
+        const tracked = latestJobs.filter((job) => trackedIds.has(job.id));
+        if (
+          tracked.length &&
+          tracked.every((job) =>
+            ["Completed", "Failed"].includes(String(job.status || ""))
+          )
+        ) {
+          const failed = tracked.filter((job) => job.status === "Failed");
+          if (failed.length) {
+            setError(
+              failed
+                .map((job) => job.error_message || `${job.job_type} failed`)
+                .join(" ")
+            );
+            setMessage("");
+          } else {
+            setMessage("Amazon finances and balance synced successfully.");
+          }
+          break;
+        }
+      }
+      await loadWorkspace({ quiet: true });
+    } catch (syncError) {
+      setError(
+        responseError(syncError, "Amazon finances could not be synchronized.")
+      );
+    } finally {
+      setBusy("");
+    }
+  };
+
   const postSettlements = async () => {
     if (!selectedSettlements.length) {
       setError("Select at least one settlement with an actual payout.");
@@ -240,11 +306,27 @@ function AmazonFinances({ authenticatedUser }) {
           </span>
         </div>
         <div className="amazon-finances-top-meta">
-          {jobs[0] && (
+          {lastFinanceSync && (
             <small>
-              Synced {dateTime(jobs[0].completed_at || jobs[0].created_at)}
+              {String(lastFinanceSync.status || "").toLowerCase() === "completed"
+                ? `Synced ${dateTime(
+                    lastFinanceSync.completed_at || lastFinanceSync.created_at
+                  )}`
+                : `${lastFinanceSync.status || "Sync"} ${dateTime(
+                    lastFinanceSync.completed_at ||
+                      lastFinanceSync.updated_at ||
+                      lastFinanceSync.created_at
+                  )}`}
             </small>
           )}
+          <button
+            className="amazon-finances-sync-btn"
+            disabled={Boolean(busy)}
+            onClick={syncFinances}
+            type="button"
+          >
+            {busy === "sync-finances" ? "Syncing…" : "Sync now"}
+          </button>
         </div>
       </header>
 

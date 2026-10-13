@@ -89,6 +89,10 @@ def _active_job_started_at(job: AmazonSyncJob) -> datetime | None:
     return job.locked_at or job.started_at or job.updated_at or job.scheduled_at
 
 
+def _pending_stale_after_minutes() -> int:
+    return _env_minutes("AMAZON_PENDING_JOB_STALE_MINUTES", 10, minimum=2)
+
+
 def _is_stale_processing_job(job: AmazonSyncJob, *, now: datetime) -> bool:
     if job.status != "Processing":
         return False
@@ -96,6 +100,18 @@ def _is_stale_processing_job(job: AmazonSyncJob, *, now: datetime) -> bool:
     if not started_at:
         return True
     return started_at <= now - timedelta(minutes=_job_stale_after_minutes(job))
+
+
+def _is_stale_pending_job(job: AmazonSyncJob, *, now: datetime) -> bool:
+    """Pending jobs left behind after a worker crash block unique enqueue forever."""
+    if job.status != "Pending":
+        return False
+    marker = job.updated_at or job.started_at or job.scheduled_at or job.created_at
+    if not marker:
+        return True
+    if job.next_retry_at is not None and job.next_retry_at <= now:
+        return True
+    return marker <= now - timedelta(minutes=_pending_stale_after_minutes())
 
 
 def _fail_stale_processing_job(job: AmazonSyncJob, *, now: datetime) -> None:
@@ -203,10 +219,13 @@ def enqueue_unique_amazon_job(
         .first()
     )
     if existing:
-        if not _is_stale_processing_job(existing, now=now):
+        if _is_stale_processing_job(existing, now=now) or _is_stale_pending_job(
+            existing, now=now
+        ):
+            _fail_stale_processing_job(existing, now=now)
+            db.flush()
+        else:
             return existing, False
-        _fail_stale_processing_job(existing, now=now)
-        db.flush()
     return (
         enqueue_amazon_job(
             db,

@@ -84,7 +84,7 @@ def get_lwa_access_token(
                 "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
                 "User-Agent": SP_API_USER_AGENT,
             },
-            timeout=(5, 15),
+            timeout=(10, 30),
         )
     except requests.Timeout as exc:
         raise AmazonTemporaryError(

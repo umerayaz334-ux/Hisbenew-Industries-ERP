@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 from datetime import datetime, timedelta
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 
 from ...database import SessionLocal
 from .constants import CONNECTION_CONNECTED
@@ -19,28 +19,52 @@ from .security import sanitize_external_message
 AUTO_SYNC_CHECK_SECONDS = 30
 AUTO_SYNC_JOB_STATUSES = ("Pending", "Processing", "Retrying")
 AUTO_SYNC_RETRY_BATCH_SIZE = 20
+# Orphaned Pending jobs (e.g. worker died after claim) block autosync forever
+# unless reclaimed. Keep this short so a crashed cycle recovers quickly.
+PENDING_ORPHAN_MINUTES = 2
+
+
+def _due_retry_filter(now: datetime):
+    orphan_before = now - timedelta(minutes=PENDING_ORPHAN_MINUTES)
+    return or_(
+        and_(
+            AmazonSyncJob.status == "Retrying",
+            or_(
+                AmazonSyncJob.next_retry_at.is_(None),
+                AmazonSyncJob.next_retry_at <= now,
+            ),
+        ),
+        and_(
+            AmazonSyncJob.status == "Pending",
+            or_(
+                and_(
+                    AmazonSyncJob.next_retry_at.is_not(None),
+                    AmazonSyncJob.next_retry_at <= now,
+                ),
+                and_(
+                    AmazonSyncJob.next_retry_at.is_(None),
+                    AmazonSyncJob.updated_at <= orphan_before,
+                ),
+            ),
+        ),
+    )
 
 
 def run_due_amazon_retries(
     *,
     maximum_jobs: int = AUTO_SYNC_RETRY_BATCH_SIZE,
 ) -> int:
-    """Claim and process retryable jobs whose backoff period has elapsed."""
+    """Claim and process due Retrying jobs and orphaned Pending jobs."""
     db = SessionLocal()
     claimed_job_ids: list[int] = []
     try:
         now = datetime.utcnow()
+        due_filter = _due_retry_filter(now)
         candidate_ids = [
             job_id
             for (job_id,) in (
                 db.query(AmazonSyncJob.id)
-                .filter(
-                    AmazonSyncJob.status == "Retrying",
-                    or_(
-                        AmazonSyncJob.next_retry_at.is_(None),
-                        AmazonSyncJob.next_retry_at <= now,
-                    ),
-                )
+                .filter(due_filter)
                 .order_by(
                     AmazonSyncJob.priority.asc(),
                     AmazonSyncJob.next_retry_at.asc(),
@@ -55,16 +79,13 @@ def run_due_amazon_retries(
                 db.query(AmazonSyncJob)
                 .filter(
                     AmazonSyncJob.id == job_id,
-                    AmazonSyncJob.status == "Retrying",
-                    or_(
-                        AmazonSyncJob.next_retry_at.is_(None),
-                        AmazonSyncJob.next_retry_at <= now,
-                    ),
+                    due_filter,
                 )
                 .update(
                     {
                         AmazonSyncJob.status: "Pending",
                         AmazonSyncJob.updated_at: now,
+                        AmazonSyncJob.next_retry_at: None,
                     },
                     synchronize_session=False,
                 )
