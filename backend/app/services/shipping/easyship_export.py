@@ -63,6 +63,32 @@ STATE_ZIP_RE = re.compile(
     r"^(?P<city>.+?)[,\s]+(?P<state>[A-Za-z]{2})\s+(?P<zip>\d{5})(?:-\d{4})?\s*$"
 )
 CITY_ZIP_RE = re.compile(r"^(?P<city>.+?)[,\s]+(?P<zip>\d{5})(?:-\d{4})?\s*$")
+# Single-line US tails: ", Austin, TX 78701, USA" or ", DOUGLAS WY 82633, United States"
+US_ADDRESS_TAIL_RE = re.compile(
+    r"""
+    ^(?P<street>.+?)
+    (?:,\s*|\s+)
+    (?P<city>[A-Za-z][A-Za-z .'-]{0,60}?)
+    (?:
+        ,\s*(?P<state>[A-Za-z]{2})\s+(?P<zip>\d{5})(?:-\d{4})?
+        |
+        \s+(?P<state2>[A-Za-z]{2})\s+(?P<zip2>\d{5})(?:-\d{4})?
+    )
+    (?:\s*,\s*(?P<country>[A-Za-z][A-Za-z .'-]{1,40}))?
+    \s*$
+    """,
+    re.VERBOSE,
+)
+COUNTRY_ALIASES = {
+    "usa": "United States",
+    "u.s.a.": "United States",
+    "u.s.": "United States",
+    "us": "United States",
+    "united states": "United States",
+    "united states of america": "United States",
+    "pakistan": "Pakistan",
+    "pk": "Pakistan",
+}
 
 CATEGORY_ALIASES = {
     "accessory": "Accessory (no-battery)",
@@ -144,22 +170,39 @@ def parse_shipping_address(address_text: str | None) -> dict:
             "country": DEFAULT_COUNTRY,
         }
 
+    compact = re.sub(r"[ \t]+", " ", raw).strip()
+    one_line = re.sub(r"\s*\n\s*", ", ", compact)
+    tail_match = US_ADDRESS_TAIL_RE.match(one_line)
+    if tail_match:
+        street = re.sub(r"\s*,\s*$", "", tail_match.group("street") or "").strip(" ,")
+        street_parts = [part.strip(" ,") for part in re.split(r"\s*,\s*|\n+", street) if part.strip(" ,")]
+        country_raw = (tail_match.group("country") or "").strip()
+        country = COUNTRY_ALIASES.get(country_raw.lower(), country_raw or DEFAULT_COUNTRY)
+        return {
+            "line1": (street_parts[0] if street_parts else street)[:180],
+            "line2": (street_parts[1] if len(street_parts) > 1 else "")[:180],
+            "city": (tail_match.group("city") or "").strip(" ,")[:80],
+            "state": (
+                (tail_match.group("state") or tail_match.group("state2") or "")
+                .strip()
+                .upper()
+            )[:40],
+            "postal_code": (tail_match.group("zip") or tail_match.group("zip2") or ""),
+            "country": country,
+        }
+
     parts = [part.strip(" ,") for part in re.split(r"[\n;]+", raw) if part.strip(" ,")]
     country = DEFAULT_COUNTRY
     city = ""
     state = ""
     postal_code = ""
 
-    # Peel country / city-state-zip from the bottom.
+    # Peel country / city-state-zip from the bottom (newline-separated addresses).
     while parts:
         tail = parts[-1]
         lowered = tail.lower()
-        if lowered in {"usa", "u.s.a.", "u.s.", "us", "united states", "united states of america"}:
-            country = "United States"
-            parts.pop()
-            continue
-        if lowered in {"pakistan", "pk"}:
-            country = "Pakistan"
+        if lowered in COUNTRY_ALIASES:
+            country = COUNTRY_ALIASES[lowered]
             parts.pop()
             continue
 
@@ -183,13 +226,17 @@ def parse_shipping_address(address_text: str | None) -> dict:
             postal_code = zip_match.group(1)
             remainder = (tail[: zip_match.start()] + tail[zip_match.end() :]).strip(" ,")
             if remainder and not city:
-                # Try "City ST" before the ZIP.
-                city_state = re.match(r"^(?P<city>.+?)[,\s]+(?P<state>[A-Za-z]{2})$", remainder)
+                city_state = re.match(
+                    r"^(?P<city>.+?)[,\s]+(?P<state>[A-Za-z]{2})$",
+                    remainder,
+                )
                 if city_state:
                     city = city_state.group("city").strip(" ,")
                     state = city_state.group("state").upper()
                 else:
-                    city = remainder
+                    # Avoid dumping the whole street into city when parse fails.
+                    maybe_city = remainder.split(",")[-1].strip()
+                    city = maybe_city if len(maybe_city) <= 40 else ""
             parts.pop()
             break
         break
@@ -288,17 +335,37 @@ def _item_customs_value(item, order) -> float:
 
 
 def _distribute_package_weight_lb(items: list, package_weight_lb: float) -> list[float]:
-    weights_kg = [_item_weight_kg(item) for item in items]
-    total_kg = sum(weights_kg)
+    """Return per-unit Item Weight (lb) for each line.
+
+    Easyship multiplies Item Weight × Item Quantity, so writing the package total
+    on each row (or as a line total) inflates the shipment weight.
+    """
     package_lb = max(float(package_weight_lb or 0), 0.001)
+    if not items:
+        return []
+
+    weights_kg = [_item_weight_kg(item) for item in items]
+    quantities = [max(int(getattr(item, "quantity", 1) or 1), 1) for item in items]
+    total_kg = sum(weights_kg)
+    total_units = sum(quantities) or len(items)
+
     if total_kg > 0:
-        return [round(package_lb * (w / total_kg), 3) for w in weights_kg]
-    share = round(package_lb / max(len(items), 1), 3)
-    values = [share] * len(items)
-    # Keep the sum close to the package weight on the first line.
-    if values:
-        values[0] = round(package_lb - sum(values[1:]), 3)
-    return values
+        line_shares = [package_lb * (w / total_kg) for w in weights_kg]
+    else:
+        # No product weights: split package evenly across units, then per line.
+        per_unit = package_lb / total_units
+        line_shares = [per_unit * qty for qty in quantities]
+
+    per_unit_weights = []
+    for share, qty in zip(line_shares, quantities):
+        per_unit_weights.append(round(max(share / qty, 0.001), 4))
+
+    # Nudge first row so quantity-weighted sum matches package weight closely.
+    reconstructed = sum(w * q for w, q in zip(per_unit_weights, quantities))
+    if per_unit_weights and abs(reconstructed - package_lb) > 0.01:
+        adjustment = (package_lb - sum(w * q for w, q in zip(per_unit_weights[1:], quantities[1:]))) / quantities[0]
+        per_unit_weights[0] = round(max(adjustment, 0.001), 4)
+    return per_unit_weights
 
 
 def build_easyship_workbook_bytes(
