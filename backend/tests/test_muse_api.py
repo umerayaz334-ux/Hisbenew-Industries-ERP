@@ -10,9 +10,10 @@ from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 from app.database import Base
-from app.models import Customer, Product, Tenant, User, Order, MuseSubmission, OrderItem, StockMovement
+from app.models import Customer, Product, Tenant, User, Order, MuseSubmission, OrderItem, StockMovement, Shipping
 from app.muse_api import MuseOrder, MusePayout, enqueue, process_queue, match_customer, rotate_key, authenticate
 from app.main import create_order_record, sync_order_payout_accounting
+from pydantic import ValidationError
 
 
 class MuseTests(unittest.TestCase):
@@ -69,6 +70,31 @@ class MuseTests(unittest.TestCase):
         enqueue(paid, "payout", self.db)
         self.process()
         self.assertEqual(self.db.query(AccountingTransaction).count(), 1)
+
+    def test_fulfilled_order_with_fedex_tracking(self):
+        with self.assertRaises(ValidationError):
+            self.order(fulfilled=True)
+        with self.assertRaises(ValidationError):
+            self.order(fulfilled=True, courier="FedEx")
+        with self.assertRaises(ValidationError):
+            self.order(fulfilled=True, courier="UPS", tracking_number="1Z999")
+        payload = self.order(
+            order_no="M-SHIP",
+            fulfilled=True,
+            courier="fedex",
+            tracking_number="794612345678",
+        )
+        self.assertEqual(payload.courier, "FedEx")
+        enqueue(payload, "order", self.db)
+        self.process()
+        order = self.db.query(Order).filter_by(order_no="M-SHIP").one()
+        shipping = self.db.query(Shipping).filter_by(order_id=order.id).one()
+        self.assertEqual(order.shipping_status, "Shipped")
+        self.assertEqual(shipping.courier_name, "FedEx")
+        self.assertEqual(shipping.tracking_number, "794612345678")
+        # Stock is deducted when Muse marks the order fulfilled/shipped.
+        self.assertEqual(self.db.query(Product).first().factory_stock, 18)
+        self.assertEqual(self.db.query(Product).first().reserved_stock, 0)
 
     def test_unknown_product_and_retry(self):
         result = enqueue(self.order(items=[dict(article_no="MISSING", quantity=1, unit_price_usd=10)]), "order", self.db)

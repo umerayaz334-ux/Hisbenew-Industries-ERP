@@ -6,13 +6,22 @@ import asyncio
 import logging
 import re
 from datetime import datetime
+from typing import Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field, ConfigDict, HttpUrl
+from pydantic import BaseModel, Field, ConfigDict, HttpUrl, field_validator, model_validator
 from sqlalchemy.exc import IntegrityError
 
-from .models import MuseApiKey, MuseSubmission, User, Tenant, Order, Customer, Product
+from .models import MuseApiKey, MuseSubmission, User, Tenant, Order, Customer, Product, Shipping
 from .schemas import OrderCreate, OrderItemCreate
+
+MUSE_COURIERS = ("FedEx", "DHL")
+MUSE_COURIER_ALIASES = {
+    "fedex": "FedEx",
+    "fed-ex": "FedEx",
+    "federal express": "FedEx",
+    "dhl": "DHL",
+}
 
 
 class MuseProduct(BaseModel):
@@ -68,6 +77,42 @@ class MuseOrder(BaseModel):
     platform: str = Field(default="Faire", min_length=1)
     estimated_net_usd: float = Field(ge=0, allow_inf_nan=False)
     items: list[MuseItem] = Field(min_length=1, max_length=500)
+    # Optional fulfillment: leave false/omit for unfulfilled warehouse queue.
+    fulfilled: bool = False
+    courier: Literal["FedEx", "DHL"] | None = None
+    tracking_number: str | None = Field(default=None, max_length=100)
+    shipped_at: datetime | None = None
+
+    @field_validator("courier", mode="before")
+    @classmethod
+    def normalize_courier(cls, value):
+        if value is None or value == "":
+            return None
+        normalized = MUSE_COURIER_ALIASES.get(str(value).strip().casefold())
+        if not normalized:
+            raise ValueError(f"courier must be one of: {', '.join(MUSE_COURIERS)}")
+        return normalized
+
+    @field_validator("tracking_number", mode="before")
+    @classmethod
+    def normalize_tracking(cls, value):
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    @model_validator(mode="after")
+    def validate_fulfillment(self):
+        # Providing courier/tracking implies a fulfilled shipment.
+        if (self.courier or self.tracking_number or self.shipped_at) and not self.fulfilled:
+            self.fulfilled = True
+        if not self.fulfilled:
+            return self
+        if not self.courier:
+            raise ValueError("fulfilled orders require courier (FedEx or DHL)")
+        if not self.tracking_number:
+            raise ValueError("fulfilled orders require tracking_number")
+        return self
 
 
 class MusePayout(BaseModel):
@@ -104,12 +149,52 @@ def rotate_key(db, user, tenant_id):
     return {"api_key": token}
 
 
-def order_result(order):
-    return {"order_no": order.order_no, "order_id": order.id,
-            "estimated_net_usd": order.expected_payout_usd,
-            "actual_paid_usd": order.received_payout_usd,
-            "payout_status": order.payout_status,
-            "stop_tracking": order.payout_status == "Received"}
+def order_result(order, shipping=None):
+    status = str(order.shipping_status or "").strip().lower()
+    return {
+        "order_no": order.order_no,
+        "order_id": order.id,
+        "estimated_net_usd": order.expected_payout_usd,
+        "actual_paid_usd": order.received_payout_usd,
+        "payout_status": order.payout_status,
+        "stop_tracking": order.payout_status == "Received",
+        "shipping_status": order.shipping_status,
+        "fulfilled": status in {"shipped", "delivered", "in transit", "waiting"},
+        "courier": getattr(shipping, "courier_name", None) if shipping else None,
+        "tracking_number": getattr(shipping, "tracking_number", None) if shipping else None,
+    }
+
+
+def apply_muse_fulfillment(order, payload, db):
+    """Mark a Muse order shipped with courier + tracking (FedEx/DHL)."""
+    if not payload.fulfilled:
+        return None
+    shipped_at = payload.shipped_at or datetime.utcnow()
+    record = db.query(Shipping).filter_by(order_id=order.id).first()
+    if record:
+        record.courier_name = payload.courier
+        record.tracking_number = payload.tracking_number
+        record.shipped_at = record.shipped_at or shipped_at
+        record.updated_at = datetime.utcnow()
+        if not record.shipping_note:
+            record.shipping_note = "Marked fulfilled via Muse API"
+    else:
+        record = Shipping(
+            order_id=order.id,
+            courier_name=payload.courier,
+            tracking_number=payload.tracking_number,
+            shipping_note="Marked fulfilled via Muse API",
+            shipped_at=shipped_at,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        db.add(record)
+    current = str(order.shipping_status or "").strip().lower()
+    if current not in {"delivered", "in transit", "waiting"}:
+        order.shipping_status = "Shipped"
+    db.commit()
+    db.refresh(record)
+    return record
 
 
 def ingest_order(payload, db, create_order_record):
@@ -121,7 +206,12 @@ def ingest_order(payload, db, create_order_record):
                 "Order number already exists in this company from a non-Muse import; "
                 "use a new order number or manage that order in Orders.",
             )
-        return order_result(existing)
+        shipping = None
+        if payload.fulfilled:
+            shipping = apply_muse_fulfillment(existing, payload, db)
+        else:
+            shipping = db.query(Shipping).filter_by(order_id=existing.id).first()
+        return order_result(existing, shipping)
     items = []
     for item in payload.items:
         product = db.query(Product).filter_by(article_no=item.article_no).first()
@@ -134,17 +224,26 @@ def ingest_order(payload, db, create_order_record):
                             phone=payload.phone, shipping_address=payload.shipping_address, platform=payload.platform)
         db.add(customer)
         db.flush()
-    data = OrderCreate(order_no=payload.order_no, order_date=payload.order_date, customer_id=customer.id,
-                       platform=payload.platform, import_customer_name=payload.customer_name,
-                       import_customer_company_name=payload.company_name, import_contact_phone=payload.phone,
-                       import_shipping_address=payload.shipping_address,
-                       order_total_usd=sum(i.quantity * i.unit_price for i in items),
-                       expected_payout_usd=payload.estimated_net_usd,
-                       remaining_payout_usd=payload.estimated_net_usd, items=items)
+    data = OrderCreate(
+        order_no=payload.order_no,
+        order_date=payload.order_date,
+        customer_id=customer.id,
+        platform=payload.platform,
+        import_customer_name=payload.customer_name,
+        import_customer_company_name=payload.company_name,
+        import_contact_phone=payload.phone,
+        import_shipping_address=payload.shipping_address,
+        shipping_status="Shipped" if payload.fulfilled else "Pending",
+        order_total_usd=sum(i.quantity * i.unit_price for i in items),
+        expected_payout_usd=payload.estimated_net_usd,
+        remaining_payout_usd=payload.estimated_net_usd,
+        items=items,
+    )
     # The existing creator commits internally. Use a savepoint-bound session so
     # customer, order, inventory reservations and items publish atomically.
     order = create_order_record(data, db, import_batch_key="muse-api")
-    return order_result(order)
+    shipping = apply_muse_fulfillment(order, payload, db) if payload.fulfilled else None
+    return order_result(order, shipping)
 
 
 def match_customer(payload, db):

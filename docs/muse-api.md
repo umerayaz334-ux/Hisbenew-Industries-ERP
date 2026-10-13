@@ -81,6 +81,23 @@ a Failed submission, resend that order and poll `/submissions` until Applied.
 Product creation is immediate and does not wait for the order queue. Existing
 Muse API keys work without rotation.
 
+Orders default to unfulfilled (`shipping_status` Pending) so they appear in the
+Shipping queue. To create an already-fulfilled shipment, include:
+
+```json
+"fulfilled": true,
+"courier": "FedEx",
+"tracking_number": "794612345678",
+"shipped_at": "2026-10-13T15:30:00+05:00"
+```
+
+`courier` must be `FedEx` or `DHL` (case-insensitive). `tracking_number` is
+required when `fulfilled` is true. `shipped_at` is optional (defaults to process
+time). Fulfilled Muse orders deduct stock like the Shipping “mark shipped” flow
+and create a shipping record with the courier and tracking number. Resubmitting
+the same Muse order number with fulfillment details updates tracking on that
+Muse order only.
+
 `image_url` is optional and accepts an absolute HTTP/HTTPS URL (HTTPS recommended).
 Omit it or send null for products without an image. Use a publicly accessible
 direct image URL, not a product page. The ERP stores the URL without downloading

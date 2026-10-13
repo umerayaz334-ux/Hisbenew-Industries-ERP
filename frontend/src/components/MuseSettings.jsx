@@ -26,6 +26,9 @@ Use the catalog wholesale price. image_url is optional; use a lasting public ima
 Create missing products first, then POST /orders:
 {"order_no":"FAIRE-1001","order_date":"2026-10-13T12:00:00+05:00","customer_name":"Jane Smith","company_name":"Sample Shop","phone":"+12125550123","shipping_address":"123 Main St, New York, NY 10001, USA","platform":"Faire","estimated_net_usd":45,"items":[{"article_no":"SKU-123","quantity":2,"unit_price_usd":25}]}
 Customers are matched by phone, then name + company, or created if missing. Optional customer_id must belong to this company.
+Omit fulfillment fields to leave the order unfulfilled in Shipping. To mark fulfilled with tracking, add:
+"fulfilled":true,"courier":"FedEx","tracking_number":"794612345678"
+courier must be FedEx or DHL. tracking_number is required when fulfilled is true. Optional shipped_at uses ISO time.
 
 3. Confirm processing
 Orders and payouts return HTTP 202 (queued). Processing starts promptly; backup checks run every 5 seconds. Poll GET /submissions every 2 seconds until Applied or Failed. Fix and resend failures. Identical retries are safe; do not change accepted submissions.
