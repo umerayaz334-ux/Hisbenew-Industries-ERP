@@ -323,14 +323,24 @@ def build_easyship_workbook_bytes(
     for order in orders:
         order_id = int(getattr(order, "id"))
         package = packages_by_order_id.get(order_id) or {}
-        length_in = float(package.get("length_in") or 0)
-        width_in = float(package.get("width_in") or 0)
-        height_in = float(package.get("height_in") or 0)
+        length_raw = package.get("length_in")
+        width_raw = package.get("width_in")
+        height_raw = package.get("height_in")
+        length_in = float(length_raw) if length_raw not in (None, "") else None
+        width_in = float(width_raw) if width_raw not in (None, "") else None
+        height_in = float(height_raw) if height_raw not in (None, "") else None
         weight_lb = float(package.get("weight_lb") or 0)
-        if length_in <= 0 or width_in <= 0 or height_in <= 0 or weight_lb <= 0:
+        if weight_lb <= 0:
             raise ValueError(
-                f"Order #{getattr(order, 'order_no', order_id)} needs package length, width, height, and weight."
+                f"Order #{getattr(order, 'order_no', order_id)} needs package weight."
             )
+        # Dimensions are optional in the review popup; leave blank cells when omitted.
+        if length_in is not None and length_in <= 0:
+            length_in = None
+        if width_in is not None and width_in <= 0:
+            width_in = None
+        if height_in is not None and height_in <= 0:
+            height_in = None
 
         items = _order_items(order)
         if not items:

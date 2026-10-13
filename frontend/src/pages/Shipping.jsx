@@ -598,7 +598,16 @@ const EASYSHIP_COURIER_OPTIONS = [
   "Delivery Time",
 ];
 
-const defaultPackageWeightLb = (order) => {
+const LB_TO_KG = 1 / KG_TO_LB;
+
+const roundWeight = (value, digits = 3) => {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return "";
+  const factor = 10 ** digits;
+  return String(Math.round(number * factor) / factor);
+};
+
+const defaultPackageWeightKg = (order) => {
   const kg =
     Number(order?.usa_shipping?.calculation_weight_kg) ||
     Number(order?.shipping_weight_override_kg) ||
@@ -606,8 +615,7 @@ const defaultPackageWeightLb = (order) => {
       (sum, item) => sum + Number(item.line_weight_kg || 0),
       0,
     );
-  if (!Number.isFinite(kg) || kg <= 0) return "";
-  return String(Math.round(kg * KG_TO_LB * 1000) / 1000);
+  return roundWeight(kg);
 };
 
 const buildEasyshipDraft = (orders) => ({
@@ -615,15 +623,21 @@ const buildEasyshipDraft = (orders) => ({
   taxes_duties_paid_by: "Receiver",
   shipping_insurance: "No",
   packages: Object.fromEntries(
-    (orders || []).map((order) => [
-      order.order_id,
-      {
-        weight_lb: defaultPackageWeightLb(order),
-        length_in: "",
-        width_in: "",
-        height_in: "",
-      },
-    ]),
+    (orders || []).map((order) => {
+      const weight_kg = defaultPackageWeightKg(order);
+      const weight_lb = weight_kg ? roundWeight(Number(weight_kg) * KG_TO_LB) : "";
+      return [
+        order.order_id,
+        {
+          weight_unit: "kg",
+          weight_kg,
+          weight_lb,
+          length_in: "",
+          width_in: "",
+          height_in: "",
+        },
+      ];
+    }),
   ),
 });
 
@@ -2763,6 +2777,53 @@ function Shipping({ userRole }) {
     });
   };
 
+  const updateEasyshipWeight = (orderId, { unit, value } = {}) => {
+    setEasyshipDraft((previous) => {
+      if (!previous) return previous;
+      const current = previous.packages?.[orderId] || {};
+      const nextUnit = unit || current.weight_unit || "kg";
+      const raw =
+        value === undefined
+          ? nextUnit === "kg"
+            ? current.weight_kg
+            : current.weight_lb
+          : value;
+      const amount = Number(raw);
+      let weight_kg = "";
+      let weight_lb = "";
+      if (Number.isFinite(amount) && amount > 0) {
+        if (nextUnit === "kg") {
+          weight_kg = String(raw);
+          weight_lb = roundWeight(amount * KG_TO_LB);
+        } else {
+          weight_lb = String(raw);
+          weight_kg = roundWeight(amount * LB_TO_KG);
+        }
+      } else if (raw === "" || raw === null || raw === undefined) {
+        weight_kg = "";
+        weight_lb = "";
+      } else if (nextUnit === "kg") {
+        weight_kg = String(raw);
+        weight_lb = current.weight_lb || "";
+      } else {
+        weight_lb = String(raw);
+        weight_kg = current.weight_kg || "";
+      }
+      return {
+        ...previous,
+        packages: {
+          ...previous.packages,
+          [orderId]: {
+            ...current,
+            weight_unit: nextUnit,
+            weight_kg,
+            weight_lb,
+          },
+        },
+      };
+    });
+  };
+
   const downloadEasyshipExport = async () => {
     if (!easyshipDraft || exportingEasyship) return;
     const orders = pendingOrders.filter((order) =>
@@ -2777,19 +2838,19 @@ function Shipping({ userRole }) {
     for (const order of orders) {
       const pack = easyshipDraft.packages[order.order_id] || {};
       const weight_lb = Number(pack.weight_lb);
+      if (!Number.isFinite(weight_lb) || weight_lb <= 0) {
+        setNotice(`Enter package weight for order #${order.order_no}.`);
+        return;
+      }
       const length_in = Number(pack.length_in);
       const width_in = Number(pack.width_in);
       const height_in = Number(pack.height_in);
-      if (![weight_lb, length_in, width_in, height_in].every((value) => Number.isFinite(value) && value > 0)) {
-        setNotice(`Enter weight and L × W × H (inches) for order #${order.order_no}.`);
-        return;
-      }
       packages.push({
         order_id: order.order_id,
         weight_lb,
-        length_in,
-        width_in,
-        height_in,
+        length_in: Number.isFinite(length_in) && length_in > 0 ? length_in : null,
+        width_in: Number.isFinite(width_in) && width_in > 0 ? width_in : null,
+        height_in: Number.isFinite(height_in) && height_in > 0 ? height_in : null,
       });
     }
 
@@ -2797,7 +2858,7 @@ function Shipping({ userRole }) {
     setNotice("");
     try {
       const response = await api.post(
-        "/shipping/easyship-export",
+        "/shipping/exports/easyship",
         {
           order_ids: packages.map((item) => item.order_id),
           packages,
@@ -5493,36 +5554,97 @@ function Shipping({ userRole }) {
                     order.order_id,
                   ),
                 )
-                .map((order) => {
+                                .map((order) => {
                   const pack = easyshipDraft.packages[order.order_id] || {};
+                  const unitCount = (order.items || []).reduce(
+                    (sum, item) => sum + Number(item.quantity || 0),
+                    0,
+                  );
+                  const totalUsd = Number(order.order_total_usd || 0);
+                  const totalLabel = totalUsd > 0
+                    ? `$${totalUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+                    : `PKR ${formatAmount(order.total_amount)}`;
+                  const thumbItems = (order.items || []).filter((item) => item.product_image_url);
+                  const visibleThumbs = thumbItems.slice(0, 4);
+                  const extraThumbs = Math.max(thumbItems.length - visibleThumbs.length, 0);
+                  const weightUnit = pack.weight_unit || "kg";
+                  const weightValue = weightUnit === "kg" ? (pack.weight_kg ?? "") : (pack.weight_lb ?? "");
+                  const convertedHint =
+                    weightUnit === "kg" && Number(pack.weight_lb) > 0
+                      ? `= ${pack.weight_lb} lb`
+                      : weightUnit === "lb" && Number(pack.weight_kg) > 0
+                        ? `= ${pack.weight_kg} kg`
+                        : "";
                   return (
                     <article className="shipping-easyship-order-card" key={order.order_id}>
-                      <div className="shipping-easyship-order-meta">
-                        <strong>#{order.order_no}</strong>
-                        <span>{order.customer_name || "Unnamed customer"}</span>
-                        <small>{order.customer_address || "No shipping address"}</small>
+                      <div className="shipping-easyship-order-summary">
+                        <div className="shipping-easyship-thumbs" aria-label="Product thumbnails">
+                          {visibleThumbs.length > 0 ? (
+                            visibleThumbs.map((item, index) => (
+                              <img
+                                alt={item.product_name || item.article_no || "Product"}
+                                key={`${order.order_id}-thumb-${item.product_id || item.article_no || index}`}
+                                src={getStaticUrl(item.product_image_url)}
+                              />
+                            ))
+                          ) : (
+                            <span className="shipping-easyship-thumb-empty">No pics</span>
+                          )}
+                          {extraThumbs > 0 && (
+                            <span className="shipping-easyship-thumb-more">+{extraThumbs}</span>
+                          )}
+                        </div>
+                        <div className="shipping-easyship-order-main">
+                          <strong className="shipping-easyship-customer">
+                            {order.customer_name || "Unnamed customer"}
+                          </strong>
+                          <div className="shipping-easyship-tags">
+                            <span className="shipping-easyship-tag">#{order.order_no}</span>
+                            <span className="shipping-easyship-tag">
+                              {unitCount} unit{unitCount === 1 ? "" : "s"}
+                            </span>
+                            <span className="shipping-easyship-tag shipping-easyship-tag-total">
+                              {totalLabel}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                       <div className="shipping-easyship-package-fields">
-                        <label>
-                          <span>Weight (lb)</span>
-                          <input
-                            inputMode="decimal"
-                            min="0.001"
-                            onChange={(event) =>
-                              updateEasyshipPackage(
-                                order.order_id,
-                                "weight_lb",
-                                event.target.value,
-                              )
-                            }
-                            placeholder="0.00"
-                            step="0.001"
-                            type="number"
-                            value={pack.weight_lb ?? ""}
-                          />
+                        <label className="shipping-easyship-weight-field">
+                          <span>Weight</span>
+                          <div className="shipping-easyship-weight-input">
+                            <input
+                              inputMode="decimal"
+                              min="0.001"
+                              onChange={(event) =>
+                                updateEasyshipWeight(order.order_id, {
+                                  value: event.target.value,
+                                })
+                              }
+                              placeholder="0.00"
+                              step="0.001"
+                              type="number"
+                              value={weightValue}
+                            />
+                            <select
+                              aria-label="Weight unit"
+                              onChange={(event) =>
+                                updateEasyshipWeight(order.order_id, {
+                                  unit: event.target.value,
+                                })
+                              }
+                              value={weightUnit}
+                            >
+                              <option value="kg">kg</option>
+                              <option value="lb">lb</option>
+                            </select>
+                          </div>
+                          {convertedHint ? (
+                            <small className="shipping-easyship-weight-hint">{convertedHint}</small>
+                          ) : null}
                         </label>
                         <label>
-                          <span>Length (in)</span>
+                          <span>Length (in) optional</span>
                           <input
                             inputMode="decimal"
                             min="0.001"
@@ -5540,7 +5662,7 @@ function Shipping({ userRole }) {
                           />
                         </label>
                         <label>
-                          <span>Width (in)</span>
+                          <span>Width (in) optional</span>
                           <input
                             inputMode="decimal"
                             min="0.001"
@@ -5558,7 +5680,7 @@ function Shipping({ userRole }) {
                           />
                         </label>
                         <label>
-                          <span>Height (in)</span>
+                          <span>Height (in) optional</span>
                           <input
                             inputMode="decimal"
                             min="0.001"

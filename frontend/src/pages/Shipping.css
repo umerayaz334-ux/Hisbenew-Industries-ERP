@@ -4574,25 +4574,111 @@
   background: #fafafa;
 }
 
-.shipping-easyship-order-meta {
+.shipping-easyship-order-summary {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 12px;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
-.shipping-easyship-order-meta strong {
-  font-size: 0.98rem;
+.shipping-easyship-thumbs {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
 }
 
-.shipping-easyship-order-meta span {
-  color: #334155;
-  font-size: 0.9rem;
+.shipping-easyship-thumbs img,
+.shipping-easyship-thumb-empty,
+.shipping-easyship-thumb-more {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #ffffff;
 }
 
-.shipping-easyship-order-meta small {
+.shipping-easyship-thumbs img + img,
+.shipping-easyship-thumbs img + .shipping-easyship-thumb-more,
+.shipping-easyship-thumb-empty + .shipping-easyship-thumb-more {
+  margin-left: -8px;
+}
+
+.shipping-easyship-thumb-empty,
+.shipping-easyship-thumb-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #64748b;
-  white-space: pre-wrap;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.shipping-easyship-order-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.shipping-easyship-customer {
+  font-size: 0.95rem;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.shipping-easyship-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.shipping-easyship-tag {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #dbe3ee;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #334155;
+  padding: 3px 9px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.shipping-easyship-tag-total {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.shipping-easyship-weight-field {
+  min-width: 160px;
+}
+
+.shipping-easyship-weight-input {
+  display: grid;
+  grid-template-columns: 1fr 64px;
+  gap: 6px;
+}
+
+.shipping-easyship-weight-input select {
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  padding: 9px 8px;
+  font: inherit;
+  font-weight: 600;
+  background: #fff;
+}
+
+.shipping-easyship-weight-hint {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .shipping-easyship-modal-actions {

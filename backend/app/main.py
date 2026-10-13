@@ -18113,9 +18113,9 @@ class ShippingWeightOverridePayload(BaseModel):
 class EasyshipPackagePayload(BaseModel):
     order_id: int
     weight_lb: float = Field(gt=0)
-    length_in: float = Field(gt=0)
-    width_in: float = Field(gt=0)
-    height_in: float = Field(gt=0)
+    length_in: float | None = Field(default=None, gt=0)
+    width_in: float | None = Field(default=None, gt=0)
+    height_in: float | None = Field(default=None, gt=0)
 
 
 class EasyshipExportPayload(BaseModel):
@@ -18318,6 +18318,7 @@ def get_pending_shipping_orders(request: Request, db: Session = Depends(get_db))
     return pending_orders
 
 
+@app.post("/shipping/exports/easyship")
 @app.post("/shipping/easyship-export")
 def export_easyship_shipments(
     payload: EasyshipExportPayload,
@@ -18341,9 +18342,9 @@ def export_easyship_shipments(
     for package in payload.packages:
         packages_by_order_id[int(package.order_id)] = {
             "weight_lb": float(package.weight_lb),
-            "length_in": float(package.length_in),
-            "width_in": float(package.width_in),
-            "height_in": float(package.height_in),
+            "length_in": float(package.length_in) if package.length_in is not None else None,
+            "width_in": float(package.width_in) if package.width_in is not None else None,
+            "height_in": float(package.height_in) if package.height_in is not None else None,
         }
 
     missing_packages = [order_id for order_id in order_ids if order_id not in packages_by_order_id]
