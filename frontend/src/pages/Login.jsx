@@ -115,6 +115,10 @@ export default function Login({ onLogin, message, onClearMessage }) {
           </button>
         </form>
 
+        <a className="sleek-website-btn" href="/website">
+          Visit website
+        </a>
+
         {feedback && (
           <div className="sleek-error-alert" role="alert">
             {feedback}

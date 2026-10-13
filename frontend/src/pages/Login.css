@@ -164,6 +164,33 @@
   transform: none;
 }
 
+.sleek-website-btn {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #e2e8f0;
+  background: transparent;
+  text-align: center;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.sleek-website-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: #14b8a6;
+  color: #fff;
+}
+
+.sleek-website-btn:focus-visible {
+  outline: 2px solid #14b8a6;
+  outline-offset: 3px;
+}
+
 /* Error Alert */
 .sleek-error-alert {
   padding: 10px 12px;

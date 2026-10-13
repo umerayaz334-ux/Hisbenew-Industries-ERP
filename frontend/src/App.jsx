@@ -275,6 +275,7 @@ const normalizePath = normalizeAppPath;
 
 const pageFromPath = (pathname) => {
   const path = normalizePath(pathname);
+  if (path === "/") return "Login";
   if (path === "/website") return "WebsiteStorefront";
   if (path === "/portal/website") return "Website";
   if (pathToPage[path]) return pathToPage[path];
@@ -466,6 +467,7 @@ function App() {
   );
   const [activePage, setActivePage] = useState(() => {
     const requestedPage = pageFromPath(window.location.pathname);
+    if (requestedPage === "Login") return "Login";
     if (parsedSavedUser?.role === "service_taker") {
       return serviceTakerPages.includes(requestedPage)
         ? requestedPage
@@ -1268,6 +1270,18 @@ function App() {
 
     return <Dashboard />;
   };
+
+  if (activePage === "Login") {
+    return (
+      <GlobalErrorBoundary>
+        <Login
+          onLogin={handleLoginSuccess}
+          message={logoutMessage}
+          onClearMessage={clearLogoutMessage}
+        />
+      </GlobalErrorBoundary>
+    );
+  }
 
   return (
     <GlobalErrorBoundary>
