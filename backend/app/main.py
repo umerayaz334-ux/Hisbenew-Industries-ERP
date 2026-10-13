@@ -18223,16 +18223,20 @@ def update_pending_order_shipping_weight(
 @app.get("/shipping", response_model=list[ShippingOut])
 def get_shipping_records(request: Request, db: Session = Depends(get_db)):
     privacy = access_privacy_context(request, db)
-    records = (
-        db.query(Shipping)
-        .options(
-            joinedload(Shipping.order).joinedload(Order.customer),
-            joinedload(Shipping.order).selectinload(Order.items).joinedload(OrderItem.product),
+    try:
+        records = (
+            db.query(Shipping)
+            .options(
+                joinedload(Shipping.order).joinedload(Order.customer),
+                joinedload(Shipping.order).selectinload(Order.items).joinedload(OrderItem.product),
+            )
+            .order_by(Shipping.id.desc())
+            .all()
         )
-        .order_by(Shipping.id.desc())
-        .all()
-    )
-    return [shipping_response(s, privacy) for s in records]
+        return [shipping_response(s, privacy) for s in records]
+    except Exception as exc:
+        print("get_shipping_records failed:", exc)
+        raise HTTPException(status_code=500, detail=f"Shipping history could not be loaded: {exc}") from exc
 
 
 @app.get("/shipping/pending")

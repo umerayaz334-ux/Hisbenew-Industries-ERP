@@ -264,14 +264,17 @@ export const getAuthHeaders = (baseHeaders = {}) => {
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 export const apiFetch = async (url, options = {}) => {
-  const maxAttempts = Number(options.retryAttempts) > 0 ? Number(options.retryAttempts) : 3;
+  const { retryAttempts, ...fetchOptions } = options;
+  const maxAttempts = Number(retryAttempts) > 0 ? Number(retryAttempts) : 3;
   let lastError = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       const response = await fetch(url, {
-        ...options,
-        headers: getAuthHeaders(options.headers || {}),
+        ...fetchOptions,
+        mode: fetchOptions.mode || "cors",
+        credentials: fetchOptions.credentials || "omit",
+        headers: getAuthHeaders(fetchOptions.headers || {}),
       });
 
       if (response.status === 401 && !isLoginRequest(url)) {

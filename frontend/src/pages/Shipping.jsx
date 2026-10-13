@@ -674,61 +674,51 @@ function Shipping({ userRole }) {
   }, [labelDirectPrinter]);
 
 
-  const describeShippingLoadError = (pendingResponse, historyResponse) => {
-    const status = pendingResponse?.status || historyResponse?.status || 0;
-    if (status === 401 || status === 403) {
+  const describeShippingLoadError = (error) => {
+    const status = error?.response?.status || 0;
+    if (error?.__authExpired || status === 401 || status === 403) {
       return "Your session expired or this login cannot open Shipping. Sign in again.";
     }
     if ([502, 503, 504].includes(status)) {
       return "The live API is restarting. Retry in a moment.";
     }
-    if (!status) {
-      return `Cannot reach the live API at ${getApiBaseUrl()}. Check your internet connection.`;
+    if (!status || error?.code === "ERR_NETWORK" || error?.message?.includes("Network Error")) {
+      return `Cannot reach the live API at ${getApiBaseUrl()}. Check your internet connection, then refresh.`;
     }
-    return `Unable to load shipping data (HTTP ${status}). Check the backend and try again.`;
+    const detail = error?.response?.data?.detail;
+    const detailText = Array.isArray(detail)
+      ? detail.map((item) => item?.msg || item?.detail || String(item)).join(", ")
+      : detail;
+    return detailText
+      ? `Unable to load shipping data: ${detailText}`
+      : `Unable to load shipping data (HTTP ${status}). Check the backend and try again.`;
   };
 
   const loadShippingData = async ({ quiet = false } = {}) => {
     if (!quiet) setRefreshing(true);
     setLoadError("");
-    const apiBase = getApiBaseUrl();
 
     try {
+      // Use the shared axios client (same as Orders/Dashboard) — more reliable on live than raw fetch.
       const [pendingResponse, historyResponse] = await Promise.all([
-        apiFetch(`${apiBase}/shipping/pending`),
-        apiFetch(`${apiBase}/shipping`),
+        api.get("/shipping/pending"),
+        api.get("/shipping"),
       ]);
 
-      if (!pendingResponse.ok || !historyResponse.ok) {
-        throw Object.assign(new Error("Shipping data could not be loaded."), {
-          pendingResponse,
-          historyResponse,
-        });
-      }
-
-      const [pendingData, historyData] = await Promise.all([
-        pendingResponse.json(),
-        historyResponse.json(),
-      ]);
-
-      setPendingOrders(Array.isArray(pendingData) ? pendingData : []);
-      setShippingRecords(Array.isArray(historyData) ? historyData : []);
+      setPendingOrders(Array.isArray(pendingResponse.data) ? pendingResponse.data : []);
+      setShippingRecords(Array.isArray(historyResponse.data) ? historyResponse.data : []);
       setLoadError("");
 
       // Rate card is helpful but must not block the shipping page.
       try {
-        const rateCardResponse = await apiFetch(`${apiBase}/shipping/usa-rate-card`);
-        if (rateCardResponse.ok) {
-          setRateCard(await rateCardResponse.json());
-        }
+        const rateCardResponse = await api.get("/shipping/usa-rate-card");
+        setRateCard(rateCardResponse.data || null);
       } catch (rateError) {
         console.warn("USA rate card could not be loaded.", rateError);
       }
     } catch (error) {
       console.error("Shipping data loading error:", error);
-      setLoadError(
-        describeShippingLoadError(error?.pendingResponse, error?.historyResponse)
-      );
+      setLoadError(describeShippingLoadError(error));
     } finally {
       setRefreshing(false);
     }
