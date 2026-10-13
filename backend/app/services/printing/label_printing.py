@@ -138,7 +138,11 @@ def _status_matches(win32print: object, status: int, flags: tuple[tuple[str, int
 
 def _wmi_printer_offline(printer_name: str) -> tuple[bool, str]:
     """Return (is_offline, detail) using WMI — catches USB unplug faster than spooler Status alone."""
+    com_initialized = False
     try:
+        import pythoncom
+        pythoncom.CoInitialize()
+        com_initialized = True
         import win32com.client  # type: ignore
 
         escaped = str(printer_name or "").replace("\\", "\\\\").replace('"', '\\"')
@@ -160,6 +164,9 @@ def _wmi_printer_offline(printer_name: str) -> tuple[bool, str]:
             return False, ""
     except Exception:
         pass
+    finally:
+        if com_initialized:
+            pythoncom.CoUninitialize()
     return False, ""
 
 

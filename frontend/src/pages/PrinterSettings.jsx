@@ -29,9 +29,6 @@ const readStoredText = (key, fallback = "") => {
 };
 
 const getInitialPrinterConnectionMode = () => {
-  if (typeof window !== "undefined" && !isLoopbackHostname(window.location.hostname)) {
-    return "server";
-  }
   const savedMode = readStoredText(PRINTER_CONNECTION_MODE_STORAGE_KEY);
   if (["local", "server"].includes(savedMode)) return savedMode;
   return "server";
@@ -125,9 +122,11 @@ export default function PrinterSettings() {
 
   const loadLabelPrinters = async (options = {}) => {
     const showNotice = options.showNotice ?? false;
-    setPrinterStatus((prev) => ({ ...prev, loading: true, error: "" }));
+    const signal = options.signal;
+    if (!options.silent) setPrinterStatus((prev) => ({ ...prev, loading: true, error: "" }));
     try {
-      const response = await fetchPrinterData("/printers");
+      const response = await fetchPrinterData("/printers", { signal });
+      if (signal?.aborted) return;
       const data = response?.data || {};
       setPrinterStatus({ loading: false, data, error: "" });
       const availablePrinters = Array.isArray(data.printers) ? data.printers : [];
@@ -149,6 +148,7 @@ export default function PrinterSettings() {
         setNotice(`Found ${availablePrinters.length} printer${availablePrinters.length === 1 ? "" : "s"}.`);
       }
     } catch (error) {
+      if (signal?.aborted) return;
       const errMsg = getPrinterApiError(error, "Could not fetch printer status");
       setPrinterStatus({ loading: false, data: null, error: errMsg });
       if (showNotice) setNotice(errMsg);
@@ -156,7 +156,14 @@ export default function PrinterSettings() {
   };
 
   useEffect(() => {
-    loadLabelPrinters();
+    const controller = new AbortController();
+    let timer;
+    const refresh = async () => {
+      await loadLabelPrinters({ silent: true, signal: controller.signal });
+      if (!controller.signal.aborted) timer = window.setTimeout(refresh, 2000);
+    };
+    refresh();
+    return () => { controller.abort(); window.clearTimeout(timer); };
   }, [printerConnectionMode, localPrintBridgeUrl]);
 
   const printerOptions = Array.isArray(printerStatus.data?.printers) ? printerStatus.data.printers : [];
@@ -246,8 +253,8 @@ export default function PrinterSettings() {
             </div>
           ) : (
             <div className="printer-settings-info-box">
-              <strong>ERP Cloud Agent Active</strong>
-              <p>Connected via WebSockets / REST endpoint: <code>https://api.hisbenew.com/print-agent</code></p>
+              <strong>Cloud print agent</strong>
+              <p>Run the print agent on the laptop connected to your USB printer. Status refreshes automatically every 2 seconds.</p>
             </div>
           )}
         </section>
@@ -299,8 +306,8 @@ export default function PrinterSettings() {
           <div className="printer-settings-status-grid">
             <div className="printer-settings-stat-item">
               <span className="stat-label">Agent Connection</span>
-              <span className={`stat-value ${printerStatus.error ? "error" : "success"}`}>
-                {printerStatus.error ? "Offline / Error" : "Connected & Ready"}
+              <span className={`stat-value ${printerStatus.error || printerStatus.data?.agent_online === false ? "error" : "success"}`}>
+                {printerStatus.error || printerStatus.data?.agent_online === false ? "Offline" : printerStatus.data ? "Online" : "Checking..."}
               </span>
             </div>
             <div className="printer-settings-stat-item">
@@ -309,7 +316,7 @@ export default function PrinterSettings() {
             </div>
             <div className="printer-settings-stat-item">
               <span className="stat-label">Selected Hardware</span>
-              <span className="stat-value highlight">{selectedPrinter?.name || directPrinter || "None"}</span>
+              <span className="stat-value highlight">{selectedPrinter?.name || directPrinter || "None"}{selectedPrinter ? (selectedPrinter.is_connected ? " - Connected" : " - Disconnected") : " - Not detected"}</span>
             </div>
             <div className="printer-settings-stat-item">
               <span className="stat-label">Direct Thermal TSPL</span>

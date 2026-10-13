@@ -39,9 +39,9 @@ except Exception as err:
                 "name": p_name,
                 "is_default": (p_name == default_p),
                 "supports_direct_labels": True,
-                "is_connected": True,
-                "status": "Ready",
-                "status_detail": "",
+                "is_connected": False,
+                "status": "Unknown",
+                "status_detail": "Hardware status unavailable; install the full print agent.",
                 "jobs": 0,
             })
         return {"printers": printers, "default_printer": default_p, "default_printer_dpi": 300}
@@ -76,6 +76,8 @@ except Exception as err:
             return {"job_id": job_id, "bytes_sent": written, "printer": printer}
         finally:
             win32print.ClosePrinter(h)
+
+active_websocket = None
 
 STATUS_INTERVAL_SECONDS = 5
 STATUS_WATCH_SECONDS = 1.0
@@ -197,6 +199,11 @@ def heartbeat_loop(local_cfg: dict) -> None:
     while True:
         try:
             status_info = read_printer_status()
+            if active_websocket is not None:
+                try:
+                    send_json(active_websocket, {"type": "status", "agent": AGENT_NAME, "status": status_info})
+                except Exception:
+                    pass
             fingerprint = _printers_fingerprint(status_info)
             now = time.time()
             changed = fingerprint != last_fingerprint
@@ -210,7 +217,8 @@ def heartbeat_loop(local_cfg: dict) -> None:
                     "printer": status_info.get("printer") or PRINTER_NAME,
                     "printers": status_info.get("printers") or [],
                 }
-                requests.post(url, json=payload, timeout=8)
+                response = requests.post(url, json=payload, timeout=8)
+                response.raise_for_status()
                 last_fingerprint = fingerprint
                 last_forced_push = now
                 if changed:
@@ -291,6 +299,8 @@ def send_json(ws, payload: dict) -> None:
 
 
 def on_open(ws) -> None:
+    global active_websocket
+    active_websocket = ws
     status = read_printer_status()
     send_json(
         ws,
@@ -339,7 +349,9 @@ def on_error(_ws, error) -> None:
 
 
 def on_close(_ws, _status_code, _message) -> None:
-    pass
+    global active_websocket
+    if active_websocket is _ws:
+        active_websocket = None
 
 
 def run_agent() -> None:

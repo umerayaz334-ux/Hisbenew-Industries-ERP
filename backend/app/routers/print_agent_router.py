@@ -294,8 +294,7 @@ def printer_agent_heartbeat(payload: AgentHeartbeatPayload, db: Session = Depend
     agent.last_heartbeat = datetime.utcnow()
     if payload.printer:
         agent.printer_name = payload.printer
-    if payload.printers:
-        agent.printers_json = json.dumps(payload.printers)
+    agent.printers_json = json.dumps(payload.printers)
     
     db.commit()
 
