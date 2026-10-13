@@ -78,6 +78,8 @@ tmp/
 # ==========================================
 
 print-agent/venv/
+print-agent/agent.pid
+print-agent/agent_config.json
 
 
 # ==========================================

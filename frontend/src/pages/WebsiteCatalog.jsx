@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import api, { getStaticUrl } from "../api/api";
+import api, { IMAGE_WIDTH, getStaticUrl } from "../api/api";
+import OptimizedImage from "../components/OptimizedImage";
 import { formatUtcLocal } from "../utils/dateUtils";
 import {
   DEFAULT_WEBSITE_SETTINGS,
@@ -26,8 +27,8 @@ const QUICK_CHAT_CHIPS = [
 const fallbackCatalogImage =
   "https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=1800&q=85";
 
-const productImageUrl = (product) =>
-  product?.image_url ? getStaticUrl(product.image_url) : null;
+const productImageUrl = (product, width = IMAGE_WIDTH.grid) =>
+  product?.image_url ? getStaticUrl(product.image_url, { w: width }) : null;
 
 const storefrontImageProps = (priority = false) => ({
   loading: priority ? "eager" : "lazy",
@@ -591,7 +592,9 @@ export default function WebsiteCatalog() {
     sortedProducts.forEach((p) => {
       const cat = p.category || "Knife Sets";
       if (!catMap.has(cat)) {
-        const img = p.image_url ? getStaticUrl(p.image_url) : fallbackCatalogImage;
+        const img = p.image_url
+          ? getStaticUrl(p.image_url, { w: IMAGE_WIDTH.tile })
+          : fallbackCatalogImage;
         catMap.set(cat, { name: cat, img });
       }
     });
@@ -1269,8 +1272,15 @@ export default function WebsiteCatalog() {
                       onClick={(e) => openProductPage(product, e)}
                     >
                       <div className="faire-card-media-square">
-                        {imgUrl ? (
-                          <img src={imgUrl} alt={product.name || product.article_no} className="faire-square-img" {...storefrontImageProps(idx < 8)} />
+                        {product.image_url ? (
+                          <OptimizedImage
+                            alt={product.name || product.article_no}
+                            className="faire-square-img"
+                            priority={idx < 6}
+                            sizes="(max-width: 640px) 46vw, 280px"
+                            src={product.image_url}
+                            variant="grid"
+                          />
                         ) : (
                           <div className="faire-no-img">
                             <span>{product.article_no || "Crafted Item"}</span>
@@ -1429,7 +1439,12 @@ export default function WebsiteCatalog() {
                   <div key={item.id} className="shopify-cart-item">
                     <div className="shopify-item-thumb">
                       {item.image_url ? (
-                        <img src={getStaticUrl(item.image_url)} alt={item.name} {...storefrontImageProps(false)} />
+                        <OptimizedImage
+                          alt={item.name}
+                          sizes="72px"
+                          src={item.image_url}
+                          variant="thumb"
+                        />
                       ) : (
                         <span>{item.article_no}</span>
                       )}

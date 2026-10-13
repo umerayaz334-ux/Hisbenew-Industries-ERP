@@ -124,16 +124,67 @@ const resolveApiBaseUrl = () => {
 
 export const API_BASE_URL = resolveApiBaseUrl();
 
+/** Display widths used like CDN image transforms (thumb / card / detail / hero). */
+export const IMAGE_WIDTH = {
+  thumb: 96,
+  tile: 180,
+  card: 360,
+  grid: 480,
+  detail: 900,
+  hero: 1400,
+};
+
+const clampImageWidth = (value) => {
+  const width = Number(value);
+  if (!Number.isFinite(width) || width <= 0) return null;
+  return Math.max(48, Math.min(1600, Math.round(width)));
+};
+
+/**
+ * Build a static asset URL. Always pass a width for list/grid thumbnails so the
+ * API returns a small WebP instead of the full upload (Shopify/Amazon-style).
+ */
 export const getStaticUrl = (path, options = {}) => {
   if (!path) return null;
-  if (path.startsWith("http")) return path;
-  const baseUrl = `${API_BASE_URL}${path}`;
-  const width = options?.w || options?.width;
-  if (width) {
-    const separator = baseUrl.includes("?") ? "&" : "?";
-    return `${baseUrl}${separator}w=${width}`;
+  if (path.startsWith("http")) {
+    // External URLs (Unsplash, etc.) keep their own sizing query when present.
+    return path;
   }
-  return baseUrl;
+  const baseUrl = `${API_BASE_URL}${path}`;
+  const width = clampImageWidth(options?.w ?? options?.width);
+  if (!width) return baseUrl;
+  const separator = baseUrl.includes("?") ? "&" : "?";
+  return `${baseUrl}${separator}w=${width}`;
+};
+
+/** Responsive srcset for product cards — browser picks the smallest fit. */
+export const getStaticSrcSet = (path, widths = [IMAGE_WIDTH.tile, IMAGE_WIDTH.card, IMAGE_WIDTH.grid]) => {
+  if (!path || path.startsWith("http")) return undefined;
+  const unique = [...new Set(widths.map(clampImageWidth).filter(Boolean))];
+  if (!unique.length) return undefined;
+  return unique.map((width) => `${getStaticUrl(path, { w: width })} ${width}w`).join(", ");
+};
+
+export const getImageProps = (path, options = {}) => {
+  const {
+    w = IMAGE_WIDTH.card,
+    widths,
+    sizes = "(max-width: 640px) 45vw, 240px",
+    priority = false,
+    alt = "",
+  } = options;
+  if (!path) return null;
+  const src = getStaticUrl(path, { w });
+  const srcSet = getStaticSrcSet(path, widths || [w, Math.round(w * 1.5), Math.round(w * 2)]);
+  return {
+    src,
+    srcSet,
+    sizes,
+    alt,
+    loading: priority ? "eager" : "lazy",
+    decoding: "async",
+    fetchPriority: priority ? "high" : "auto",
+  };
 };
 
 export const getAuditHeaders = () => {

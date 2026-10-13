@@ -77,7 +77,7 @@ except Exception as err:
         finally:
             win32print.ClosePrinter(h)
 
-STATUS_INTERVAL_SECONDS = 30
+STATUS_INTERVAL_SECONDS = 8
 POLL_INTERVAL_SECONDS = 5
 RECONNECT_SECONDS = 5
 

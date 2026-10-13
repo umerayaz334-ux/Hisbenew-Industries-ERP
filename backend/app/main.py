@@ -29,11 +29,14 @@ import uuid
 import zipfile
 from pathlib import Path
 from ipaddress import ip_address
+import subprocess
+import sys
+import time
 from xml.sax.saxutils import escape as xml_escape
 from urllib.parse import urlparse
 from urllib import request as urllib_request
 
-from .config import APP_DATA_DIR, CORS_ALLOW_ORIGINS, CORS_ALLOW_ORIGIN_REGEX, FRONTEND_DIST_DIR, INTERNAL_CALL_ICE_SERVERS, STATIC_DIR, UPLOAD_DIR
+from .config import APP_DATA_DIR, BACKEND_DIR, CORS_ALLOW_ORIGINS, CORS_ALLOW_ORIGIN_REGEX, FRONTEND_DIST_DIR, INTERNAL_CALL_ICE_SERVERS, PROJECT_DIR, STATIC_DIR, UPLOAD_DIR
 from .database import Base, DEFAULT_TENANT_NAME, DEFAULT_TENANT_SLUG, engine, SessionLocal, ensure_scaling_indexes, migrate_database
 from .models import Tenant, Module, TenantModule, CustomPage, Product, Customer, User, ActivityLog, UserRoleRequest, PublicAccessRequest, InternalMessage, InternalMessageContactRequest, WebsiteVisitorSession, WebsiteVisitorActivity, WebsiteVisitorMessage, InternalCall, InternalCallSignal, InspirationItem, OrderImportBatch, Order, OrderItem, StockMovement, Supplier, SupplierOrderItem, SupplierSupplyItem, SupplierTransaction, SupplierPayment, WorkflowStep, Worker, WorkerPayment, Shipping, FulfillmentShipment, FulfillmentBox, FulfillmentBoxItem, FulfillmentInventoryDiscrepancy, FulfillmentOrder, FulfillmentOrderItem, FulfillmentPick, CourierPayment, RegularBill, RegularBillPayment, AccountingSettings, AccountingFiscalYear, AccountingPeriodLock, AccountingCurrencyRate, AccountingJournalEntry, AccountingJournalLine, AccountingAccount, AccountingTransaction, AccountingDocument, AccountingDocumentLine, AccountingDocumentPayment, AccountingBankTransaction, AccountingBankRule, AccountingRecurringTemplate, ProductionBatch, ProductionTask, SharedData, WorkspaceData, OrderWorkflowTask, OrderFollowUp
 from .integrations.amazon import router as amazon_router
@@ -2083,6 +2086,7 @@ def is_auth_exempt_path(path: str, method: str = "GET") -> bool:
         or clean_path.startswith("/health")
         or clean_path.startswith("/app-install-info")
         or clean_path.startswith("/local-label-printers")
+        or clean_path.startswith("/local-print-agent")
         or clean_path.startswith("/api/admin/upload-database")
         or clean_path.startswith("/api/printer-agents")
         or clean_path.startswith("/printer-agents")
@@ -6982,8 +6986,22 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.middleware("http")
 async def private_network_access_middleware(request: Request, call_next):
+    # Allow hisbenew.com (and other HTTPS pages) to wake/use this laptop's print bridge.
+    if request.method == "OPTIONS" and request.headers.get("access-control-request-private-network"):
+        origin = request.headers.get("origin") or "*"
+        return Response(
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+                "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers") or "*",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Private-Network": "true",
+            },
+        )
     response = await call_next(request)
-    if request.url.path.startswith("/local-label-printers"):
+    path = request.url.path or ""
+    if path.startswith("/local-label-printers") or path.startswith("/local-print-agent"):
         response.headers["Access-Control-Allow-Private-Network"] = "true"
     return response
 
@@ -12888,6 +12906,136 @@ def require_local_printer_bridge(request: Request) -> None:
         status_code=403,
         detail="Local printer bridge commands are only accepted from this computer.",
     )
+
+
+PRINT_AGENT_DIR = PROJECT_DIR / "print-agent"
+PRINT_AGENT_SCRIPT = PRINT_AGENT_DIR / "printer_agent.py"
+PRINT_AGENT_PID_FILE = PRINT_AGENT_DIR / "agent.pid"
+
+
+def _print_agent_python() -> str:
+    venv_python = BACKEND_DIR / "venv" / "Scripts" / "python.exe"
+    if venv_python.exists():
+        return str(venv_python)
+    agent_venv = PRINT_AGENT_DIR / "venv" / "Scripts" / "python.exe"
+    if agent_venv.exists():
+        return str(agent_venv)
+    return sys.executable
+
+
+def _print_agent_process_running(pid: int | None = None) -> bool:
+    if pid:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+    if not PRINT_AGENT_PID_FILE.exists():
+        return False
+    try:
+        stored_pid = int(PRINT_AGENT_PID_FILE.read_text(encoding="utf-8").strip() or "0")
+    except (OSError, ValueError):
+        return False
+    if stored_pid <= 0:
+        return False
+    if not _print_agent_process_running(stored_pid):
+        try:
+            PRINT_AGENT_PID_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return False
+    return True
+
+
+def _start_local_print_agent(erp_api: str | None = None) -> dict:
+    if not PRINT_AGENT_SCRIPT.exists():
+        raise HTTPException(status_code=404, detail="Local print agent script was not found.")
+
+    if _print_agent_process_running():
+        return {
+            "status": "already_running",
+            "pid": int(PRINT_AGENT_PID_FILE.read_text(encoding="utf-8").strip()),
+            "erp_api": (erp_api or "").strip() or None,
+            "script": str(PRINT_AGENT_SCRIPT),
+        }
+
+    env = os.environ.copy()
+    clean_api = str(erp_api or "").strip().rstrip("/")
+    if clean_api:
+        env["ERP_API"] = clean_api
+
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
+        ) | getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
+    process = subprocess.Popen(
+        [_print_agent_python(), str(PRINT_AGENT_SCRIPT)],
+        cwd=str(PRINT_AGENT_DIR),
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        creationflags=creationflags,
+        close_fds=True,
+    )
+    try:
+        PRINT_AGENT_PID_FILE.write_text(str(process.pid), encoding="utf-8")
+    except OSError:
+        pass
+
+    return {
+        "status": "started",
+        "pid": process.pid,
+        "erp_api": clean_api or None,
+        "script": str(PRINT_AGENT_SCRIPT),
+    }
+
+
+@app.get("/local-print-agent/status")
+def get_local_print_agent_status(request: Request):
+    require_local_printer_bridge(request)
+    running = _print_agent_process_running()
+    pid = None
+    if running and PRINT_AGENT_PID_FILE.exists():
+        try:
+            pid = int(PRINT_AGENT_PID_FILE.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            pid = None
+    printers = []
+    try:
+        printers = list_label_printers().get("printers") or []
+    except Exception:
+        printers = []
+    return {
+        "running": running,
+        "pid": pid,
+        "printer_count": len(printers),
+        "connected_printers": sum(1 for printer in printers if printer.get("is_connected")),
+    }
+
+
+@app.post("/local-print-agent/ensure")
+def ensure_local_print_agent(request: Request, payload: dict | None = None):
+    """Start the laptop print agent if needed. Loopback-only so the Label Printer page can wake it."""
+    require_local_printer_bridge(request)
+    body = payload if isinstance(payload, dict) else {}
+    erp_api = body.get("erp_api") or body.get("api_base") or os.getenv("ERP_PUBLIC_API_BASE") or None
+    agent = _start_local_print_agent(erp_api)
+    # Give the agent a moment to enumerate printers / register.
+    time.sleep(0.4)
+    status = get_local_print_agent_status(request)
+    try:
+        local_printers = list_label_printers()
+    except LabelPrintError as exc:
+        local_printers = {"printers": [], "error": str(exc)}
+    return {
+        **agent,
+        "agent": status,
+        "local_printers": local_printers,
+        "connection_scope": "this_laptop",
+    }
 
 
 @app.get("/label-printers")

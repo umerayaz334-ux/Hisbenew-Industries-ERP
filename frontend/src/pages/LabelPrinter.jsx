@@ -47,12 +47,66 @@ const readStoredText = (key, fallback = "") => {
 };
 
 const getInitialPrinterConnectionMode = () => {
-  if (typeof window !== "undefined" && !isLoopbackHostname(window.location.hostname)) {
-    return "server";
+  // On this laptop, prefer the local print bridge / agent so Label Printer can wake it.
+  if (typeof window !== "undefined" && isLoopbackHostname(window.location.hostname)) {
+    const savedMode = readStoredText(PRINTER_CONNECTION_MODE_STORAGE_KEY);
+    if (["local", "server"].includes(savedMode)) return savedMode;
+    return "local";
   }
   const savedMode = readStoredText(PRINTER_CONNECTION_MODE_STORAGE_KEY);
   if (["local", "server"].includes(savedMode)) return savedMode;
   return "server";
+};
+
+const resolveErpApiForLocalAgent = () => {
+  if (typeof window === "undefined") return "https://api.hisbenew.com";
+  try {
+    const { protocol, hostname } = window.location;
+    if (isLoopbackHostname(hostname)) {
+      return normalizeApiBaseUrl(readStoredText(LOCAL_PRINT_BRIDGE_URL_STORAGE_KEY, DEFAULT_LOCAL_PRINT_BRIDGE_URL))
+        || DEFAULT_LOCAL_PRINT_BRIDGE_URL;
+    }
+    if (hostname.toLowerCase().includes("hisbenew.com")) {
+      return "https://api.hisbenew.com";
+    }
+    return `${protocol}//${hostname}${hostname.includes(":") ? "" : ""}`.replace(/\/$/, "") || "https://api.hisbenew.com";
+  } catch {
+    return "https://api.hisbenew.com";
+  }
+};
+
+const ensureLocalPrintAgent = async (bridgeUrl, erpApi) => {
+  const candidates = [
+    buildPrintBridgeUrl(bridgeUrl || DEFAULT_LOCAL_PRINT_BRIDGE_URL, "/local-print-agent/ensure"),
+    "http://127.0.0.1:8000/local-print-agent/ensure",
+    "http://localhost:8000/local-print-agent/ensure",
+  ];
+  const tried = new Set();
+  let lastError = "";
+  for (const url of candidates) {
+    if (tried.has(url)) continue;
+    tried.add(url);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        targetAddressSpace: "loopback",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ erp_api: erpApi || resolveErpApiForLocalAgent() }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        lastError = body?.detail || `HTTP ${response.status}`;
+        continue;
+      }
+      return { ok: true, data: body, url };
+    } catch (error) {
+      lastError = error?.message || "Local print agent could not be reached.";
+    }
+  }
+  return { ok: false, error: lastError || "Local print agent could not be started." };
 };
 
 const getInitialLocalPrintBridgeUrl = () =>
@@ -64,6 +118,34 @@ const buildPrintBridgeUrl = (baseUrl, path) =>
 
 const getPrinterApiError = (error, fallback) =>
   error?.response?.data?.detail || error?.message || fallback;
+
+const printerListFingerprint = (printers = []) =>
+  printers
+    .map(
+      (printer) =>
+        `${printer.name}|${printer.is_connected === false ? 0 : 1}|${printer.supports_direct_labels ? 1 : 0}|${printer.status || ""}`
+    )
+    .sort()
+    .join(";");
+
+const pickPreferredLabelPrinter = (printers = [], currentName = "") => {
+  if (
+    currentName &&
+    printers.some(
+      (printer) =>
+        printer.name === currentName &&
+        printer.supports_direct_labels &&
+        printer.is_connected !== false
+    )
+  ) {
+    return currentName;
+  }
+  const thermalConnected =
+    printers.find((printer) => printer.supports_direct_labels && printer.is_connected !== false) ||
+    printers.find((printer) => printer.supports_direct_labels);
+  const fallback = thermalConnected || printers.find((printer) => printer.is_default) || printers[0];
+  return fallback?.name || "";
+};
 
 const PRODUCT_DESIGN_FIELDS = [
   "brand",
@@ -746,6 +828,9 @@ function LabelPrinter() {
   const [printerConnectionMode, setPrinterConnectionMode] = useState(getInitialPrinterConnectionMode);
   const [localPrintBridgeUrl, setLocalPrintBridgeUrl] = useState(getInitialLocalPrintBridgeUrl);
   const liveEditorRef = useRef(null);
+  const printerSnapshotRef = useRef("");
+  const directPrinterRef = useRef("");
+  const printerHotplugBusyRef = useRef(false);
 
   useEffect(() => {
     if (!noticeState.message) return;
@@ -826,21 +911,51 @@ function LabelPrinter() {
     };
   }, []);
 
-  const loadLabelPrinters = async ({ showNotice = false } = {}) => {
-    setPrinterStatus({ loading: true, error: "" });
+  const loadLabelPrinters = async ({ showNotice = false, silent = false, detectHotplug = false } = {}) => {
+    if (!silent) setPrinterStatus({ loading: true, error: "" });
     try {
       const response = await getPrinterStatus();
       const printers = Array.isArray(response.data?.printers) ? response.data.printers : [];
+      const previousFingerprint = printerSnapshotRef.current;
+      const nextFingerprint = printerListFingerprint(printers);
+      const previousNames = new Set(
+        previousFingerprint
+          ? previousFingerprint.split(";").map((entry) => entry.split("|")[0]).filter(Boolean)
+          : []
+      );
+      const newlyConnected = printers.filter(
+        (printer) =>
+          printer.is_connected !== false &&
+          printer.supports_direct_labels &&
+          (!previousFingerprint || !previousNames.has(printer.name) || previousFingerprint.includes(`${printer.name}|0|`))
+      );
+
       setPrinterOptions(printers);
       setDirectPrinter((current) => {
-        if (current && printers.some((printer) => printer.name === current && printer.supports_direct_labels && printer.is_connected !== false)) return current;
-        const thermalPrinter = printers.find((printer) => printer.supports_direct_labels && printer.is_connected !== false)
-          || printers.find((printer) => printer.supports_direct_labels);
-        const defaultPrinter = thermalPrinter || printers.find((printer) => printer.is_default) || printers[0];
-        return defaultPrinter?.name || "";
+        const preferred = pickPreferredLabelPrinter(printers, current);
+        // Prefer a newly plugged USB thermal when the current selection is empty or offline.
+        if (detectHotplug && newlyConnected.length) {
+          const currentStillOnline =
+            current &&
+            printers.some(
+              (printer) => printer.name === current && printer.supports_direct_labels && printer.is_connected !== false
+            );
+          if (!currentStillOnline) {
+            directPrinterRef.current = newlyConnected[0].name;
+            return newlyConnected[0].name;
+          }
+        }
+        directPrinterRef.current = preferred;
+        return preferred;
       });
       setPrinterStatus({ loading: false, error: "" });
-      if (showNotice) {
+      printerSnapshotRef.current = nextFingerprint;
+
+      if (detectHotplug && previousFingerprint && newlyConnected.length) {
+        setNotice("USB label printer detected and connected: {name}.", {
+          name: newlyConnected[0].name,
+        });
+      } else if (showNotice) {
         const connectedCount = printers.filter((printer) => printer.is_connected).length;
         setNotice(printers.length
           ? "{connected} of {count} printers connected on {source}."
@@ -848,18 +963,169 @@ function LabelPrinter() {
           { connected: connectedCount, count: printers.length, source: printerConnectionModeLabel }
         );
       }
+      return printers;
     } catch (error) {
       const detail = getPrinterApiError(error, "Printer status could not be checked.");
-      setPrinterOptions([]);
-      setDirectPrinter("");
-      setPrinterStatus({ loading: false, error: detail });
+      if (!silent) {
+        setPrinterOptions([]);
+        setDirectPrinter("");
+        directPrinterRef.current = "";
+        setPrinterStatus({ loading: false, error: detail });
+      }
       if (showNotice) setNotice("Printer status could not be checked: {detail}", { detail });
+      return [];
     }
   };
 
   useEffect(() => {
+    let active = true;
+    const applyPrinterList = (printers, sourceLabel) => {
+      setPrinterOptions(printers);
+      setDirectPrinter((current) => {
+        const preferred = pickPreferredLabelPrinter(printers, current);
+        directPrinterRef.current = preferred;
+        return preferred;
+      });
+      printerSnapshotRef.current = printerListFingerprint(printers);
+      setPrinterStatus({ loading: false, error: "" });
+      setNotice("{count} printer(s) ready on {source}.", {
+        count: printers.length,
+        source: sourceLabel,
+      });
+    };
+
+    const wakeAndConnect = async () => {
+      setPrinterStatus({ loading: true, error: "" });
+      setNotice("Starting local print agent and connecting printers...");
+
+      const ensureResult = await ensureLocalPrintAgent(
+        resolvedLocalPrintBridgeUrl,
+        resolveErpApiForLocalAgent()
+      );
+      if (!active) return;
+
+      const ensuredPrinters = Array.isArray(ensureResult.data?.local_printers?.printers)
+        ? ensureResult.data.local_printers.printers
+        : [];
+
+      if (ensureResult.ok) {
+        setNotice(
+          ensureResult.data?.status === "already_running"
+            ? "Local print agent is online."
+            : "Local print agent started. Connecting printers..."
+        );
+        if (ensuredPrinters.length > 0) {
+          if (printerConnectionMode !== "local") {
+            setPrinterConnectionMode("local");
+          }
+          applyPrinterList(ensuredPrinters, "This laptop");
+          return;
+        }
+      }
+
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        if (!active) return;
+        try {
+          const response = await getPrinterStatus();
+          const printers = Array.isArray(response.data?.printers) ? response.data.printers : [];
+          if (printers.length > 0) {
+            applyPrinterList(printers, printerConnectionModeLabel);
+            return;
+          }
+          setPrinterOptions([]);
+          setPrinterStatus({ loading: false, error: "" });
+        } catch (error) {
+          const detail = getPrinterApiError(error, "Printer status could not be checked.");
+          setPrinterOptions([]);
+          setDirectPrinter("");
+          setPrinterStatus({ loading: false, error: detail });
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 700));
+      }
+
+      if (!active) return;
+      if (!ensureResult.ok) {
+        setNotice(
+          "Could not auto-start the local print agent. Keep the local ERP backend running on port 8000, then reopen Label Printer."
+        );
+      } else {
+        await loadLabelPrinters({ showNotice: true });
+      }
+    };
+
+    wakeAndConnect();
+    return () => {
+      active = false;
+    };
+    // Only re-run when the chosen bridge target changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedLocalPrintBridgeUrl]);
+
+  useEffect(() => {
+    // Refresh printer list when the user switches Local vs ERP server.
     loadLabelPrinters();
-  }, [printerConnectionMode, resolvedLocalPrintBridgeUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printerConnectionMode]);
+
+  useEffect(() => {
+    // Auto-detect USB plug/unplug while Label Printer stays open.
+    let active = true;
+    let ensureCooldownUntil = 0;
+    const refreshForUsb = async ({ announce = true, wakeAgent = false } = {}) => {
+      if (!active || printerHotplugBusyRef.current) return;
+      printerHotplugBusyRef.current = true;
+      try {
+        const shouldWake =
+          useLocalPrinterBridge &&
+          (wakeAgent || Date.now() >= ensureCooldownUntil);
+        if (shouldWake) {
+          ensureCooldownUntil = Date.now() + 20000;
+          await ensureLocalPrintAgent(resolvedLocalPrintBridgeUrl, resolveErpApiForLocalAgent());
+        }
+        if (!active) return;
+        const printers = await loadLabelPrinters({ silent: true, detectHotplug: announce });
+        if (useLocalPrinterBridge && (!printers || printers.length === 0)) {
+          ensureCooldownUntil = 0;
+        }
+      } finally {
+        printerHotplugBusyRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      refreshForUsb({ announce: true, wakeAgent: false });
+    }, 2500);
+
+    const onFocus = () => refreshForUsb({ announce: true, wakeAgent: true });
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refreshForUsb({ announce: true, wakeAgent: true });
+    };
+    const onUsbChange = () => {
+      // Windows often needs a beat before the USB printer appears in EnumPrinters.
+      window.setTimeout(() => refreshForUsb({ announce: true, wakeAgent: true }), 400);
+      window.setTimeout(() => refreshForUsb({ announce: true, wakeAgent: false }), 1600);
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    const usb = typeof navigator !== "undefined" ? navigator.usb : null;
+    if (usb?.addEventListener) {
+      usb.addEventListener("connect", onUsbChange);
+      usb.addEventListener("disconnect", onUsbChange);
+    }
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (usb?.removeEventListener) {
+        usb.removeEventListener("connect", onUsbChange);
+        usb.removeEventListener("disconnect", onUsbChange);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printerConnectionMode, resolvedLocalPrintBridgeUrl, useLocalPrinterBridge]);
 
   useEffect(() => {
     try {
