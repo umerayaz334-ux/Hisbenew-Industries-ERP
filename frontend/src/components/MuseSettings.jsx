@@ -11,7 +11,30 @@ export default function MuseSettings() {
   const [copied, setCopied] = useState(false);
   const [rotate, setRotate] = useState(false);
   const base = new URL(api.defaults.baseURL || "/", window.location.origin).href.replace(/\/$/, "");
-  const instructions = `Muse AI integration\nBase URL: ${base}/integrations/muse\nAuthorization: Bearer ${key || "<API_KEY>"}\nContent-Type: application/json\nCurrency: USD\n\nGET /products returns all products in your company as [{id, article_no, name, unit_price_usd, image_url}]. Compare exact article numbers with your catalog. Before submitting an order with a missing SKU, POST /products:\n${JSON.stringify({article_no:"YOUR-ARTICLE",name:"Product name",unit_price_usd:50,image_url:"https://example.com/catalog/product.jpg"},null,2)}\nUse the wholesale catalog price in USD. image_url is optional: provide a publicly accessible direct HTTP/HTTPS image URL (HTTPS recommended), or omit it / send null. The ERP stores the URL, so the image must remain available at that address. HTTP 200 returns the saved product immediately; creation is not queued. Existing article numbers return the existing product without changing its name, price, or image. Verify the article number using GET /products, then submit the order. Use the same API key for both product endpoints.\n\nPOST /orders when a new order arrives:\n${JSON.stringify({order_no:"FAIRE-1001",order_date:"2026-10-10T12:00:00+05:00",customer_name:"Jane Smith",company_name:"Sample Shop",phone:"+12125550123",shipping_address:"123 Main St, New York, NY 10001, USA",platform:"Faire",estimated_net_usd:82.10,items:[{article_no:"YOUR-ARTICLE",quantity:2,unit_price_usd:50}]},null,2)}\n\nThe ERP starts processing as soon as a submission arrives, with a backup queue check every 5 seconds while its server is running. HTTP 202 means queued, not applied. Poll GET /submissions every 2 seconds until Applied or Failed. Correct and resend failed payloads. Repeating an identical order or payout is safe; do not change an accepted submission.\n\nExisting customers are matched by normalized phone, then customer name + company name. An optional customer_id explicitly links an existing customer in this company. Ambiguous matches fail for review. Create any missing article numbers with POST /products first. After fixing a missing SKU, resend the failed order and check GET /submissions until Applied. Quantity is units, unit_price_usd is the per-unit gross price.\n\nDaily at 08:00 Asia/Karachi (03:00 UTC), GET /pending-payouts and check payment at the original sales source. Once settled, POST /payouts:\n${JSON.stringify({order_no:"FAIRE-1001",actual_paid_usd:80,paid_at:"2026-10-11T08:00:00+05:00"},null,2)}\n\nactual_paid_usd is the final total, not an incremental payment. The ERP keeps the original estimate, records the actual payment in Payouts and Accounting, and removes the order from pending payouts. Stop tracking after the payout submission is Applied. Never report an estimate as a received payment.`;
+  const instructions = `Muse AI - ERP connection
+Base URL: ${base}/integrations/muse
+Authorization: Bearer ${key || "<YOUR_EXISTING_API_KEY>"}
+Content-Type: application/json
+Scope: this key's company only. All prices are USD.
+
+1. Products
+GET /products to compare exact SKUs. POST /products to create missing ones:
+{"article_no":"SKU-123","name":"Product name","unit_price_usd":25,"image_url":"https://example.com/product.jpg"}
+Use the catalog wholesale price. image_url is optional; use a lasting public image URL. HTTP 200 confirms the product. Existing SKUs are returned unchanged.
+
+2. Orders
+Create missing products first, then POST /orders:
+{"order_no":"FAIRE-1001","order_date":"2026-10-13T12:00:00+05:00","customer_name":"Jane Smith","company_name":"Sample Shop","phone":"+12125550123","shipping_address":"123 Main St, New York, NY 10001, USA","platform":"Faire","estimated_net_usd":45,"items":[{"article_no":"SKU-123","quantity":2,"unit_price_usd":25}]}
+Customers are matched by phone, then name + company, or created if missing. Optional customer_id must belong to this company.
+
+3. Confirm processing
+Orders and payouts return HTTP 202 (queued). Processing starts promptly; backup checks run every 5 seconds. Poll GET /submissions every 2 seconds until Applied or Failed. Fix and resend failures. Identical retries are safe; do not change accepted submissions.
+
+4. Final payouts
+Daily at 08:00 Asia/Karachi, GET /pending-payouts and verify payment at the sales source. Once settled, POST /payouts:
+{"order_no":"FAIRE-1001","actual_paid_usd":45,"paid_at":"2026-10-14T08:00:00+05:00"}
+Send the final received total, never an estimate or installment. Stop tracking when Applied.`;
+  useEffect(() => { setCopied(false); }, [instructions]);
   const load = async () => {
     try { setData((await api.get("/muse-settings")).data); setError(""); }
     catch (e) { setError(e.response?.data?.detail || "Unable to load Muse settings."); }
@@ -34,22 +57,21 @@ export default function MuseSettings() {
     <button type="button" className="orders-create-button" onClick={() => setOpen(true)}>⚙ Settings</button>
     {open && <div className="muse-overlay"><section className="muse-panel" role="dialog" aria-modal="true" aria-labelledby="muse-title">
       <div className="muse-heading"><h2 id="muse-title">Orders API · Muse AI</h2><button type="button" autoFocus onClick={() => setOpen(false)}>Close</button></div>
-      <p>Muse can list and create products, submit orders and report final payouts here. The ERP starts processing new submissions <strong>as soon as they arrive</strong> and updates Customers, Orders, inventory reservations, Payouts and Accounting.</p>
-      <p>Muse checks the sales source for payments daily at <strong>8:00 AM Pakistan time</strong>.</p>
+      <p className="muse-summary">Connect Muse to add products with images, submit orders and report payouts. This API key works only for this company.</p>
+      <p className="muse-hint">Processing starts on arrival. Ask Muse to check payments daily at 8:00 AM Pakistan time.</p>
       {error && <p role="alert">{error}</p>}
       {data && <>
-        <label>Products endpoint (GET / POST)<input readOnly value={`${base}/integrations/muse/products`} /></label>
-        <label>Orders endpoint<input readOnly value={`${base}/integrations/muse/orders`} /></label>
-        <p>Use your publicly reachable HTTPS server URL when sharing with Muse. A localhost or private network URL is only reachable on that network.</p>
+        <label className="muse-label">API base URL<input readOnly value={`${base}/integrations/muse`} /></label>
+        <p className="muse-hint">Share your public HTTPS URL with Muse. Localhost works only on this computer.</p>
         <button type="button" disabled={busy} onClick={() => data.configured ? setRotate(true) : generate()}>{data.configured ? "Replace API key" : "Generate API key"}</button>
         {rotate && <p>Replacing the key disconnects the previous Muse setup. <button type="button" disabled={busy} onClick={generate}>Replace key now</button> <button type="button" onClick={() => setRotate(false)}>Cancel</button></p>}
         {key && <label>New API key — copy now; it is not stored in readable form<input readOnly value={key} /></label>}
-        <h3>Instructions to send to Muse</h3>
-        <textarea readOnly rows={15} value={instructions} />
-        <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(instructions); setCopied(true); } catch { setError("Select and copy the instructions manually."); } }}>{copied ? "Copied" : "Copy instructions"}</button>
-        <h3>Recent submissions</h3>
-        <button type="button" onClick={load}>Refresh status</button>
-        {!data.submissions.length && <p>No submissions yet.</p>}
+        <h3>Send to Muse</h3>
+        <p className="muse-hint">Copy the connection details and examples below.{!key && " Add your existing API key, or generate one if you have not set up Muse yet."}</p>
+        <textarea aria-label="Muse connection instructions" readOnly rows={10} value={instructions} />
+        <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(instructions); setCopied(true); } catch { setError("Select and copy the instructions manually."); } }} className="muse-copy">{copied ? "Copied!" : "Copy setup for Muse"}</button>
+        <div className="muse-heading muse-status-heading"><h3>Recent submissions</h3><button type="button" onClick={load}>Refresh</button></div>
+        {!data.submissions.length && <p className="muse-empty">No submissions yet. Muse activity will appear here.</p>}
         {data.submissions.map(row => <div className="muse-submission" key={row.id}><strong>{row.order_no}</strong> · {row.kind} · {row.status}{row.error && <p>{row.error}</p>}{row.status === "Failed" && <button type="button" onClick={async () => { try { await api.post(`/muse-settings/retry/${row.id}`); await load(); } catch { setError("Unable to retry submission."); } }}>Retry now</button>}</div>)}
       </>}
     </section></div>}

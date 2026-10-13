@@ -6,3 +6,14 @@
 .muse-panel button { padding: 8px 14px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f1f5f9; cursor: pointer; }
 .muse-panel [role=alert] { color: #a32121; }
 .muse-submission { padding: 12px 0; border-bottom: 1px solid #e2e8f0; }
+.muse-panel { box-sizing: border-box; }
+.muse-heading h2 { margin: 0; font-size: 22px; }
+.muse-summary { margin-bottom: 6px; }
+.muse-panel .muse-hint { color: #526674; font-size: 13px; margin: 6px 0 16px; }
+.muse-label { display: block; font-weight: 600; }
+.muse-panel textarea { line-height: 1.6; resize: vertical; background: #f8fafc; }
+.muse-panel .muse-copy { background: #173f50; color: #fff; border-color: #173f50; font-weight: 600; }
+.muse-status-heading { margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
+.muse-status-heading h3 { margin: 0; }
+.muse-empty { padding: 16px; border-radius: 8px; background: #f8fafc; color: #526674; font-size: 14px; }
+@media (max-width: 600px) { .muse-overlay { padding: 12px; } .muse-panel { padding: 18px; } .muse-heading h2 { font-size: 19px; } }
