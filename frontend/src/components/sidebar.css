@@ -1843,3 +1843,13 @@
 }
 
 
+
+/* Real navigation links retain the existing button appearance. */
+a.menu-button, a.mobile-tab-button, a.mobile-menu-item {
+  text-decoration: none;
+  box-sizing: border-box;
+}
+a.menu-button:focus-visible, a.mobile-tab-button:focus-visible, a.mobile-menu-item:focus-visible {
+  outline: 2px solid #0d9488;
+  outline-offset: -2px;
+}

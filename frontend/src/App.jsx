@@ -1306,6 +1306,10 @@ function App() {
             <Sidebar
               activePage={activePage}
               setActivePage={updatePath}
+              getPageHref={(page) => scopedAppPath(pagePaths[page] || "/portal", {
+                user: authenticatedUser,
+                preserveCurrentScope: !authenticatedUser,
+              })}
               workspace={schoolWorkspaceActive ? "school" : "factory"}
               schoolSettings={schoolSettings}
               schoolPermissions={schoolAccess?.permissions}

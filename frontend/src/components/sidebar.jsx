@@ -486,6 +486,7 @@ function WorkspaceSwitchIcon() {
 function Sidebar({
   activePage,
   setActivePage,
+  getPageHref,
   workspace = "factory",
   schoolSettings,
   schoolPermissions,
@@ -596,7 +597,9 @@ function Sidebar({
     activeButton?.scrollIntoView({ block: "nearest" });
   }, [activePage, visibleMenuCount]);
 
-  const handleNavigation = (page) => {
+  const handleNavigation = (event, page) => {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
     setActivePage(page);
     setMobileMenuOpen(false);
   };
@@ -705,7 +708,7 @@ function Sidebar({
                   <span>Platform Super Admin</span>
                 </div>
               )}
-              <button
+              <a
                 aria-current={activePage === item.name ? "page" : undefined}
                 aria-label={itemLabel}
                 className={`menu-button ${
@@ -713,9 +716,10 @@ function Sidebar({
                 } ${
                   isSchoolWorkspace || mainMenuOrder.includes(item.name) ? "" : "menu-secondary-button"
                 } ${activePage === item.name ? "active" : ""}`.trim()}
-                onClick={() => handleNavigation(item.name)}
+                href={getPageHref(item.name)}
+                onClick={(event) => handleNavigation(event, item.name)}
                 title={itemLabel}
-                type="button"
+                
               >
                 <SidebarIcon name={item.icon} />
                 <span className="menu-initial">{getMenuInitials(itemLabel)}</span>
@@ -728,7 +732,7 @@ function Sidebar({
                     {formatNotificationCount(notificationCount)}
                   </span>
                 )}
-              </button>
+              </a>
             </div>
           );
         })}
@@ -739,16 +743,17 @@ function Sidebar({
           const notificationCount = getNotificationCount(item);
 
           return (
-            <button
+            <a
               aria-current={activePage === item.name ? "page" : undefined}
               aria-label={mobileLabel(item)}
               className={`mobile-tab-button ${
                 activePage === item.name ? "active" : ""
               }`.trim()}
               key={item.name}
-              onClick={() => handleNavigation(item.name)}
+              href={getPageHref(item.name)}
+                onClick={(event) => handleNavigation(event, item.name)}
               title={mobileLabel(item)}
-              type="button"
+              
             >
               <SidebarIcon name={item.icon} />
               <span>{mobileLabel(item)}</span>
@@ -757,7 +762,7 @@ function Sidebar({
                   {formatNotificationCount(notificationCount)}
                 </span>
               )}
-            </button>
+            </a>
           );
         })}
 
@@ -822,14 +827,15 @@ function Sidebar({
                 const itemLabel = getItemLabel(item);
 
                 return (
-                  <button
+                  <a
                     aria-current={activePage === item.name ? "page" : undefined}
                     className={`mobile-menu-item ${
                       activePage === item.name ? "active" : ""
                     }`.trim()}
                     key={item.name}
-                    onClick={() => handleNavigation(item.name)}
-                    type="button"
+                    href={getPageHref(item.name)}
+                onClick={(event) => handleNavigation(event, item.name)}
+                    
                   >
                     <SidebarIcon name={item.icon} />
                     <span>{itemLabel}</span>
@@ -838,7 +844,7 @@ function Sidebar({
                         {formatNotificationCount(notificationCount)}
                       </span>
                     )}
-                  </button>
+                  </a>
                 );
               })}
             </div>
