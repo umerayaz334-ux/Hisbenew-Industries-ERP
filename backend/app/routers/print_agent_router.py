@@ -18,8 +18,8 @@ router = APIRouter()
 
 connected_agents: dict[str, dict[str, Any]] = {}
 pending_print_jobs: dict[str, asyncio.Future] = {}
-AGENT_ONLINE_SECONDS = 90
-AGENT_STALE_PRINTER_SECONDS = 90
+AGENT_ONLINE_SECONDS = 20
+AGENT_STALE_PRINTER_SECONDS = 20
 
 
 def _force_printers_offline(printers: list[Any], detail: str = "Print agent offline or USB disconnected.") -> list[dict[str, Any]]:
@@ -29,10 +29,30 @@ def _force_printers_offline(printers: list[Any], detail: str = "Print agent offl
             continue
         entry = dict(printer)
         entry["is_connected"] = False
-        entry["status"] = "Offline"
+        entry["status"] = "Not connected"
         entry["status_detail"] = detail
         offline.append(entry)
     return offline
+
+
+def _parse_agent_last_seen(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+    except ValueError:
+        return None
+
+
+def _agent_is_fresh(agent: dict[str, Any], max_age_seconds: int = AGENT_STALE_PRINTER_SECONDS) -> bool:
+    last_seen = _parse_agent_last_seen(agent.get("last_seen"))
+    if not last_seen:
+        return False
+    return (datetime.utcnow() - last_seen).total_seconds() < max_age_seconds
 
 
 def get_db():
@@ -453,10 +473,41 @@ async def get_print_agent_printers(db: Session = Depends(get_db)):
     if agent:
         status = _agent_status(agent)
         printers = status.get("printers") if isinstance(status.get("printers"), list) else []
+        if not isinstance(printers, list):
+            printers = []
+        fresh = _agent_is_fresh(agent)
+        if not fresh:
+            printers = _force_printers_offline(
+                printers,
+                "Print agent stopped reporting — printer is not connected.",
+            )
         return {
             "connection_scope": "print_agent",
             "agent": agent.get("name"),
-            "agent_count": max(1, len(connected_agents)),
+            "agent_count": 1 if fresh else 0,
+            "agent_online": fresh,
+            "default_printer": status.get("default_printer") or "",
+            "default_printer_dpi": status.get("default_printer_dpi") or 300,
+            "printers": printers,
+        }
+
+    # Also use REST heartbeat cache in memory (no websocket).
+    for cached in connected_agents.values():
+        status = _agent_status(cached)
+        printers = status.get("printers") if isinstance(status.get("printers"), list) else []
+        if not isinstance(printers, list) or not printers:
+            continue
+        fresh = _agent_is_fresh(cached)
+        if not fresh:
+            printers = _force_printers_offline(
+                printers,
+                "Print agent stopped reporting — printer is not connected.",
+            )
+        return {
+            "connection_scope": "print_agent",
+            "agent": cached.get("hostname") or cached.get("name"),
+            "agent_count": 1 if fresh else 0,
+            "agent_online": fresh,
             "default_printer": status.get("default_printer") or "",
             "default_printer_dpi": status.get("default_printer_dpi") or 300,
             "printers": printers,
