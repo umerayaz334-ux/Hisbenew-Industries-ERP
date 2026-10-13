@@ -18202,6 +18202,22 @@ def get_shipping_records(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Shipping history could not be loaded: {exc}") from exc
 
 
+@app.get("/shipping/pending-count")
+def get_pending_shipping_count(request: Request, db: Session = Depends(get_db)):
+    """Lightweight tenant-scoped badge count for the sidebar Shipping item."""
+    get_authenticated_user(request, db)
+    count = (
+        db.query(func.count(Order.id))
+        .filter(
+            ~func.lower(func.coalesce(Order.shipping_status, "")).in_(
+                list(STOCK_DEDUCTED_SHIPPING_STATUSES)
+            )
+        )
+        .scalar()
+    )
+    return {"count": int(count or 0)}
+
+
 @app.get("/shipping/pending")
 def get_pending_shipping_orders(request: Request, db: Session = Depends(get_db)):
     privacy = access_privacy_context(request, db)

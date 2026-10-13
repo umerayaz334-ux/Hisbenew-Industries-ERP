@@ -780,10 +780,19 @@ function App() {
     const allowedPagesForCounts = allowedPageKey.split("|");
 
     const loadSidebarCounts = async () => {
+      // Load each badge independently so one failing endpoint cannot hide
+      // Shipping (or other) counts for a tenant.
       const nextCounts = {};
+      const loadCount = async (label, loader) => {
+        try {
+          Object.assign(nextCounts, await loader());
+        } catch (error) {
+          console.warn(`Sidebar ${label} count could not be loaded.`, error);
+        }
+      };
 
-      try {
-        if (sidebarRole === "worker" && sidebarWorkerId) {
+      if (sidebarRole === "worker" && sidebarWorkerId) {
+        await loadCount("My Tasks", async () => {
           const [orderTasksResponse, productionTasksResponse] = await Promise.all([
             api.get("/order-workflow/tasks", {
               params: { worker_id: sidebarWorkerId },
@@ -803,45 +812,58 @@ function App() {
                 (task) => task.status !== "Completed"
               )
             : [];
-          nextCounts["My Tasks"] =
-            openOrderTasks.length + openProductionTasks.length;
-        }
+          return {
+            "My Tasks": openOrderTasks.length + openProductionTasks.length,
+          };
+        });
+      }
 
-        if (
-          ["admin", "manager", "warehouse", "super_admin"].includes(sidebarRole) &&
-          allowedPagesForCounts.includes("Shipping")
-        ) {
-          const response = await api.get("/dashboard-stats");
-          nextCounts.Shipping = Number(response.data?.pending_shipping_orders || 0);
-        }
+      if (
+        ["admin", "manager", "warehouse", "super_admin"].includes(sidebarRole) &&
+        allowedPagesForCounts.includes("Shipping")
+      ) {
+        await loadCount("Shipping", async () => {
+          const response = await api.get("/shipping/pending-count");
+          return {
+            Shipping: Number(response.data?.count || 0),
+          };
+        });
+      }
 
-        if (
-          ["admin", "manager", "warehouse", "super_admin"].includes(sidebarRole) &&
-          (allowedPagesForCounts.includes("Warehouse / Fulfillment") ||
-            allowedPagesForCounts.includes("Warehouse Dispatch"))
-        ) {
+      if (
+        ["admin", "manager", "warehouse", "super_admin"].includes(sidebarRole) &&
+        (allowedPagesForCounts.includes("Warehouse / Fulfillment") ||
+          allowedPagesForCounts.includes("Warehouse Dispatch"))
+      ) {
+        await loadCount("Warehouse", async () => {
           const response = await api.get("/fulfillment/dashboard");
           const unfulfilledCount = Number(
             response.data?.stats?.unfulfilled_orders || 0
           );
-          nextCounts["Warehouse / Fulfillment"] = unfulfilledCount;
-          nextCounts["Warehouse Dispatch"] = unfulfilledCount;
-        }
-
-        if (allowedPagesForCounts.includes("Messages")) {
-          const response = await api.get("/internal-messages/unread-count");
-          nextCounts.Messages = Number(response.data?.unread_count || 0);
-        }
-
-        if (allowedPagesForCounts.includes("Website Visitors")) {
-          const response = await api.get("/visitor-chat/sessions/unread-count");
-          nextCounts["Website Visitors"] = Number(response.data?.unread_count || 0);
-        }
-
-        if (active) setSidebarCounts(nextCounts);
-      } catch (error) {
-        console.warn("Sidebar counts could not be loaded.", error);
+          return {
+            "Warehouse / Fulfillment": unfulfilledCount,
+            "Warehouse Dispatch": unfulfilledCount,
+          };
+        });
       }
+
+      if (allowedPagesForCounts.includes("Messages")) {
+        await loadCount("Messages", async () => {
+          const response = await api.get("/internal-messages/unread-count");
+          return { Messages: Number(response.data?.unread_count || 0) };
+        });
+      }
+
+      if (allowedPagesForCounts.includes("Website Visitors")) {
+        await loadCount("Website Visitors", async () => {
+          const response = await api.get("/visitor-chat/sessions/unread-count");
+          return {
+            "Website Visitors": Number(response.data?.unread_count || 0),
+          };
+        });
+      }
+
+      if (active) setSidebarCounts(nextCounts);
     };
 
     const initialLoadId = setTimeout(loadSidebarCounts, 0);
