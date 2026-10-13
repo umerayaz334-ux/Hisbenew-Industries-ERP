@@ -590,6 +590,43 @@ const getNoteLines = (notes) => {
 
 
 
+const KG_TO_LB = 2.2046226218;
+
+const EASYSHIP_COURIER_OPTIONS = [
+  "Best Value For Money",
+  "Cost",
+  "Delivery Time",
+];
+
+const defaultPackageWeightLb = (order) => {
+  const kg =
+    Number(order?.usa_shipping?.calculation_weight_kg) ||
+    Number(order?.shipping_weight_override_kg) ||
+    (order?.items || []).reduce(
+      (sum, item) => sum + Number(item.line_weight_kg || 0),
+      0,
+    );
+  if (!Number.isFinite(kg) || kg <= 0) return "";
+  return String(Math.round(kg * KG_TO_LB * 1000) / 1000);
+};
+
+const buildEasyshipDraft = (orders) => ({
+  choose_courier_by: "Best Value For Money",
+  taxes_duties_paid_by: "Receiver",
+  shipping_insurance: "No",
+  packages: Object.fromEntries(
+    (orders || []).map((order) => [
+      order.order_id,
+      {
+        weight_lb: defaultPackageWeightLb(order),
+        length_in: "",
+        width_in: "",
+        height_in: "",
+      },
+    ]),
+  ),
+});
+
 function Shipping({ userRole }) {
 
   const confirmDialog = useConfirmDialog();
@@ -666,6 +703,11 @@ function Shipping({ userRole }) {
 
   const [savingItemWeight, setSavingItemWeight] = useState(false);
 
+  const [selectedPendingIds, setSelectedPendingIds] = useState(() => new Set());
+  const [easyshipDraft, setEasyshipDraft] = useState(null);
+  const [exportingEasyship, setExportingEasyship] = useState(false);
+
+
 
   useEffect(() => {
     try {
@@ -706,6 +748,12 @@ function Shipping({ userRole }) {
       ]);
 
       setPendingOrders(Array.isArray(pendingResponse.data) ? pendingResponse.data : []);
+      setSelectedPendingIds((previous) => {
+        const available = new Set(
+          (Array.isArray(pendingResponse.data) ? pendingResponse.data : []).map((order) => order.order_id),
+        );
+        return new Set([...previous].filter((id) => available.has(id)));
+      });
       setShippingRecords(Array.isArray(historyResponse.data) ? historyResponse.data : []);
       setLoadError("");
 
@@ -2656,6 +2704,143 @@ function Shipping({ userRole }) {
 
   }, [pendingOrders, pendingSearch]);
 
+  const selectedPendingOrders = useMemo(
+    () => filteredPendingOrders.filter((order) => selectedPendingIds.has(order.order_id)),
+    [filteredPendingOrders, selectedPendingIds],
+  );
+
+  const allVisiblePendingSelected =
+    filteredPendingOrders.length > 0 &&
+    filteredPendingOrders.every((order) => selectedPendingIds.has(order.order_id));
+
+  const someVisiblePendingSelected =
+    filteredPendingOrders.some((order) => selectedPendingIds.has(order.order_id));
+
+  const togglePendingSelection = (orderId, checked) => {
+    setSelectedPendingIds((previous) => {
+      const next = new Set(previous);
+      if (checked) next.add(orderId);
+      else next.delete(orderId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllPending = (checked) => {
+    setSelectedPendingIds((previous) => {
+      const next = new Set(previous);
+      if (checked) {
+        filteredPendingOrders.forEach((order) => next.add(order.order_id));
+      } else {
+        filteredPendingOrders.forEach((order) => next.delete(order.order_id));
+      }
+      return next;
+    });
+  };
+
+  const openEasyshipReview = (orders) => {
+    const list = Array.isArray(orders) ? orders : [];
+    if (list.length === 0) {
+      setNotice("Select at least one pending order to download for Easyship.");
+      return;
+    }
+    setSelectedPendingIds(new Set(list.map((order) => order.order_id)));
+    setEasyshipDraft(buildEasyshipDraft(list));
+  };
+
+  const updateEasyshipPackage = (orderId, field, value) => {
+    setEasyshipDraft((previous) => {
+      if (!previous) return previous;
+      return {
+        ...previous,
+        packages: {
+          ...previous.packages,
+          [orderId]: {
+            ...(previous.packages?.[orderId] || {}),
+            [field]: value,
+          },
+        },
+      };
+    });
+  };
+
+  const downloadEasyshipExport = async () => {
+    if (!easyshipDraft || exportingEasyship) return;
+    const orders = pendingOrders.filter((order) =>
+      Object.prototype.hasOwnProperty.call(easyshipDraft.packages || {}, order.order_id),
+    );
+    if (orders.length === 0) {
+      setNotice("No orders selected for Easyship export.");
+      return;
+    }
+
+    const packages = [];
+    for (const order of orders) {
+      const pack = easyshipDraft.packages[order.order_id] || {};
+      const weight_lb = Number(pack.weight_lb);
+      const length_in = Number(pack.length_in);
+      const width_in = Number(pack.width_in);
+      const height_in = Number(pack.height_in);
+      if (![weight_lb, length_in, width_in, height_in].every((value) => Number.isFinite(value) && value > 0)) {
+        setNotice(`Enter weight and L × W × H (inches) for order #${order.order_no}.`);
+        return;
+      }
+      packages.push({
+        order_id: order.order_id,
+        weight_lb,
+        length_in,
+        width_in,
+        height_in,
+      });
+    }
+
+    setExportingEasyship(true);
+    setNotice("");
+    try {
+      const response = await api.post(
+        "/shipping/easyship-export",
+        {
+          order_ids: packages.map((item) => item.order_id),
+          packages,
+          choose_courier_by: easyshipDraft.choose_courier_by,
+          taxes_duties_paid_by: easyshipDraft.taxes_duties_paid_by,
+          shipping_insurance: easyshipDraft.shipping_insurance,
+        },
+        { responseType: "blob", timeout: 60000 },
+      );
+      const disposition = response.headers?.["content-disposition"] || "";
+      const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+      const filename =
+        filenameMatch?.[1] ||
+        `easyship-shipments-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+      setEasyshipDraft(null);
+      setNotice(`Downloaded Easyship file for ${packages.length} order${packages.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      let message = "Easyship download failed.";
+      const data = error?.response?.data;
+      if (data instanceof Blob) {
+        try {
+          const errText = await data.text();
+          const parsed = JSON.parse(errText);
+          message = parsed?.detail || message;
+        } catch {}
+      } else if (typeof data?.detail === "string") {
+        message = data.detail;
+      }
+      setNotice(message);
+    } finally {
+      setExportingEasyship(false);
+    }
+  };
+
+
 
 
   const filteredShippingRecords = useMemo(() => {
@@ -2924,23 +3109,89 @@ function Shipping({ userRole }) {
 
 
 
-          <label className="shipping-search-box">
+          <div className="shipping-pending-toolbar">
 
-            <Icon name="search" size={17} />
+            <label className="shipping-select-all">
 
-            <input
+              <input
 
-              aria-label="Search pending orders"
+                aria-label="Select all pending orders"
 
-              onChange={(event) => setPendingSearch(event.target.value)}
+                checked={allVisiblePendingSelected}
 
-              placeholder="Search order or customer"
+                disabled={filteredPendingOrders.length === 0}
 
-              value={pendingSearch}
+                onChange={(event) => toggleSelectAllPending(event.target.checked)}
 
-            />
+                ref={(node) => {
 
-          </label>
+                  if (node) {
+
+                    node.indeterminate = someVisiblePendingSelected && !allVisiblePendingSelected;
+
+                  }
+
+                }}
+
+                type="checkbox"
+
+              />
+
+              <span>Select all</span>
+
+            </label>
+
+            <button
+
+              className="shipping-easyship-button"
+
+              disabled={filteredPendingOrders.length === 0}
+
+              onClick={() => openEasyshipReview(filteredPendingOrders)}
+
+              type="button"
+
+            >
+
+              Download all pending
+
+            </button>
+
+            <button
+
+              className="shipping-easyship-button shipping-easyship-button-secondary"
+
+              disabled={selectedPendingOrders.length === 0}
+
+              onClick={() => openEasyshipReview(selectedPendingOrders)}
+
+              type="button"
+
+            >
+
+              Download selected ({selectedPendingOrders.length})
+
+            </button>
+
+            <label className="shipping-search-box">
+
+              <Icon name="search" size={17} />
+
+              <input
+
+                aria-label="Search pending orders"
+
+                onChange={(event) => setPendingSearch(event.target.value)}
+
+                placeholder="Search order or customer"
+
+                value={pendingSearch}
+
+              />
+
+            </label>
+
+          </div>
 
         </div>
 
@@ -3058,11 +3309,41 @@ function Shipping({ userRole }) {
 
                     isExpanded ? "is-expanded" : ""
 
-                  }`}
+                  }${selectedPendingIds.has(order.order_id) ? " is-selected" : ""}`}
 
                   key={order.order_id}
 
                 >
+
+                  <div className="shipping-order-row">
+
+                    <label
+
+                      className="shipping-order-select"
+
+                      onClick={(event) => event.stopPropagation()}
+
+                      onMouseDown={(event) => event.stopPropagation()}
+
+                    >
+
+                      <input
+
+                        aria-label={`Select order ${order.order_no}`}
+
+                        checked={selectedPendingIds.has(order.order_id)}
+
+                        onChange={(event) =>
+
+                          togglePendingSelection(order.order_id, event.target.checked)
+
+                        }
+
+                        type="checkbox"
+
+                      />
+
+                    </label>
 
                   <button
 
@@ -3141,6 +3422,8 @@ function Shipping({ userRole }) {
                     </span>
 
                   </button>
+
+                  </div>
 
 
 
@@ -5116,7 +5399,210 @@ function Shipping({ userRole }) {
 
 
 
-      {labelPrintDraft && (
+      
+      {easyshipDraft && (
+        <div
+          className="shipping-easyship-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !exportingEasyship) {
+              setEasyshipDraft(null);
+            }
+          }}
+        >
+          <section
+            aria-label="Review Easyship export"
+            aria-modal="true"
+            className="shipping-easyship-modal"
+            role="dialog"
+          >
+            <div className="shipping-easyship-modal-header">
+              <div>
+                <h3>Review selected orders</h3>
+                <p>Confirm package weight and dimensions, then download the Easyship import file.</p>
+              </div>
+              <button
+                aria-label="Close Easyship review"
+                className="shipping-label-modal-close"
+                disabled={exportingEasyship}
+                onClick={() => setEasyshipDraft(null)}
+                type="button"
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+
+            <div className="shipping-easyship-global-fields">
+              <label>
+                <span>Choose courier by</span>
+                <select
+                  onChange={(event) =>
+                    setEasyshipDraft((previous) =>
+                      previous
+                        ? { ...previous, choose_courier_by: event.target.value }
+                        : previous,
+                    )
+                  }
+                  value={easyshipDraft.choose_courier_by}
+                >
+                  {EASYSHIP_COURIER_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Taxes &amp; duties paid by</span>
+                <select
+                  onChange={(event) =>
+                    setEasyshipDraft((previous) =>
+                      previous
+                        ? { ...previous, taxes_duties_paid_by: event.target.value }
+                        : previous,
+                    )
+                  }
+                  value={easyshipDraft.taxes_duties_paid_by}
+                >
+                  <option value="Receiver">Receiver</option>
+                  <option value="Sender">Sender</option>
+                </select>
+              </label>
+              <label>
+                <span>Shipping insurance</span>
+                <select
+                  onChange={(event) =>
+                    setEasyshipDraft((previous) =>
+                      previous
+                        ? { ...previous, shipping_insurance: event.target.value }
+                        : previous,
+                    )
+                  }
+                  value={easyshipDraft.shipping_insurance}
+                >
+                  <option value="No">No</option>
+                  <option value="Yes ">Yes</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="shipping-easyship-order-list">
+              {pendingOrders
+                .filter((order) =>
+                  Object.prototype.hasOwnProperty.call(
+                    easyshipDraft.packages || {},
+                    order.order_id,
+                  ),
+                )
+                .map((order) => {
+                  const pack = easyshipDraft.packages[order.order_id] || {};
+                  return (
+                    <article className="shipping-easyship-order-card" key={order.order_id}>
+                      <div className="shipping-easyship-order-meta">
+                        <strong>#{order.order_no}</strong>
+                        <span>{order.customer_name || "Unnamed customer"}</span>
+                        <small>{order.customer_address || "No shipping address"}</small>
+                      </div>
+                      <div className="shipping-easyship-package-fields">
+                        <label>
+                          <span>Weight (lb)</span>
+                          <input
+                            inputMode="decimal"
+                            min="0.001"
+                            onChange={(event) =>
+                              updateEasyshipPackage(
+                                order.order_id,
+                                "weight_lb",
+                                event.target.value,
+                              )
+                            }
+                            placeholder="0.00"
+                            step="0.001"
+                            type="number"
+                            value={pack.weight_lb ?? ""}
+                          />
+                        </label>
+                        <label>
+                          <span>Length (in)</span>
+                          <input
+                            inputMode="decimal"
+                            min="0.001"
+                            onChange={(event) =>
+                              updateEasyshipPackage(
+                                order.order_id,
+                                "length_in",
+                                event.target.value,
+                              )
+                            }
+                            placeholder="L"
+                            step="0.01"
+                            type="number"
+                            value={pack.length_in ?? ""}
+                          />
+                        </label>
+                        <label>
+                          <span>Width (in)</span>
+                          <input
+                            inputMode="decimal"
+                            min="0.001"
+                            onChange={(event) =>
+                              updateEasyshipPackage(
+                                order.order_id,
+                                "width_in",
+                                event.target.value,
+                              )
+                            }
+                            placeholder="W"
+                            step="0.01"
+                            type="number"
+                            value={pack.width_in ?? ""}
+                          />
+                        </label>
+                        <label>
+                          <span>Height (in)</span>
+                          <input
+                            inputMode="decimal"
+                            min="0.001"
+                            onChange={(event) =>
+                              updateEasyshipPackage(
+                                order.order_id,
+                                "height_in",
+                                event.target.value,
+                              )
+                            }
+                            placeholder="H"
+                            step="0.01"
+                            type="number"
+                            value={pack.height_in ?? ""}
+                          />
+                        </label>
+                      </div>
+                    </article>
+                  );
+                })}
+            </div>
+
+            <div className="shipping-easyship-modal-actions">
+              <button
+                disabled={exportingEasyship}
+                onClick={() => setEasyshipDraft(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="shipping-easyship-download"
+                disabled={exportingEasyship}
+                onClick={downloadEasyshipExport}
+                type="button"
+              >
+                {exportingEasyship ? "Preparing…" : "Download Easyship Excel"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+{labelPrintDraft && (
 
         <div
 

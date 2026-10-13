@@ -92,6 +92,7 @@ from .services.shipping.usa_shipping import (
     parse_usa_rate_workbook,
     usa_rate_card_summary,
 )
+from .services.shipping.easyship_export import build_easyship_workbook_bytes
 from .integrations.fedex.tracking import (
     detect_carrier_by_tracking,
     fetch_fedex_tracking_batch,
@@ -18109,6 +18110,22 @@ class ShippingWeightOverridePayload(BaseModel):
     weight_kg: float | None = Field(default=None, gt=0)
 
 
+class EasyshipPackagePayload(BaseModel):
+    order_id: int
+    weight_lb: float = Field(gt=0)
+    length_in: float = Field(gt=0)
+    width_in: float = Field(gt=0)
+    height_in: float = Field(gt=0)
+
+
+class EasyshipExportPayload(BaseModel):
+    order_ids: list[int] = Field(min_length=1)
+    packages: list[EasyshipPackagePayload] = Field(min_length=1)
+    choose_courier_by: str = "Best Value For Money"
+    taxes_duties_paid_by: str = "Receiver"
+    shipping_insurance: str = "No"
+
+
 @app.get("/shipping/usa-rate-card")
 def get_usa_shipping_rate_card():
     try:
@@ -18299,6 +18316,81 @@ def get_pending_shipping_orders(request: Request, db: Session = Depends(get_db))
             ],
         })
     return pending_orders
+
+
+@app.post("/shipping/easyship-export")
+def export_easyship_shipments(
+    payload: EasyshipExportPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Download selected pending orders as an Easyship Imperial import workbook."""
+    get_authenticated_user(request, db)
+    access_privacy_context(request, db)
+
+    order_ids = []
+    seen = set()
+    for order_id in payload.order_ids:
+        value = int(order_id)
+        if value in seen:
+            continue
+        seen.add(value)
+        order_ids.append(value)
+
+    packages_by_order_id = {}
+    for package in payload.packages:
+        packages_by_order_id[int(package.order_id)] = {
+            "weight_lb": float(package.weight_lb),
+            "length_in": float(package.length_in),
+            "width_in": float(package.width_in),
+            "height_in": float(package.height_in),
+        }
+
+    missing_packages = [order_id for order_id in order_ids if order_id not in packages_by_order_id]
+    if missing_packages:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Package size/weight required for order ids: {', '.join(map(str, missing_packages))}",
+        )
+
+    orders = (
+        db.query(Order)
+        .options(
+            joinedload(Order.customer),
+            selectinload(Order.items).joinedload(OrderItem.product),
+        )
+        .filter(Order.id.in_(order_ids))
+        .all()
+    )
+    orders_by_id = {order.id: order for order in orders}
+    missing_orders = [order_id for order_id in order_ids if order_id not in orders_by_id]
+    if missing_orders:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Orders not found: {', '.join(map(str, missing_orders))}",
+        )
+
+    ordered = [orders_by_id[order_id] for order_id in order_ids]
+    try:
+        content = build_easyship_workbook_bytes(
+            ordered,
+            packages_by_order_id,
+            choose_courier_by=str(payload.choose_courier_by or "Best Value For Money").strip()
+            or "Best Value For Money",
+            taxes_duties_paid_by=str(payload.taxes_duties_paid_by or "Receiver").strip() or "Receiver",
+            shipping_insurance=str(payload.shipping_insurance or "No").strip() or "No",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    filename = f"easyship-shipments-{datetime.now().strftime('%Y%m%d-%H%M')}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def deduct_order_items_for_shipping(db: Session, order_obj: Order):

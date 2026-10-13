@@ -4402,3 +4402,241 @@
 .shipping-label-preview.is-positioned {
   font-family: Arial, Helvetica, sans-serif;
 }
+
+
+/* Easyship pending dispatch selection + review */
+.shipping-pending-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.shipping-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #334155;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.shipping-select-all input,
+.shipping-order-select input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #1f2937;
+  cursor: pointer;
+}
+
+.shipping-easyship-button {
+  border: 1px solid #1f2937;
+  border-radius: 999px;
+  background: #1f2937;
+  color: #ffffff;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shipping-easyship-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.shipping-easyship-button-secondary {
+  background: #ffffff;
+  color: #1f2937;
+}
+
+.shipping-order-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.shipping-order-select {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  margin: 0;
+  padding-left: 14px;
+  cursor: pointer;
+}
+
+.shipping-order-row .shipping-order-header {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shipping-order-card.is-selected {
+  background: #f8fafc;
+}
+
+.shipping-order-card.is-selected .shipping-order-header {
+  background: #f8fafc;
+}
+
+.shipping-easyship-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.shipping-easyship-modal {
+  width: min(920px, 100%);
+  max-height: min(90vh, 900px);
+  overflow: auto;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.shipping-easyship-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.shipping-easyship-modal-header h3 {
+  margin: 0 0 4px;
+  font-size: 1.15rem;
+}
+
+.shipping-easyship-modal-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.92rem;
+}
+
+.shipping-easyship-global-fields,
+.shipping-easyship-package-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.shipping-easyship-global-fields {
+  padding: 16px 22px 8px;
+}
+
+.shipping-easyship-global-fields label,
+.shipping-easyship-package-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.shipping-easyship-global-fields input,
+.shipping-easyship-global-fields select,
+.shipping-easyship-package-fields input {
+  width: 100%;
+  border: 1px solid #d0d7de;
+  border-radius: 10px;
+  padding: 9px 11px;
+  font: inherit;
+  font-weight: 500;
+  color: #0f172a;
+  background: #fff;
+}
+
+.shipping-easyship-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 22px 16px;
+}
+
+.shipping-easyship-order-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px;
+  background: #fafafa;
+}
+
+.shipping-easyship-order-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.shipping-easyship-order-meta strong {
+  font-size: 0.98rem;
+}
+
+.shipping-easyship-order-meta span {
+  color: #334155;
+  font-size: 0.9rem;
+}
+
+.shipping-easyship-order-meta small {
+  color: #64748b;
+  white-space: pre-wrap;
+}
+
+.shipping-easyship-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.shipping-easyship-modal-actions button {
+  border: 1px solid #d0d7de;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 9px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shipping-easyship-download {
+  border-color: #1f2937 !important;
+  background: #1f2937 !important;
+  color: #ffffff !important;
+}
+
+.shipping-easyship-modal-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .shipping-pending-toolbar {
+    justify-content: stretch;
+  }
+
+  .shipping-pending-toolbar .shipping-search-box {
+    width: 100%;
+  }
+
+  .shipping-order-select {
+    padding-left: 10px;
+    flex-basis: 36px;
+  }
+}
+
