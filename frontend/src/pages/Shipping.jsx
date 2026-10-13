@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import JsBarcode from "jsbarcode";
 import api, { API_BASE_URL, apiFetch, getApiBaseUrl, getAuthHeaders, getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
@@ -703,6 +704,8 @@ function Shipping({ userRole }) {
   const [etaMenuRecordId, setEtaMenuRecordId] = useState(null);
   const [etaDraftById, setEtaDraftById] = useState({});
   const [updatingEtaRecordId, setUpdatingEtaRecordId] = useState(null);
+  const [etaMenuPosition, setEtaMenuPosition] = useState(null);
+  const etaDateInputRef = useRef(null);
 
 
   const [copiedOrderId, setCopiedOrderId] = useState(null);
@@ -1454,13 +1457,37 @@ function Shipping({ userRole }) {
     });
   };
 
-  const openEstimatedDeliveryMenu = (record) => {
+  const openEstimatedDeliveryMenu = (record, anchorEl) => {
     setStatusMenuRecordId(null);
+    const nextDraft = toDateInputValue(record.estimated_delivery_at);
     setEtaDraftById((previous) => ({
       ...previous,
-      [record.id]: toDateInputValue(record.estimated_delivery_at),
+      [record.id]: nextDraft,
     }));
-    setEtaMenuRecordId((previous) => (previous === record.id ? null : record.id));
+    setEtaMenuRecordId((previous) => {
+      if (previous === record.id) {
+        setEtaMenuPosition(null);
+        return null;
+      }
+      if (anchorEl?.getBoundingClientRect) {
+        const rect = anchorEl.getBoundingClientRect();
+        const menuWidth = 260;
+        const left = Math.min(
+          Math.max(12, rect.right - menuWidth),
+          window.innerWidth - menuWidth - 12,
+        );
+        const top = Math.min(rect.bottom + 8, window.innerHeight - 180);
+        setEtaMenuPosition({ top, left, width: menuWidth });
+      } else {
+        setEtaMenuPosition({ top: 120, left: 120, width: 260 });
+      }
+      return record.id;
+    });
+  };
+
+  const closeEstimatedDeliveryMenu = () => {
+    setEtaMenuRecordId(null);
+    setEtaMenuPosition(null);
   };
 
   const handleEstimatedDeliveryChange = async (record, { clear = false } = {}) => {
@@ -1489,7 +1516,7 @@ function Shipping({ userRole }) {
           ),
         );
       }
-      setEtaMenuRecordId(null);
+      closeEstimatedDeliveryMenu();
       setNotice(
         clear || !draft
           ? `Cleared estimated delivery for order ${record.order_no}.`
@@ -5038,7 +5065,12 @@ function Shipping({ userRole }) {
 
                       </td>
 
-                      <td data-label="Est. Delivery">
+                      <td
+                        className={`shipping-eta-cell-td${
+                          etaMenuRecordId === record.id ? " is-eta-open" : ""
+                        }`}
+                        data-label="Est. Delivery"
+                      >
                         {(() => {
                           const isMenuOpen = etaMenuRecordId === record.id;
                           const isUpdating = updatingEtaRecordId === record.id;
@@ -5049,93 +5081,150 @@ function Shipping({ userRole }) {
                           return (
                             <div className="shipping-eta-cell">
                               <div className="shipping-eta-badge-container">
-                                <span
+                                <button
                                   className={`shipping-eta-badge ${
                                     hasDate ? "is-set" : "is-empty"
                                   }`}
+                                  disabled={isUpdating}
+                                  onClick={(event) =>
+                                    openEstimatedDeliveryMenu(
+                                      record,
+                                      event.currentTarget,
+                                    )
+                                  }
+                                  title="Set estimated delivery date"
+                                  type="button"
                                 >
                                   {formatEstimatedDelivery(record.estimated_delivery_at)}
-                                </span>
-                                <div className="shipping-status-menu-anchor">
-                                  <button
-                                    aria-expanded={isMenuOpen}
-                                    aria-haspopup="dialog"
-                                    aria-label={`Set estimated delivery for order ${record.order_no}`}
-                                    className={`shipping-status-menu-btn ${
-                                      isMenuOpen ? "is-open" : ""
-                                    }`}
-                                    disabled={isUpdating}
-                                    onClick={() => openEstimatedDeliveryMenu(record)}
-                                    title="Set or change estimated delivery date"
-                                    type="button"
-                                  >
-                                    <Icon
-                                      name={isUpdating ? "refresh" : "chevron"}
-                                      size={11}
+                                  <Icon
+                                    name={isUpdating ? "refresh" : "chevron"}
+                                    size={11}
+                                  />
+                                </button>
+                              </div>
+                              {isMenuOpen &&
+                                etaMenuPosition &&
+                                createPortal(
+                                  <>
+                                    <div
+                                      className="shipping-eta-portal-backdrop"
+                                      onMouseDown={(event) => {
+                                        if (event.target === event.currentTarget) {
+                                          closeEstimatedDeliveryMenu();
+                                        }
+                                      }}
                                     />
-                                  </button>
-                                  {isMenuOpen && (
-                                    <>
-                                      <div
-                                        className="shipping-status-menu-backdrop shipping-eta-menu-backdrop"
-                                        onMouseDown={(event) => {
-                                          // Close only for true outside clicks; ignore date-picker UI.
-                                          if (event.target === event.currentTarget) {
-                                            setEtaMenuRecordId(null);
+                                    <div
+                                      className="shipping-eta-portal-menu"
+                                      role="dialog"
+                                      aria-label="Estimated delivery"
+                                      style={{
+                                        top: etaMenuPosition.top,
+                                        left: etaMenuPosition.left,
+                                        width: etaMenuPosition.width,
+                                      }}
+                                      onMouseDown={(event) => event.stopPropagation()}
+                                      onClick={(event) => event.stopPropagation()}
+                                    >
+                                      <strong className="shipping-eta-portal-title">
+                                        Estimated delivery
+                                      </strong>
+                                      <label className="shipping-eta-date-field">
+                                        <span>Date</span>
+                                        <input
+                                          ref={etaDateInputRef}
+                                          autoFocus
+                                          onChange={(event) =>
+                                            setEtaDraftById((previous) => ({
+                                              ...previous,
+                                              [record.id]: event.target.value,
+                                            }))
+                                          }
+                                          onKeyDown={(event) => {
+                                            if (event.key === "Escape") {
+                                              closeEstimatedDeliveryMenu();
+                                            }
+                                          }}
+                                          type="date"
+                                          value={draftValue}
+                                        />
+                                      </label>
+                                      <button
+                                        className="shipping-eta-open-calendar"
+                                        onClick={() => {
+                                          const input = etaDateInputRef.current;
+                                          if (!input) return;
+                                          input.focus();
+                                          if (typeof input.showPicker === "function") {
+                                            try {
+                                              input.showPicker();
+                                            } catch {
+                                              input.click();
+                                            }
+                                          } else {
+                                            input.click();
                                           }
                                         }}
-                                      />
-                                      <div
-                                        className="shipping-eta-dropdown-menu"
-                                        role="dialog"
-                                        aria-label="Estimated delivery"
-                                        onMouseDown={(event) => event.stopPropagation()}
-                                        onClick={(event) => event.stopPropagation()}
+                                        type="button"
                                       >
-                                        <label className="shipping-eta-date-field">
-                                          <span>Estimated delivery</span>
-                                          <input
-                                            autoFocus
-                                            onChange={(event) =>
-                                              setEtaDraftById((previous) => ({
-                                                ...previous,
-                                                [record.id]: event.target.value,
-                                              }))
-                                            }
-                                            onClick={(event) => event.stopPropagation()}
-                                            onMouseDown={(event) => event.stopPropagation()}
-                                            type="date"
-                                            value={draftValue}
-                                          />
-                                        </label>
-                                        <div className="shipping-eta-menu-actions">
-                                          <button
-                                            disabled={isUpdating || !hasDate}
-                                            onClick={() =>
-                                              handleEstimatedDeliveryChange(record, {
-                                                clear: true,
-                                              })
-                                            }
-                                            type="button"
-                                          >
-                                            Clear
-                                          </button>
-                                          <button
-                                            className="shipping-eta-save"
-                                            disabled={isUpdating || !draftValue}
-                                            onClick={() =>
-                                              handleEstimatedDeliveryChange(record)
-                                            }
-                                            type="button"
-                                          >
-                                            {isUpdating ? "Saving…" : "Save"}
-                                          </button>
-                                        </div>
+                                        Open calendar
+                                      </button>
+                                      <div className="shipping-eta-menu-actions">
+                                        <button
+                                          disabled={isUpdating || !hasDate}
+                                          onClick={() =>
+                                            handleEstimatedDeliveryChange(record, {
+                                              clear: true,
+                                            })
+                                          }
+                                          type="button"
+                                        >
+                                          Clear
+                                        </button>
+                                        <button
+                                          className="shipping-eta-save"
+                                          disabled={isUpdating || !draftValue}
+                                          onClick={() =>
+                                            handleEstimatedDeliveryChange(record)
+                                          }
+                                          type="button"
+                                        >
+                                          {isUpdating ? "Saving…" : "Save"}
+                                        </button>
                                       </div>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
+                                    </div>
+                                  </>,
+                                  document.body,
+                                )}
+                            </div>
+                          );
+                        })()}
+                      </td>
+
+                      <td className="shipping-weight-cell" data-label="Weight">) =>
+                                            handleEstimatedDeliveryChange(record, {
+                                              clear: true,
+                                            })
+                                          }
+                                          type="button"
+                                        >
+                                          Clear
+                                        </button>
+                                        <button
+                                          className="shipping-eta-save"
+                                          disabled={isUpdating || !draftValue}
+                                          onClick={() =>
+                                            handleEstimatedDeliveryChange(record)
+                                          }
+                                          type="button"
+                                        >
+                                          {isUpdating ? "Saving…" : "Save"}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </>,
+                                  document.body,
+                                )}
                             </div>
                           );
                         })()}
