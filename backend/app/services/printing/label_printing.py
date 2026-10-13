@@ -139,6 +139,7 @@ def _status_matches(win32print: object, status: int, flags: tuple[tuple[str, int
 def _wmi_printer_offline(printer_name: str) -> tuple[bool, str]:
     """Return (is_offline, detail) using WMI — catches USB unplug faster than spooler Status alone."""
     com_initialized = False
+    wmi = matches = printer = None
     try:
         import pythoncom
         pythoncom.CoInitialize()
@@ -165,31 +166,56 @@ def _wmi_printer_offline(printer_name: str) -> tuple[bool, str]:
     except Exception:
         pass
     finally:
+        printer = matches = wmi = None
         if com_initialized:
             pythoncom.CoUninitialize()
     return False, ""
 
 
+def _usb_port_present(port_name: str) -> bool | None:
+    """Match a spooler USB port to a currently present USBPRINT devnode.
+
+    EnumPorts and Win32_Printer retain installed queues after unplugging.
+    CM_Locate_DevNode without PHANTOM only locates present hardware.
+    """
+    import ctypes
+    import winreg
+
+    root_path = r"SYSTEM\CurrentControlSet\Enum\USBPRINT"
+    try:
+        locate = ctypes.WinDLL("cfgmgr32").CM_Locate_DevNodeW
+        locate.argtypes = [ctypes.POINTER(ctypes.c_ulong), ctypes.c_wchar_p, ctypes.c_ulong]
+        locate.restype = ctypes.c_ulong
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, root_path) as root:
+            for model_index in range(winreg.QueryInfoKey(root)[0]):
+                model = winreg.EnumKey(root, model_index)
+                with winreg.OpenKey(root, model) as model_key:
+                    for instance_index in range(winreg.QueryInfoKey(model_key)[0]):
+                        instance = winreg.EnumKey(model_key, instance_index)
+                        try:
+                            with winreg.OpenKey(model_key, instance + r"\Device Parameters") as params:
+                                assigned_port = winreg.QueryValueEx(params, "PortName")[0]
+                        except FileNotFoundError:
+                            continue
+                        if str(assigned_port).upper() != port_name.strip().upper():
+                            continue
+                        node = ctypes.c_ulong()
+                        device_id = "USBPRINT\\" + model + "\\" + instance
+                        if locate(ctypes.byref(node), device_id, 0) == 0:
+                            return True
+        return False
+    except FileNotFoundError:
+        return False
+    except (OSError, AttributeError):
+        return None
+
+
 def _usb_port_missing(port_name: str) -> bool:
-    """True when a USB* spooler port is gone after unplug."""
     clean = str(port_name or "").strip()
     if not clean.upper().startswith("USB"):
         return False
-    try:
-        win32print = _win32print()
-        names = set()
-        for entry in win32print.EnumPorts(None, 1):
-            if isinstance(entry, Mapping):
-                names.add(str(entry.get("Name") or entry.get("pName") or "").strip().upper())
-            elif isinstance(entry, (list, tuple)) and entry:
-                names.add(str(entry[0] or "").strip().upper())
-            else:
-                names.add(str(entry or "").strip().upper())
-        if not names:
-            return False
-        return clean.upper() not in names
-    except Exception:
-        return False
+    # Never advertise connected hardware when its presence cannot be verified.
+    return _usb_port_present(clean) is not True
 
 
 def _clear_work_offline_attribute(printer_name: str) -> None:
@@ -261,14 +287,13 @@ def _printer_connection_status(printer_name: str) -> dict:
     wmi_offline, wmi_detail = _wmi_printer_offline(printer_name)
     usb_gone = _usb_port_missing(port_name)
 
-    # USB port + WMI are the truth for plug/unplug. Sticky WORK_OFFLINE alone must not
-    # keep live stuck on "Not connected" after the cable is plugged back in.
+    # Reading status must not alter the Windows work-offline setting.
     hardware_offline = wmi_offline or usb_gone
     if hardware_offline:
         if "Offline" not in blocking_statuses:
             blocking_statuses.append("Offline")
     elif attr_work_offline:
-        _clear_work_offline_attribute(printer_name)
+        blocking_statuses.append("Offline")
 
     status_labels = blocking_statuses + active_statuses
     detail = ""

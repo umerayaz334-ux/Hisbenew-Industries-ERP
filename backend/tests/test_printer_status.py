@@ -52,3 +52,19 @@ class PrinterStatusTests(unittest.TestCase):
                 agent.heartbeat_loop({'security_token': ''})
         messages = [json.loads(call.args[0]) for call in ws.send.call_args_list]
         self.assertEqual([message['status']['connected'] for message in messages], [True, False])
+
+
+class UsbPresenceTests(unittest.TestCase):
+    def test_installed_ready_queue_does_not_override_missing_usb(self):
+        from app.services.printing import label_printing as printing
+        spooler = Mock()
+        spooler.GetPrinter.return_value = {"Status": 0, "Attributes": 0, "pPortName": "USB001"}
+        # Constants must be integers, just as in win32print.
+        for name, value, _ in printing.BLOCKING_PRINTER_STATUS_FLAGS + printing.NON_BLOCKING_PRINTER_STATUS_FLAGS:
+            setattr(spooler, name, value)
+        spooler.PRINTER_ATTRIBUTE_WORK_OFFLINE = 1024
+        with patch.object(printing, '_win32print', return_value=spooler), patch.object(printing, '_wmi_printer_offline', return_value=(False, '')):
+            for present, expected in ((False, False), (None, False), (True, True)):
+                with patch.object(printing, '_usb_port_present', return_value=present):
+                    self.assertEqual(printing._printer_connection_status('USB printer')['is_connected'], expected)
+            spooler.SetPrinter.assert_not_called()
