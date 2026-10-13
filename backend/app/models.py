@@ -1608,6 +1608,7 @@ class Shipping(Base):
     calculated_weight_kg = Column(Float, nullable=True)
     estimated_shipping_cost = Column(Float, nullable=True)
     rate_source_version = Column(String, nullable=True)
+    estimated_delivery_at = Column(DateTime, nullable=True)
 
     shipped_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)

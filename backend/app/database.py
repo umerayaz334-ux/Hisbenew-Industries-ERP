@@ -1474,6 +1474,7 @@ def migrate_database():
                 "calculated_weight_kg": "FLOAT",
                 "estimated_shipping_cost": "FLOAT",
                 "rate_source_version": "VARCHAR",
+                "estimated_delivery_at": "DATETIME",
             }
             for column_name, column_def in shipping_rate_columns.items():
                 if column_name not in shipping_columns:

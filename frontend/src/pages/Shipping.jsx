@@ -700,6 +700,10 @@ function Shipping({ userRole }) {
   const [statusMenuRecordId, setStatusMenuRecordId] = useState(null);
 
   const [updatingStatusRecordId, setUpdatingStatusRecordId] = useState(null);
+  const [etaMenuRecordId, setEtaMenuRecordId] = useState(null);
+  const [etaDraftById, setEtaDraftById] = useState({});
+  const [updatingEtaRecordId, setUpdatingEtaRecordId] = useState(null);
+
 
   const [copiedOrderId, setCopiedOrderId] = useState(null);
 
@@ -1425,6 +1429,85 @@ function Shipping({ userRole }) {
   };
 
 
+
+  const toDateInputValue = (value) => {
+    if (!value) return "";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+      return match ? match[1] : "";
+    }
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatEstimatedDelivery = (value) => {
+    if (!value) return "Not set";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Not set";
+    return parsed.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const openEstimatedDeliveryMenu = (record) => {
+    setStatusMenuRecordId(null);
+    setEtaDraftById((previous) => ({
+      ...previous,
+      [record.id]: toDateInputValue(record.estimated_delivery_at),
+    }));
+    setEtaMenuRecordId((previous) => (previous === record.id ? null : record.id));
+  };
+
+  const handleEstimatedDeliveryChange = async (record, { clear = false } = {}) => {
+    setUpdatingEtaRecordId(record.id);
+    setNotice("");
+    try {
+      const draft = etaDraftById[record.id] ?? toDateInputValue(record.estimated_delivery_at);
+      const payload = clear
+        ? { clear_estimated_delivery: true }
+        : {
+            estimated_delivery_at: draft
+              ? new Date(`${draft}T12:00:00`).toISOString()
+              : undefined,
+            clear_estimated_delivery: !draft,
+          };
+      if (!clear && !draft) {
+        setNotice("Choose an estimated delivery date first.");
+        return;
+      }
+      const response = await api.patch(`/shipping/${record.id}`, payload);
+      const saved = response?.data;
+      if (saved?.id) {
+        setShippingRecords((previous) =>
+          (Array.isArray(previous) ? previous : []).map((item) =>
+            item.id === saved.id ? { ...item, ...saved } : item,
+          ),
+        );
+      }
+      setEtaMenuRecordId(null);
+      setNotice(
+        clear || !draft
+          ? `Cleared estimated delivery for order ${record.order_no}.`
+          : `Estimated delivery for order ${record.order_no} saved as ${formatEstimatedDelivery(
+              saved?.estimated_delivery_at || draft,
+            )}.`,
+      );
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      setNotice(
+        typeof detail === "string"
+          ? detail
+          : error?.message || "Failed to update estimated delivery.",
+      );
+    } finally {
+      setUpdatingEtaRecordId(null);
+    }
+  };
 
   const handleManualStatusChange = async (record, newStage) => {
     setStatusMenuRecordId(null);
@@ -4464,6 +4547,8 @@ function Shipping({ userRole }) {
 
                   <th>Status</th>
 
+                  <th>Est. Delivery</th>
+
                   <th className="shipping-align-right">Weight</th>
 
                   <th className="shipping-align-right">Cost</th>
@@ -4860,7 +4945,10 @@ function Shipping({ userRole }) {
 
                                     disabled={isUpdating}
 
-                                    onClick={() => setStatusMenuRecordId((prev) => (prev === record.id ? null : record.id))}
+                                    onClick={() => {
+                                      setEtaMenuRecordId(null);
+                                      setStatusMenuRecordId((prev) => (prev === record.id ? null : record.id));
+                                    }}
 
                                     title="Click to manually change status (Delivered, In Transit, Shipped, etc.)"
 
@@ -4948,6 +5036,99 @@ function Shipping({ userRole }) {
 
                         })()}
 
+                      </td>
+
+                      <td data-label="Est. Delivery">
+                        {(() => {
+                          const isMenuOpen = etaMenuRecordId === record.id;
+                          const isUpdating = updatingEtaRecordId === record.id;
+                          const draftValue =
+                            etaDraftById[record.id] ??
+                            toDateInputValue(record.estimated_delivery_at);
+                          const hasDate = Boolean(record.estimated_delivery_at);
+                          return (
+                            <div className="shipping-eta-cell">
+                              <div className="shipping-eta-badge-container">
+                                <span
+                                  className={`shipping-eta-badge ${
+                                    hasDate ? "is-set" : "is-empty"
+                                  }`}
+                                >
+                                  {formatEstimatedDelivery(record.estimated_delivery_at)}
+                                </span>
+                                <div className="shipping-status-menu-anchor">
+                                  <button
+                                    aria-expanded={isMenuOpen}
+                                    aria-haspopup="dialog"
+                                    aria-label={`Set estimated delivery for order ${record.order_no}`}
+                                    className={`shipping-status-menu-btn ${
+                                      isMenuOpen ? "is-open" : ""
+                                    }`}
+                                    disabled={isUpdating}
+                                    onClick={() => openEstimatedDeliveryMenu(record)}
+                                    title="Set or change estimated delivery date"
+                                    type="button"
+                                  >
+                                    <Icon
+                                      name={isUpdating ? "refresh" : "chevron"}
+                                      size={11}
+                                    />
+                                  </button>
+                                  {isMenuOpen && (
+                                    <>
+                                      <div
+                                        className="shipping-status-menu-backdrop"
+                                        onClick={() => setEtaMenuRecordId(null)}
+                                      />
+                                      <div
+                                        className="shipping-eta-dropdown-menu"
+                                        role="dialog"
+                                        aria-label="Estimated delivery"
+                                      >
+                                        <label className="shipping-eta-date-field">
+                                          <span>Estimated delivery</span>
+                                          <input
+                                            onChange={(event) =>
+                                              setEtaDraftById((previous) => ({
+                                                ...previous,
+                                                [record.id]: event.target.value,
+                                              }))
+                                            }
+                                            type="date"
+                                            value={draftValue}
+                                          />
+                                        </label>
+                                        <div className="shipping-eta-menu-actions">
+                                          <button
+                                            disabled={isUpdating || !hasDate}
+                                            onClick={() =>
+                                              handleEstimatedDeliveryChange(record, {
+                                                clear: true,
+                                              })
+                                            }
+                                            type="button"
+                                          >
+                                            Clear
+                                          </button>
+                                          <button
+                                            className="shipping-eta-save"
+                                            disabled={isUpdating || !draftValue}
+                                            onClick={() =>
+                                              handleEstimatedDeliveryChange(record)
+                                            }
+                                            type="button"
+                                          >
+                                            {isUpdating ? "Saving…" : "Save"}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       <td className="shipping-weight-cell" data-label="Weight">

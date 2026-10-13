@@ -7582,6 +7582,7 @@ def shipping_response(shipping: Shipping, privacy: dict | None = None):
         "estimated_shipping_cost": shipping.estimated_shipping_cost,
         "rate_source_version": shipping.rate_source_version,
         "shipping_status": order.shipping_status if order else "Shipped",
+        "estimated_delivery_at": getattr(shipping, "estimated_delivery_at", None),
         "shipped_at": shipping.shipped_at,
         "created_at": shipping.created_at,
         "updated_at": shipping.updated_at,
@@ -18873,6 +18874,11 @@ def update_shipping_record(
 
     if shipping_update.shipping_service is not None:
         record.shipping_service = normalize_usa_shipping_service(shipping_update.shipping_service)
+
+    if shipping_update.clear_estimated_delivery:
+        record.estimated_delivery_at = None
+    elif shipping_update.estimated_delivery_at is not None:
+        record.estimated_delivery_at = shipping_update.estimated_delivery_at
 
     record.updated_at = datetime.utcnow()
 

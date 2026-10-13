@@ -955,6 +955,8 @@ class ShippingUpdate(BaseModel):
     shipping_cost: float | None = None
     shipping_note: str | None = None
     shipping_service: str | None = None
+    estimated_delivery_at: datetime | None = None
+    clear_estimated_delivery: bool = False
 
 
 class ShippingOut(BaseModel):
@@ -978,6 +980,7 @@ class ShippingOut(BaseModel):
     carrier_url: str | None = None
     detected_carrier: str | None = None
     shipping_status: str | None = None
+    estimated_delivery_at: datetime | None = None
     shipped_at: datetime
     created_at: datetime
     updated_at: datetime
