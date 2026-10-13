@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
 import "./Customers.css";
+import "./Customers.mobile.css";
 
 const createEmptyForm = () => ({
   name: "",

@@ -30,8 +30,8 @@
     rgba(17, 24, 39, 0.06) 0 10px 24px -12px,
     rgba(17, 24, 39, 0.04) 0 1px 3px;
 
-  --sans: "Open Sans", Roboto, Verdana, Arial, sans-serif;
-  --heading: "Open Sans", Roboto, Verdana, Arial, sans-serif;
+  --sans: Verdana, "Segoe UI", Arial, sans-serif;
+  --heading: Verdana, "Segoe UI", Arial, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 16px/145% var(--sans);

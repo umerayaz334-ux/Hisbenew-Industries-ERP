@@ -24,7 +24,9 @@ import {
   pickLabelFields,
   readLabelPrinterSettings,
   readStoredText,
-} from "../utils/labelPrintUtils";import "./Shipping.css";
+} from "../utils/labelPrintUtils";
+import "./Shipping.css";
+import "./Shipping.mobile.css";
 
 import "./Products.css";
 

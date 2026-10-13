@@ -18,58 +18,130 @@ import "./pages/DashboardDesktop.css";
 import "./pages/DashboardFocus.css";
 import { DEFAULT_SCHOOL_SETTINGS, normalizeSchoolSettings, schoolThemeStyle } from "./school/theme";
 
-const Products = lazy(() => import("./pages/Products"));
-const Inventory = lazy(() => import("./pages/Inventory"));
-const Inspiration = lazy(() => import("./pages/Inspiration"));
-const Customers = lazy(() => import("./pages/Customers"));
-const Suppliers = lazy(() => import("./pages/Suppliers"));
-const SupplierLedger = lazy(() => import("./pages/SupplierLedger"));
-const Orders = lazy(() => import("./pages/Orders"));
-const Manufacturing = lazy(() => import("./pages/Manufacturing"));
-const Workers = lazy(() => import("./pages/Workers"));
-const Shipping = lazy(() => import("./pages/Shipping"));
-const ShippingBalance = lazy(() => import("./pages/ShippingBalance"));
-const Fulfillment = lazy(() => import("./pages/Fulfillment"));
-const LabelPrinter = lazy(() => import("./pages/LabelPrinter"));
-const PrinterSettings = lazy(() => import("./pages/PrinterSettings"));
-const ServiceTakers = lazy(() => import("./pages/ServiceTakers"));
-const ServiceTakerPortal = lazy(() => import("./pages/ServiceTakerPortal"));
-const LocalOrders = lazy(() => import("./pages/LocalOrders"));
-const FollowUps = lazy(() => import("./pages/FollowUps"));
-const Payouts = lazy(() => import("./pages/Payouts"));
-const Payments = lazy(() => import("./pages/Payments"));
-const WorkerPayouts = lazy(() => import("./pages/WorkerPayouts"));
-const WorkerAccounts2 = lazy(() => import("./pages/WorkerAccounts2"));
-const Accounting = lazy(() => import("./pages/Accounting"));
-const Production = lazy(() => import("./pages/Production"));
-const MyTasks = lazy(() => import("./pages/MyTasks"));
-const Reports = lazy(() => import("./pages/Reports"));
-const Website = lazy(() => import("./pages/Website"));
-const WebsiteAdmin = lazy(() => import("./pages/WebsiteAdmin"));
-const WebsiteVisitors = lazy(() => import("./pages/WebsiteVisitors"));
-const Deployment = lazy(() => import("./pages/Deployment"));
-const WebsiteCatalog = lazy(() => import("./pages/WebsiteCatalog"));
-const Settings = lazy(() => import("./pages/Settings"));
-const AmazonSettings = lazy(() => import("./pages/AmazonSettings"));
-const AmazonListings = lazy(() => import("./pages/AmazonListings"));
-const AmazonOrders = lazy(() => import("./pages/AmazonOrders"));
-const AmazonFbaInbound = lazy(() => import("./pages/AmazonFbaInbound"));
-const AmazonFinances = lazy(() => import("./pages/AmazonFinances"));
-const AmazonPricing = lazy(() => import("./pages/AmazonPricing"));
-const Users = lazy(() => import("./pages/Users"));
-const Companies = lazy(() => import("./pages/Companies"));
+const pageImporters = {
+  Products: () => import("./pages/Products"),
+  Inventory: () => import("./pages/Inventory"),
+  Inspiration: () => import("./pages/Inspiration"),
+  Customers: () => import("./pages/Customers"),
+  Suppliers: () => import("./pages/Suppliers"),
+  "Supplier Ledger": () => import("./pages/SupplierLedger"),
+  Orders: () => import("./pages/Orders"),
+  Manufacturing: () => import("./pages/Manufacturing"),
+  Workers: () => import("./pages/Workers"),
+  Shipping: () => import("./pages/Shipping"),
+  "Shipping Balance": () => import("./pages/ShippingBalance"),
+  "Warehouse / Fulfillment": () => import("./pages/Fulfillment"),
+  "Warehouse Dispatch": () => import("./pages/Fulfillment"),
+  "Warehouse Shipments": () => import("./pages/Fulfillment"),
+  "Warehouse Stock": () => import("./pages/Fulfillment"),
+  "Label Printer": () => import("./pages/LabelPrinter"),
+  "Printer Settings": () => import("./pages/PrinterSettings"),
+  "Service Takers": () => import("./pages/ServiceTakers"),
+  "Service Dashboard": () => import("./pages/ServiceTakerPortal"),
+  "Service Products": () => import("./pages/ServiceTakerPortal"),
+  "Service Inbound": () => import("./pages/ServiceTakerPortal"),
+  "Service Shipments": () => import("./pages/ServiceTakerPortal"),
+  "Service Manufacturing": () => import("./pages/ServiceTakerPortal"),
+  "Service Quotations": () => import("./pages/ServiceTakerPortal"),
+  "Service Charges": () => import("./pages/ServiceTakerPortal"),
+  "Local Orders": () => import("./pages/LocalOrders"),
+  "Follow Ups": () => import("./pages/FollowUps"),
+  Payouts: () => import("./pages/Payouts"),
+  Billings: () => import("./pages/Payments"),
+  "Worker Payouts": () => import("./pages/WorkerPayouts"),
+  "Worker Accounts": () => import("./pages/WorkerAccounts2"),
+  Accounting: () => import("./pages/Accounting"),
+  Production: () => import("./pages/Production"),
+  "My Tasks": () => import("./pages/MyTasks"),
+  Reports: () => import("./pages/Reports"),
+  Website: () => import("./pages/WebsiteAdmin"),
+  "Website Visitors": () => import("./pages/WebsiteVisitors"),
+  Deployment: () => import("./pages/Deployment"),
+  WebsiteCatalog: () => import("./pages/WebsiteCatalog"),
+  Settings: () => import("./pages/Settings"),
+  "Amazon Settings": () => import("./pages/AmazonSettings"),
+  "Amazon Listings": () => import("./pages/AmazonListings"),
+  "Amazon FBA Orders": () => import("./pages/AmazonOrders"),
+  "Amazon FBA Inbound": () => import("./pages/AmazonFbaInbound"),
+  "Amazon Finances": () => import("./pages/AmazonFinances"),
+  "Amazon Pricing": () => import("./pages/AmazonPricing"),
+  Users: () => import("./pages/Users"),
+  Companies: () => import("./pages/Companies"),
+  "Add Company": () => import("./pages/Companies"),
+  Quotes: () => import("./pages/Quotes"),
+  TempData: () => import("./pages/TempData"),
+  Messages: () => import("./pages/Messages"),
+  "Copy Clipboard": () => import("./pages/CopyClipboard"),
+  "School ERP": () => import("./school/pages/SchoolDashboard"),
+  "School Students": () => import("./school/pages/SchoolStudents"),
+  "School Settings": () => import("./school/pages/SchoolSettings"),
+  "School Foundation": () => import("./school/pages/SchoolFoundation"),
+  "School Admission Apply": () => import("./school/pages/SchoolAdmissionApply"),
+  "School Attendance": () => import("./school/pages/SchoolAttendance"),
+  "School Finance": () => import("./school/pages/SchoolFinance"),
+};
+
+const Products = lazy(pageImporters.Products);
+const Inventory = lazy(pageImporters.Inventory);
+const Inspiration = lazy(pageImporters.Inspiration);
+const Customers = lazy(pageImporters.Customers);
+const Suppliers = lazy(pageImporters.Suppliers);
+const SupplierLedger = lazy(pageImporters["Supplier Ledger"]);
+const Orders = lazy(pageImporters.Orders);
+const Manufacturing = lazy(pageImporters.Manufacturing);
+const Workers = lazy(pageImporters.Workers);
+const Shipping = lazy(pageImporters.Shipping);
+const ShippingBalance = lazy(pageImporters["Shipping Balance"]);
+const Fulfillment = lazy(pageImporters["Warehouse / Fulfillment"]);
+const LabelPrinter = lazy(pageImporters["Label Printer"]);
+const PrinterSettings = lazy(pageImporters["Printer Settings"]);
+const ServiceTakers = lazy(pageImporters["Service Takers"]);
+const ServiceTakerPortal = lazy(pageImporters["Service Dashboard"]);
+const LocalOrders = lazy(pageImporters["Local Orders"]);
+const FollowUps = lazy(pageImporters["Follow Ups"]);
+const Payouts = lazy(pageImporters.Payouts);
+const Payments = lazy(pageImporters.Billings);
+const WorkerPayouts = lazy(pageImporters["Worker Payouts"]);
+const WorkerAccounts2 = lazy(pageImporters["Worker Accounts"]);
+const Accounting = lazy(pageImporters.Accounting);
+const Production = lazy(pageImporters.Production);
+const MyTasks = lazy(pageImporters["My Tasks"]);
+const Reports = lazy(pageImporters.Reports);
+const WebsiteAdmin = lazy(pageImporters.Website);
+const WebsiteVisitors = lazy(pageImporters["Website Visitors"]);
+const Deployment = lazy(pageImporters.Deployment);
+const WebsiteCatalog = lazy(pageImporters.WebsiteCatalog);
+const Settings = lazy(pageImporters.Settings);
+const AmazonSettings = lazy(pageImporters["Amazon Settings"]);
+const AmazonListings = lazy(pageImporters["Amazon Listings"]);
+const AmazonOrders = lazy(pageImporters["Amazon FBA Orders"]);
+const AmazonFbaInbound = lazy(pageImporters["Amazon FBA Inbound"]);
+const AmazonFinances = lazy(pageImporters["Amazon Finances"]);
+const AmazonPricing = lazy(pageImporters["Amazon Pricing"]);
+const Users = lazy(pageImporters.Users);
+const Companies = lazy(pageImporters.Companies);
 const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
-const Quotes = lazy(() => import("./pages/Quotes"));
-const TempData = lazy(() => import("./pages/TempData"));
-const Messages = lazy(() => import("./pages/Messages"));
-const CopyClipboard = lazy(() => import("./pages/CopyClipboard"));
-const SchoolDashboard = lazy(() => import("./school/pages/SchoolDashboard"));
-const SchoolStudents = lazy(() => import("./school/pages/SchoolStudents"));
-const SchoolSettings = lazy(() => import("./school/pages/SchoolSettings"));
-const SchoolFoundation = lazy(() => import("./school/pages/SchoolFoundation"));
-const SchoolAdmissionApply = lazy(() => import("./school/pages/SchoolAdmissionApply"));
-const SchoolAttendance = lazy(() => import("./school/pages/SchoolAttendance"));
-const SchoolFinance = lazy(() => import("./school/pages/SchoolFinance"));
+const Quotes = lazy(pageImporters.Quotes);
+const TempData = lazy(pageImporters.TempData);
+const Messages = lazy(pageImporters.Messages);
+const CopyClipboard = lazy(pageImporters["Copy Clipboard"]);
+const SchoolDashboard = lazy(pageImporters["School ERP"]);
+const SchoolStudents = lazy(pageImporters["School Students"]);
+const SchoolSettings = lazy(pageImporters["School Settings"]);
+const SchoolFoundation = lazy(pageImporters["School Foundation"]);
+const SchoolAdmissionApply = lazy(pageImporters["School Admission Apply"]);
+const SchoolAttendance = lazy(pageImporters["School Attendance"]);
+const SchoolFinance = lazy(pageImporters["School Finance"]);
+
+const prefetchedPages = new Set();
+const prefetchPageModule = (pageName) => {
+  const importer = pageImporters[pageName];
+  if (!importer || prefetchedPages.has(pageName)) return;
+  prefetchedPages.add(pageName);
+  importer().catch(() => {
+    prefetchedPages.delete(pageName);
+  });
+};
 
 const pagePaths = {
   Dashboard: "/portal",
@@ -791,43 +863,49 @@ function App() {
         }
       };
 
+      const countLoaders = [];
+
       if (sidebarRole === "worker" && sidebarWorkerId) {
-        await loadCount("My Tasks", async () => {
-          const [orderTasksResponse, productionTasksResponse] = await Promise.all([
-            api.get("/order-workflow/tasks", {
-              params: { worker_id: sidebarWorkerId },
-            }),
-            api.get("/production/tasks", {
-              params: { worker_id: sidebarWorkerId },
-            }),
-          ]);
-          const openOrderTasks = Array.isArray(orderTasksResponse.data)
-            ? orderTasksResponse.data.filter(
-                (task) =>
-                  task.status !== "Completed" && task.status !== "Canceled"
-              )
-            : [];
-          const openProductionTasks = Array.isArray(productionTasksResponse.data)
-            ? productionTasksResponse.data.filter(
-                (task) => task.status !== "Completed"
-              )
-            : [];
-          return {
-            "My Tasks": openOrderTasks.length + openProductionTasks.length,
-          };
-        });
+        countLoaders.push(
+          loadCount("My Tasks", async () => {
+            const [orderTasksResponse, productionTasksResponse] = await Promise.all([
+              api.get("/order-workflow/tasks", {
+                params: { worker_id: sidebarWorkerId },
+              }),
+              api.get("/production/tasks", {
+                params: { worker_id: sidebarWorkerId },
+              }),
+            ]);
+            const openOrderTasks = Array.isArray(orderTasksResponse.data)
+              ? orderTasksResponse.data.filter(
+                  (task) =>
+                    task.status !== "Completed" && task.status !== "Canceled"
+                )
+              : [];
+            const openProductionTasks = Array.isArray(productionTasksResponse.data)
+              ? productionTasksResponse.data.filter(
+                  (task) => task.status !== "Completed"
+                )
+              : [];
+            return {
+              "My Tasks": openOrderTasks.length + openProductionTasks.length,
+            };
+          })
+        );
       }
 
       if (
         ["admin", "manager", "warehouse", "super_admin"].includes(sidebarRole) &&
         allowedPagesForCounts.includes("Shipping")
       ) {
-        await loadCount("Shipping", async () => {
-          const response = await api.get("/shipping/pending-count");
-          return {
-            Shipping: Number(response.data?.count || 0),
-          };
-        });
+        countLoaders.push(
+          loadCount("Shipping", async () => {
+            const response = await api.get("/shipping/pending-count");
+            return {
+              Shipping: Number(response.data?.count || 0),
+            };
+          })
+        );
       }
 
       if (
@@ -835,38 +913,61 @@ function App() {
         (allowedPagesForCounts.includes("Warehouse / Fulfillment") ||
           allowedPagesForCounts.includes("Warehouse Dispatch"))
       ) {
-        await loadCount("Warehouse", async () => {
-          const response = await api.get("/fulfillment/dashboard");
-          const unfulfilledCount = Number(
-            response.data?.stats?.unfulfilled_orders || 0
-          );
-          return {
-            "Warehouse / Fulfillment": unfulfilledCount,
-            "Warehouse Dispatch": unfulfilledCount,
-          };
-        });
+        countLoaders.push(
+          loadCount("Warehouse", async () => {
+            const response = await api.get("/fulfillment/pending-count");
+            const unfulfilledCount = Number(response.data?.count || 0);
+            return {
+              "Warehouse / Fulfillment": unfulfilledCount,
+              "Warehouse Dispatch": unfulfilledCount,
+            };
+          })
+        );
       }
 
       if (allowedPagesForCounts.includes("Messages")) {
-        await loadCount("Messages", async () => {
-          const response = await api.get("/internal-messages/unread-count");
-          return { Messages: Number(response.data?.unread_count || 0) };
-        });
+        countLoaders.push(
+          loadCount("Messages", async () => {
+            const response = await api.get("/internal-messages/unread-count");
+            return { Messages: Number(response.data?.unread_count || 0) };
+          })
+        );
       }
 
       if (allowedPagesForCounts.includes("Website Visitors")) {
-        await loadCount("Website Visitors", async () => {
-          const response = await api.get("/visitor-chat/sessions/unread-count");
-          return {
-            "Website Visitors": Number(response.data?.unread_count || 0),
-          };
-        });
+        countLoaders.push(
+          loadCount("Website Visitors", async () => {
+            const response = await api.get("/visitor-chat/sessions/unread-count");
+            return {
+              "Website Visitors": Number(response.data?.unread_count || 0),
+            };
+          })
+        );
       }
 
+      await Promise.all(countLoaders);
       if (active) setSidebarCounts(nextCounts);
     };
 
+    const warmCommonPages = () => {
+      const warmList = [
+        "Orders",
+        "Shipping",
+        "Products",
+        "Customers",
+        "Accounting",
+        "Amazon Finances",
+        "Amazon FBA Orders",
+        "Warehouse / Fulfillment",
+      ].filter((page) => allowedPagesForCounts.includes(page));
+      warmList.forEach((page) => prefetchPageModule(page));
+    };
+
     const initialLoadId = setTimeout(loadSidebarCounts, 0);
+    const warmId =
+      typeof window !== "undefined" && "requestIdleCallback" in window
+        ? window.requestIdleCallback(warmCommonPages, { timeout: 2500 })
+        : setTimeout(warmCommonPages, 900);
     const intervalId = setInterval(loadSidebarCounts, 30000);
     const handleRefresh = () => {
       loadSidebarCounts();
@@ -879,6 +980,11 @@ function App() {
     return () => {
       active = false;
       clearTimeout(initialLoadId);
+      if (typeof window !== "undefined" && "cancelIdleCallback" in window && typeof warmId === "number") {
+        window.cancelIdleCallback(warmId);
+      } else {
+        clearTimeout(warmId);
+      }
       clearInterval(intervalId);
       window.removeEventListener("erp:refresh-sidebar-counts", handleRefresh);
       window.removeEventListener("erp:shipping-updated", handleRefresh);
@@ -1328,6 +1434,7 @@ function App() {
             <Sidebar
               activePage={activePage}
               setActivePage={updatePath}
+              onPrefetchPage={prefetchPageModule}
               getPageHref={(page) => scopedAppPath(pagePaths[page] || "/portal", {
                 user: authenticatedUser,
                 preserveCurrentScope: !authenticatedUser,

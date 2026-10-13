@@ -4,6 +4,7 @@ import api, { getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
 import AmazonFbaInventory from "./AmazonFbaInventory";
 import "./Products.css";
+import "./Products.mobile.css";
 
 const createEmptyForm = () => ({
   article_no: "",

@@ -4,17 +4,22 @@ import './index.css'
 import App from './App.jsx'
 import { DialogProvider } from './components/DialogProvider.jsx'
 import './pages/MobileApp.css'
-import './pages/Orders.mobile.css'
-import './pages/Customers.mobile.css'
-import './pages/Shipping.mobile.css'
-import './pages/Products.mobile.css'
-import './pages/Suppliers.mobile.css'
 
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
+if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch((error) => {
-      console.warn("ERP app install support could not be registered.", error);
-    });
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) =>
+        Promise.all(registrations.map((registration) => registration.unregister()))
+      )
+      .catch(() => undefined);
+
+    if ("caches" in window) {
+      caches
+        .keys()
+        .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+        .catch(() => undefined);
+    }
   });
 }
 

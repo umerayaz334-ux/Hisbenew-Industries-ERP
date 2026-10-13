@@ -5,6 +5,7 @@ import { formatUtcLocal, parseUtcLocal } from "../utils/dateUtils";
 import { normalizeAppPath, scopedAppPath } from "../utils/routeUtils";
 import WorkerAccounts2 from "./WorkerAccounts2";
 import "./Suppliers.css";
+import "./Suppliers.mobile.css";
 
 const formatMoney = (value) =>
   Number(value || 0).toLocaleString("en-PK", {

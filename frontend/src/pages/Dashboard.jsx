@@ -741,149 +741,209 @@ function OperationalDashboard({ userRole, workerId, userName }) {
         return;
       }
       setStats(dashboardStats);
+      // Paint the dashboard as soon as core stats arrive; secondary panels load after.
+      setLoading(false);
+
+      const secondaryLoads = [];
 
       if (userRole === "warehouse") {
-        try {
-          const fulfillmentResponse = await apiFetch(
-            `${API_BASE_URL}/fulfillment/dashboard?refresh=${Date.now()}`,
-            freshFetchOptions
-          );
-          if (
-            fulfillmentResponse.ok &&
-            requestId === dashboardRequestIdRef.current &&
-            dashboardMountedRef.current
-          ) {
-            setFulfillmentData(await fulfillmentResponse.json());
-          } else if (requestId === dashboardRequestIdRef.current) {
-            setFulfillmentData({
-              stats: {},
-              orders: [],
-              shipments: [],
-              inventory: [],
-            });
-          }
-        } catch (error) {
-          console.error("Warehouse dashboard fulfillment error:", error);
-          if (requestId === dashboardRequestIdRef.current) {
-            setFulfillmentData({
-              stats: {},
-              orders: [],
-              shipments: [],
-              inventory: [],
-            });
-          }
-        }
+        secondaryLoads.push(
+          (async () => {
+            try {
+              const fulfillmentResponse = await apiFetch(
+                `${API_BASE_URL}/fulfillment/dashboard?refresh=${Date.now()}`,
+                freshFetchOptions
+              );
+              if (
+                fulfillmentResponse.ok &&
+                requestId === dashboardRequestIdRef.current &&
+                dashboardMountedRef.current
+              ) {
+                setFulfillmentData(await fulfillmentResponse.json());
+              } else if (requestId === dashboardRequestIdRef.current) {
+                setFulfillmentData({
+                  stats: {},
+                  orders: [],
+                  shipments: [],
+                  inventory: [],
+                });
+              }
+            } catch (error) {
+              console.error("Warehouse dashboard fulfillment error:", error);
+              if (requestId === dashboardRequestIdRef.current) {
+                setFulfillmentData({
+                  stats: {},
+                  orders: [],
+                  shipments: [],
+                  inventory: [],
+                });
+              }
+            }
+          })()
+        );
       } else if (requestId === dashboardRequestIdRef.current) {
         setFulfillmentData(null);
       }
 
       if (userRole === "worker" && workerId) {
-        try {
-          const [orderTasksResponse, workerTasksResponse, workerPaymentsResponse] =
-            await Promise.all([
-              apiFetch(
-                `${API_BASE_URL}/order-workflow/tasks?worker_id=${workerId}&refresh=${Date.now()}`,
-                freshFetchOptions
-              ),
-              apiFetch(
-                `${API_BASE_URL}/production/tasks?worker_id=${workerId}&refresh=${Date.now()}`,
-                freshFetchOptions
-              ),
-              apiFetch(
-                `${API_BASE_URL}/worker-payments?worker_id=${workerId}&refresh=${Date.now()}`,
-                freshFetchOptions
-              ),
-            ]);
-          if (
-            requestId !== dashboardRequestIdRef.current ||
-            !dashboardMountedRef.current
-          ) {
-            return;
-          }
-          if (!orderTasksResponse.ok) {
-            setOrderTasks([]);
-            return;
-          }
-          const orderTasksData = await orderTasksResponse.json();
-          const nextOrderTasks = Array.isArray(orderTasksData) ? orderTasksData : [];
-          setOrderTasks(nextOrderTasks.filter((task) => task.status !== "Completed"));
-          const workerTasksData = workerTasksResponse.ok
-            ? await workerTasksResponse.json()
-            : [];
-          const workerPaymentsData = workerPaymentsResponse.ok
-            ? await workerPaymentsResponse.json()
-            : [];
-          setWorkerPayoutData({
-            tasks: Array.isArray(workerTasksData) ? workerTasksData : [],
-            orderTasks: nextOrderTasks,
-            payments: Array.isArray(workerPaymentsData) ? workerPaymentsData : [],
-          });
-        } catch (error) {
-          console.error("Dashboard order tasks error:", error);
-          if (requestId === dashboardRequestIdRef.current) {
-            setOrderTasks([]);
-            setWorkerPayoutData({ tasks: [], orderTasks: [], payments: [] });
-          }
-        }
+        secondaryLoads.push(
+          (async () => {
+            try {
+              const [orderTasksResponse, workerTasksResponse, workerPaymentsResponse] =
+                await Promise.all([
+                  apiFetch(
+                    `${API_BASE_URL}/order-workflow/tasks?worker_id=${workerId}&refresh=${Date.now()}`,
+                    freshFetchOptions
+                  ),
+                  apiFetch(
+                    `${API_BASE_URL}/production/tasks?worker_id=${workerId}&refresh=${Date.now()}`,
+                    freshFetchOptions
+                  ),
+                  apiFetch(
+                    `${API_BASE_URL}/worker-payments?worker_id=${workerId}&refresh=${Date.now()}`,
+                    freshFetchOptions
+                  ),
+                ]);
+              if (
+                requestId !== dashboardRequestIdRef.current ||
+                !dashboardMountedRef.current
+              ) {
+                return;
+              }
+              if (!orderTasksResponse.ok) {
+                setOrderTasks([]);
+                return;
+              }
+              const orderTasksData = await orderTasksResponse.json();
+              const nextOrderTasks = Array.isArray(orderTasksData)
+                ? orderTasksData
+                : [];
+              setOrderTasks(
+                nextOrderTasks.filter((task) => task.status !== "Completed")
+              );
+              const workerTasksData = workerTasksResponse.ok
+                ? await workerTasksResponse.json()
+                : [];
+              const workerPaymentsData = workerPaymentsResponse.ok
+                ? await workerPaymentsResponse.json()
+                : [];
+              setWorkerPayoutData({
+                tasks: Array.isArray(workerTasksData) ? workerTasksData : [],
+                orderTasks: nextOrderTasks,
+                payments: Array.isArray(workerPaymentsData)
+                  ? workerPaymentsData
+                  : [],
+              });
+            } catch (error) {
+              console.error("Dashboard order tasks error:", error);
+              if (requestId === dashboardRequestIdRef.current) {
+                setOrderTasks([]);
+                setWorkerPayoutData({
+                  tasks: [],
+                  orderTasks: [],
+                  payments: [],
+                });
+              }
+            }
+          })()
+        );
       } else if (requestId === dashboardRequestIdRef.current) {
         setOrderTasks([]);
         setWorkerPayoutData({ tasks: [], orderTasks: [], payments: [] });
       }
 
-      // Load active In-Transit shipments with live tracking
+      // Load active In-Transit shipments with live tracking (non-blocking)
       if (userRole !== "worker") {
-        try {
-          const [shippingRes, trackingRes] = await Promise.all([
-            apiFetch(`${API_BASE_URL}/shipping?limit=100`, freshFetchOptions),
-            apiFetch(`${API_BASE_URL}/shipping/tracking-overview`, freshFetchOptions),
-          ]);
-          if (shippingRes.ok && requestId === dashboardRequestIdRef.current && dashboardMountedRef.current) {
-            const shipRecords = await shippingRes.json();
-            const trackMap = trackingRes.ok ? await trackingRes.json() : {};
-            const inTransitList = (Array.isArray(shipRecords) ? shipRecords : [])
-              .filter((rec) => {
-                const shippingStatus = String(rec.shipping_status || "")
-                  .trim()
-                  .toLowerCase();
-                // Order already closed as delivered must never appear in live active dispatches
-                if (shippingStatus === "delivered") return false;
+        setInTransitLoading(true);
+        secondaryLoads.push(
+          (async () => {
+            try {
+              const [shippingRes, trackingRes] = await Promise.all([
+                apiFetch(
+                  `${API_BASE_URL}/shipping?limit=100`,
+                  freshFetchOptions
+                ),
+                apiFetch(
+                  `${API_BASE_URL}/shipping/tracking-overview`,
+                  freshFetchOptions
+                ),
+              ]);
+              if (
+                shippingRes.ok &&
+                requestId === dashboardRequestIdRef.current &&
+                dashboardMountedRef.current
+              ) {
+                const shipRecords = await shippingRes.json();
+                const trackMap = trackingRes.ok
+                  ? await trackingRes.json()
+                  : {};
+                const inTransitList = (
+                  Array.isArray(shipRecords) ? shipRecords : []
+                )
+                  .filter((rec) => {
+                    const shippingStatus = String(rec.shipping_status || "")
+                      .trim()
+                      .toLowerCase();
+                    if (shippingStatus === "delivered") return false;
 
-                const trk = String(rec.tracking_number || "").trim();
-                if (!trk) return false;
+                    const trk = String(rec.tracking_number || "").trim();
+                    if (!trk) return false;
 
-                const trackInfo =
-                  trackMap[trk] ||
-                  trackMap[trk.toUpperCase()] ||
-                  trackMap[trk.toLowerCase()];
-                const resolved = resolveDashboardTrackingStatus(trackInfo, trk);
-                // Active board: In Transit + Waiting pickup only (never Delivered)
-                return resolved.stage === "in_transit" || resolved.stage === "waiting";
-              })
-              .map((rec) => {
-                const trk = String(rec.tracking_number || "").trim();
-                const trackInfo =
-                  trackMap[trk] ||
-                  trackMap[trk.toUpperCase()] ||
-                  trackMap[trk.toLowerCase()];
-                const resolved = resolveDashboardTrackingStatus(trackInfo, trk);
-                const isOutForDelivery =
-                  String(trackInfo?.status || "").toLowerCase().includes("vehicle") ||
-                  String(trackInfo?.status || "").toLowerCase().includes("out for delivery") ||
-                  String(trackInfo?.status_code || "").toUpperCase() === "OD" ||
-                  String(trackInfo?.status_stage || "").toLowerCase() === "out_for_delivery";
-                return {
-                  ...rec,
-                  tracking_info: trackInfo,
-                  tracking_status: resolved,
-                  is_out_for_delivery: isOutForDelivery,
-                };
-              });
-            setInTransitShipmentsList(inTransitList);
-          }
-        } catch (shipErr) {
-          console.error("Dashboard in-transit fetch error:", shipErr);
-        }
+                    const trackInfo =
+                      trackMap[trk] ||
+                      trackMap[trk.toUpperCase()] ||
+                      trackMap[trk.toLowerCase()];
+                    const resolved = resolveDashboardTrackingStatus(
+                      trackInfo,
+                      trk
+                    );
+                    return (
+                      resolved.stage === "in_transit" ||
+                      resolved.stage === "waiting"
+                    );
+                  })
+                  .map((rec) => {
+                    const trk = String(rec.tracking_number || "").trim();
+                    const trackInfo =
+                      trackMap[trk] ||
+                      trackMap[trk.toUpperCase()] ||
+                      trackMap[trk.toLowerCase()];
+                    const resolved = resolveDashboardTrackingStatus(
+                      trackInfo,
+                      trk
+                    );
+                    const isOutForDelivery =
+                      String(trackInfo?.status || "")
+                        .toLowerCase()
+                        .includes("vehicle") ||
+                      String(trackInfo?.status || "")
+                        .toLowerCase()
+                        .includes("out for delivery") ||
+                      String(trackInfo?.status_code || "").toUpperCase() ===
+                        "OD" ||
+                      String(trackInfo?.status_stage || "").toLowerCase() ===
+                        "out_for_delivery";
+                    return {
+                      ...rec,
+                      tracking_info: trackInfo,
+                      tracking_status: resolved,
+                      is_out_for_delivery: isOutForDelivery,
+                    };
+                  });
+                setInTransitShipmentsList(inTransitList);
+              }
+            } catch (shipErr) {
+              console.error("Dashboard in-transit fetch error:", shipErr);
+            } finally {
+              if (requestId === dashboardRequestIdRef.current) {
+                setInTransitLoading(false);
+              }
+            }
+          })()
+        );
       }
+
+      await Promise.all(secondaryLoads);
     } catch (error) {
       console.error("Dashboard error:", error);
       if (

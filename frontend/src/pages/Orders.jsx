@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
 import "./Orders.css";
+import "./Orders.mobile.css";
 import MuseSettings from "../components/MuseSettings";
 
 const getProductInitials = (articleNo, productName) =>

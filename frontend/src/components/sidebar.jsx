@@ -486,6 +486,7 @@ function WorkspaceSwitchIcon() {
 function Sidebar({
   activePage,
   setActivePage,
+  onPrefetchPage,
   getPageHref,
   workspace = "factory",
   schoolSettings,
@@ -718,6 +719,8 @@ function Sidebar({
                 } ${activePage === item.name ? "active" : ""}`.trim()}
                 href={getPageHref(item.name)}
                 onClick={(event) => handleNavigation(event, item.name)}
+                onFocus={() => onPrefetchPage?.(item.name)}
+                onMouseEnter={() => onPrefetchPage?.(item.name)}
                 title={itemLabel}
                 
               >
@@ -752,6 +755,8 @@ function Sidebar({
               key={item.name}
               href={getPageHref(item.name)}
                 onClick={(event) => handleNavigation(event, item.name)}
+              onFocus={() => onPrefetchPage?.(item.name)}
+              onMouseEnter={() => onPrefetchPage?.(item.name)}
               title={mobileLabel(item)}
               
             >

@@ -8143,12 +8143,28 @@ def fulfillment_dashboard_response(
         .limit(30)
         .all()
     )
-    all_orders = (
+    orders = (
         db.query(FulfillmentOrder)
         .order_by(FulfillmentOrder.created_at.desc(), FulfillmentOrder.id.desc())
+        .limit(80)
         .all()
     )
-    orders = all_orders[:80]
+    unfulfilled_orders = (
+        db.query(func.count(FulfillmentOrder.id))
+        .filter(
+            func.lower(func.coalesce(FulfillmentOrder.status, "")) != "shipped"
+        )
+        .scalar()
+        or 0
+    )
+    shipped_orders = (
+        db.query(func.count(FulfillmentOrder.id))
+        .filter(
+            func.lower(func.coalesce(FulfillmentOrder.status, "")) == "shipped"
+        )
+        .scalar()
+        or 0
+    )
     inventory = fulfillment_inventory_response(db)
     inventory_locations = fulfillment_inventory_locations_response(db)
     discrepancies = (
@@ -8162,12 +8178,8 @@ def fulfillment_dashboard_response(
     )
     return {
         "stats": {
-            "unfulfilled_orders": sum(
-                1 for order in all_orders if str(order.status or "").strip().lower() != "shipped"
-            ),
-            "shipped_orders": sum(
-                1 for order in all_orders if str(order.status or "").strip().lower() == "shipped"
-            ),
+            "unfulfilled_orders": int(unfulfilled_orders),
+            "shipped_orders": int(shipped_orders),
             "fulfillment_units": sum(max(item.get("available_quantity") or 0, 0) for item in inventory),
             "active_boxes": len({item.get("box_id") for item in inventory if item.get("available_quantity", 0) > 0}),
             "recent_shipments": len(shipments),
@@ -8184,6 +8196,20 @@ def fulfillment_dashboard_response(
             for discrepancy in discrepancies
         ],
     }
+
+
+@app.get("/fulfillment/pending-count")
+def get_fulfillment_pending_count(db: Session = Depends(get_db)):
+    """Lightweight badge count — avoids loading the full fulfillment dashboard."""
+    count = (
+        db.query(func.count(FulfillmentOrder.id))
+        .filter(
+            func.lower(func.coalesce(FulfillmentOrder.status, "")) != "shipped"
+        )
+        .scalar()
+        or 0
+    )
+    return {"count": int(count)}
 
 
 @app.get("/fulfillment/dashboard")
