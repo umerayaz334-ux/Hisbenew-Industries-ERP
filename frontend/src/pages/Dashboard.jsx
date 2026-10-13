@@ -2178,7 +2178,11 @@ function OperationalDashboard({ userRole, workerId, userName }) {
                     const carrier = trackInfo?.carrier || shipment.courier_name || "FedEx";
                     const isOutForDelivery = shipment.is_out_for_delivery;
                     const isWaiting = shipment.tracking_status?.stage === "waiting";
-                    const etaDate = formatCompactDateOnly(trackInfo?.estimated_delivery);
+                    // Prefer manually saved Shipping ETA, then live carrier ETA.
+                    const etaDate = formatCompactDateOnly(
+                      shipment.estimated_delivery_at || trackInfo?.estimated_delivery,
+                    );
+                    const etaIsManual = Boolean(shipment.estimated_delivery_at);
                     const carrierUrl = trackInfo?.tracking_url || (trk ? `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(trk)}` : "/portal/shipping");
 
                     const statusClass = isOutForDelivery
@@ -2249,7 +2253,11 @@ function OperationalDashboard({ userRole, workerId, userName }) {
                           {etaDate ? (
                             <div className="erp-eta-cell">
                               <strong>{etaDate}</strong>
-                              {trackInfo?.destination && <small>{trackInfo.destination}</small>}
+                              <small>
+                                {etaIsManual
+                                  ? "Manual estimate"
+                                  : trackInfo?.destination || "Carrier estimate"}
+                              </small>
                             </div>
                           ) : (
                             <span className="erp-muted-text">—</span>
