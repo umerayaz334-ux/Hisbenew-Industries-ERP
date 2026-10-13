@@ -1487,7 +1487,7 @@ function Shipping({ userRole }) {
       }
       if (anchorEl?.getBoundingClientRect) {
         const rect = anchorEl.getBoundingClientRect();
-        const menuWidth = 220;
+        const menuWidth = 240;
         const left = Math.min(
           Math.max(12, rect.right - menuWidth),
           window.innerWidth - menuWidth - 12,
@@ -1495,7 +1495,7 @@ function Shipping({ userRole }) {
         const top = Math.min(rect.bottom + 8, window.innerHeight - 160);
         setEtaMenuPosition({ top, left, width: menuWidth });
       } else {
-        setEtaMenuPosition({ top: 120, left: 120, width: 220 });
+        setEtaMenuPosition({ top: 120, left: 120, width: 240 });
       }
       return record.id;
     });
@@ -5145,26 +5145,17 @@ function Shipping({ userRole }) {
                                       <strong className="shipping-eta-portal-title">
                                         Estimated delivery
                                       </strong>
-                                      <label className="shipping-eta-date-field shipping-eta-date-field--icon">
+                                      <label className="shipping-eta-date-field">
                                         <input
                                           ref={etaDateInputRef}
-                                          aria-label="Pick estimated delivery date"
+                                          aria-label="Estimated delivery date"
+                                          autoFocus
                                           onChange={(event) =>
                                             setEtaDraftById((previous) => ({
                                               ...previous,
                                               [record.id]: event.target.value,
                                             }))
                                           }
-                                          onClick={(event) => {
-                                            const input = event.currentTarget;
-                                            if (typeof input.showPicker === "function") {
-                                              try {
-                                                input.showPicker();
-                                              } catch {
-                                                /* native click still opens where supported */
-                                              }
-                                            }
-                                          }}
                                           onKeyDown={(event) => {
                                             if (event.key === "Escape") {
                                               closeEstimatedDeliveryMenu();
