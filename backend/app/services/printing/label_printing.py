@@ -136,6 +136,55 @@ def _status_matches(win32print: object, status: int, flags: tuple[tuple[str, int
     return labels
 
 
+def _wmi_printer_offline(printer_name: str) -> tuple[bool, str]:
+    """Return (is_offline, detail) using WMI — catches USB unplug faster than spooler Status alone."""
+    try:
+        import win32com.client  # type: ignore
+
+        escaped = str(printer_name or "").replace("\\", "\\\\").replace('"', '\\"')
+        query = f'SELECT Name, PortName, WorkOffline, PrinterStatus, DetectedErrorState FROM Win32_Printer WHERE Name="{escaped}"'
+        wmi = win32com.client.GetObject("winmgmts:")
+        matches = wmi.ExecQuery(query)
+        for printer in matches:
+            work_offline = bool(getattr(printer, "WorkOffline", False))
+            printer_status = int(getattr(printer, "PrinterStatus", 0) or 0)
+            error_state = int(getattr(printer, "DetectedErrorState", 0) or 0)
+            port_name = str(getattr(printer, "PortName", "") or "")
+            # PrinterStatus 7 = Offline. DetectedErrorState 5 = No paper, 6 = Not available, etc.
+            if work_offline or printer_status == 7:
+                return True, "USB/cable disconnected (Windows reports offline)."
+            if error_state in {4, 5, 6, 9}:  # Service / offline-ish / not available
+                return True, "Printer hardware is not available."
+            if port_name.upper().startswith("USB") and _usb_port_missing(port_name):
+                return True, f"USB port {port_name} is not present."
+            return False, ""
+    except Exception:
+        pass
+    return False, ""
+
+
+def _usb_port_missing(port_name: str) -> bool:
+    """True when a USB* spooler port is gone after unplug."""
+    clean = str(port_name or "").strip()
+    if not clean.upper().startswith("USB"):
+        return False
+    try:
+        win32print = _win32print()
+        names = set()
+        for entry in win32print.EnumPorts(None, 1):
+            if isinstance(entry, Mapping):
+                names.add(str(entry.get("Name") or entry.get("pName") or "").strip().upper())
+            elif isinstance(entry, (list, tuple)) and entry:
+                names.add(str(entry[0] or "").strip().upper())
+            else:
+                names.add(str(entry or "").strip().upper())
+        if not names:
+            return False
+        return clean.upper() not in names
+    except Exception:
+        return False
+
+
 def _printer_connection_status(printer_name: str) -> dict:
     win32print = _win32print()
     try:
@@ -143,7 +192,7 @@ def _printer_connection_status(printer_name: str) -> dict:
     except Exception as exc:
         return {
             "is_connected": False,
-            "status": "Unavailable",
+            "status": "Not connected",
             "status_detail": _text(exc) or "Windows could not open this printer.",
             "jobs": 0,
         }
@@ -153,7 +202,7 @@ def _printer_connection_status(printer_name: str) -> dict:
     except Exception as exc:
         return {
             "is_connected": False,
-            "status": "Unavailable",
+            "status": "Not connected",
             "status_detail": _text(exc) or "Windows could not read this printer status.",
             "jobs": 0,
         }
@@ -164,14 +213,37 @@ def _printer_connection_status(printer_name: str) -> dict:
             pass
 
     status_value = int(info.get("Status") or 0) if isinstance(info, Mapping) else 0
+    attributes = int(info.get("Attributes") or 0) if isinstance(info, Mapping) else 0
     jobs = int(info.get("cJobs") or 0) if isinstance(info, Mapping) else 0
+    port_name = str(info.get("pPortName") or info.get("PortName") or "") if isinstance(info, Mapping) else ""
     blocking_statuses = _status_matches(win32print, status_value, BLOCKING_PRINTER_STATUS_FLAGS)
     active_statuses = _status_matches(win32print, status_value, NON_BLOCKING_PRINTER_STATUS_FLAGS)
+    work_offline = bool(
+        attributes & int(getattr(win32print, "PRINTER_ATTRIBUTE_WORK_OFFLINE", 0x00000400))
+    )
+    wmi_offline, wmi_detail = _wmi_printer_offline(printer_name)
+    usb_gone = _usb_port_missing(port_name)
+
+    if work_offline and "Offline" not in blocking_statuses:
+        blocking_statuses.append("Offline")
+    if wmi_offline and "Offline" not in blocking_statuses:
+        blocking_statuses.append("Offline")
+    if usb_gone and "Offline" not in blocking_statuses:
+        blocking_statuses.append("Offline")
+
     status_labels = blocking_statuses + active_statuses
+    detail = ""
+    if usb_gone:
+        detail = f"USB port {port_name} removed — printer is not connected."
+    elif wmi_detail:
+        detail = wmi_detail
+    elif work_offline:
+        detail = "Marked offline in Windows after USB/cable disconnect."
+
     return {
         "is_connected": not blocking_statuses,
-        "status": ", ".join(status_labels) if status_labels else "Ready",
-        "status_detail": "",
+        "status": (", ".join(status_labels) if status_labels else "Ready") if not blocking_statuses else "Not connected",
+        "status_detail": detail,
         "jobs": jobs,
     }
 

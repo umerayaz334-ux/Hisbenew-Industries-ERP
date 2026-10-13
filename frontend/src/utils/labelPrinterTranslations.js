@@ -119,6 +119,7 @@ const URDU = {
   "{connected} of {count} printers connected on {source}.": "{source} پر {count} میں سے {connected} پرنٹر کا رابطہ موجود ہے۔",
   "No printers were found on {source}.": "{source} پر کوئی پرنٹر نہیں ملا۔",
   "USB label printer detected and connected: {name}.": "USB لیبل پرنٹر مل گیا اور جڑ گیا: {name}۔",
+  "USB label printer disconnected: {name}. Not connected.": "USB لیبل پرنٹر ہٹ گیا: {name}۔ رابطہ نہیں ہے۔",
   "Starting local print agent and connecting printers...": "لوکل پرنٹ ایجنٹ شروع ہو رہا ہے اور پرنٹر جڑ رہے ہیں...",
   "Local print agent is online.": "لوکل پرنٹ ایجنٹ آن لائن ہے۔",
   "Local print agent started. Connecting printers...": "لوکل پرنٹ ایجنٹ شروع ہو گیا۔ پرنٹر جڑ رہے ہیں...",

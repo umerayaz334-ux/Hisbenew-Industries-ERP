@@ -317,6 +317,7 @@ WORKSPACE_DATA_PAGES = {
     "copy-clipboard": "Copy Clipboard",
     "quotes": "Quotes",
     "temp-data": "TempData",
+    "label-printer": "Label Printer",
 }
 MAX_WORKSPACE_DATA_BYTES = 5 * 1024 * 1024
 

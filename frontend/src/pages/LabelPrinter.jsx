@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import JsBarcode from "jsbarcode";
 import api, { getStaticUrl } from "../api/api";
 import "./LabelPrinter.css";
 import "./LabelPrinterTheme.css";
 import { LABEL_PRINTER_LANGUAGE_KEY, translateLabelPrinter } from "../utils/labelPrinterTranslations";
 import { removePrintedCopies, waitForLabelPrintJob } from "../utils/labelPrintQueue";
+import { useWorkspaceData } from "../utils/workspaceData";
+
+const LABEL_PRINTER_WORKSPACE_KEY = "label-printer";
 
 const DEFAULT_PRESETS = [
   { id: "product-50x25", name: "Product 50 x 25 mm", width: 50, height: 25, gap: 2 },
@@ -534,6 +537,48 @@ const readStoredJson = (key, fallback) => {
   }
 };
 
+const normalizeLabelPrinterWorkspace = (data) => {
+  const source = isPlainObject(data) ? data : {};
+  return {
+    customSizes: Array.isArray(source.customSizes) ? source.customSizes : [],
+    productDesigns: isPlainObject(source.productDesigns) ? source.productDesigns : {},
+    printRotation: ["normal", "clockwise", "counterclockwise"].includes(source.printRotation)
+      ? source.printRotation
+      : "clockwise",
+    selectedSizeId:
+      typeof source.selectedSizeId === "string" && source.selectedSizeId
+        ? source.selectedSizeId
+        : DEFAULT_PRESETS[0].id,
+  };
+};
+
+const loadLabelPrinterWorkspaceLocal = () => {
+  if (typeof window === "undefined") {
+    return { data: normalizeLabelPrinterWorkspace(null), exists: false };
+  }
+  const sizesRaw = window.localStorage.getItem(CUSTOM_SIZE_STORAGE_KEY);
+  const designsRaw = window.localStorage.getItem(PRODUCT_DESIGN_STORAGE_KEY);
+  const rotationRaw = window.localStorage.getItem(PRINT_ROTATION_STORAGE_KEY);
+  const sizeIdRaw = window.localStorage.getItem(SELECTED_SIZE_STORAGE_KEY);
+  return {
+    data: normalizeLabelPrinterWorkspace({
+      customSizes: sizesRaw ? readStoredJson(CUSTOM_SIZE_STORAGE_KEY, []) : [],
+      productDesigns: designsRaw ? readStoredJson(PRODUCT_DESIGN_STORAGE_KEY, {}) : {},
+      printRotation: rotationRaw || "clockwise",
+      selectedSizeId: sizeIdRaw || DEFAULT_PRESETS[0].id,
+    }),
+    exists: sizesRaw !== null || designsRaw !== null || rotationRaw !== null || sizeIdRaw !== null,
+  };
+};
+
+const saveLabelPrinterWorkspaceLocal = (data) => {
+  const normalized = normalizeLabelPrinterWorkspace(data);
+  window.localStorage.setItem(CUSTOM_SIZE_STORAGE_KEY, JSON.stringify(normalized.customSizes));
+  window.localStorage.setItem(PRODUCT_DESIGN_STORAGE_KEY, JSON.stringify(normalized.productDesigns));
+  window.localStorage.setItem(PRINT_ROTATION_STORAGE_KEY, normalized.printRotation);
+  window.localStorage.setItem(SELECTED_SIZE_STORAGE_KEY, normalized.selectedSizeId);
+};
+
 const BarcodePreview = ({ value, height, scale = 1, heightScale = 1 }) => {
   const barcodeRef = useRef(null);
 
@@ -804,8 +849,48 @@ function LabelPrinter() {
   const [queue, setQueue] = useState([]);
   const [draftItem, setDraftItem] = useState(null);
   const [selectedId, setSelectedId] = useState("");
-  const [customSizes, setCustomSizes] = useState([]);
-  const [selectedSizeId, setSelectedSizeId] = useState(DEFAULT_PRESETS[0].id);
+  const [sharedDesign, setSharedDesign] = useWorkspaceData({
+    dataKey: LABEL_PRINTER_WORKSPACE_KEY,
+    loadLocal: loadLabelPrinterWorkspaceLocal,
+    normalize: normalizeLabelPrinterWorkspace,
+    saveLocal: saveLabelPrinterWorkspaceLocal,
+  });
+  const customSizes = sharedDesign.customSizes;
+  const productDesigns = sharedDesign.productDesigns;
+  const printRotation = sharedDesign.printRotation;
+  const selectedSizeId = sharedDesign.selectedSizeId;
+  const setCustomSizes = useCallback(
+    (next) =>
+      setSharedDesign((current) => ({
+        ...current,
+        customSizes: typeof next === "function" ? next(current.customSizes) : next,
+      })),
+    [setSharedDesign]
+  );
+  const setProductDesigns = useCallback(
+    (next) =>
+      setSharedDesign((current) => ({
+        ...current,
+        productDesigns: typeof next === "function" ? next(current.productDesigns) : next,
+      })),
+    [setSharedDesign]
+  );
+  const setPrintRotation = useCallback(
+    (next) =>
+      setSharedDesign((current) => ({
+        ...current,
+        printRotation: typeof next === "function" ? next(current.printRotation) : next,
+      })),
+    [setSharedDesign]
+  );
+  const setSelectedSizeId = useCallback(
+    (next) =>
+      setSharedDesign((current) => ({
+        ...current,
+        selectedSizeId: typeof next === "function" ? next(current.selectedSizeId) : next,
+      })),
+    [setSharedDesign]
+  );
   const [showNewSize, setShowNewSize] = useState(false);
   const [newSize, setNewSize] = useState({ name: "", width: "50", height: "25", gap: "2" });
   const [noticeState, setNoticeState] = useState({ message: "" });
@@ -816,9 +901,7 @@ function LabelPrinter() {
   ));
   const setNotice = (message, values = {}) => setNoticeState({ message, values });
   const [activeLayer, setActiveLayer] = useState("title");
-  const [productDesigns, setProductDesigns] = useState({});
   const [designClipboard, setDesignClipboard] = useState(null);
-  const [printRotation, setPrintRotation] = useState("clockwise");
   const [storageReady, setStorageReady] = useState(false);
   const [inlineEditingLayer, setInlineEditingLayer] = useState("");
   const [directPrinter, setDirectPrinter] = useState("");
@@ -929,10 +1012,31 @@ function LabelPrinter() {
           printer.supports_direct_labels &&
           (!previousFingerprint || !previousNames.has(printer.name) || previousFingerprint.includes(`${printer.name}|0|`))
       );
+      const newlyDisconnected = printers.filter(
+        (printer) =>
+          printer.supports_direct_labels &&
+          printer.is_connected === false &&
+          previousFingerprint &&
+          previousFingerprint.includes(`${printer.name}|1|`)
+      );
+      const removedThermalNames = previousFingerprint
+        ? previousFingerprint
+            .split(";")
+            .map((entry) => {
+              const [name, connected, supports] = entry.split("|");
+              return supports === "1" && connected === "1" ? name : "";
+            })
+            .filter((name) => name && !printers.some((printer) => printer.name === name))
+        : [];
 
       setPrinterOptions(printers);
       setDirectPrinter((current) => {
-        const preferred = pickPreferredLabelPrinter(printers, current);
+        const currentOffline =
+          current &&
+          printers.some(
+            (printer) => printer.name === current && printer.is_connected === false
+          );
+        const currentMissing = current && !printers.some((printer) => printer.name === current);
         // Prefer a newly plugged USB thermal when the current selection is empty or offline.
         if (detectHotplug && newlyConnected.length) {
           const currentStillOnline =
@@ -945,13 +1049,22 @@ function LabelPrinter() {
             return newlyConnected[0].name;
           }
         }
+        if (detectHotplug && (currentOffline || currentMissing)) {
+          const preferred = pickPreferredLabelPrinter(printers, "");
+          directPrinterRef.current = preferred;
+          return preferred;
+        }
+        const preferred = pickPreferredLabelPrinter(printers, current);
         directPrinterRef.current = preferred;
         return preferred;
       });
       setPrinterStatus({ loading: false, error: "" });
       printerSnapshotRef.current = nextFingerprint;
 
-      if (detectHotplug && previousFingerprint && newlyConnected.length) {
+      if (detectHotplug && previousFingerprint && (newlyDisconnected.length || removedThermalNames.length)) {
+        const name = newlyDisconnected[0]?.name || removedThermalNames[0];
+        setNotice("USB label printer disconnected: {name}. Not connected.", { name });
+      } else if (detectHotplug && previousFingerprint && newlyConnected.length) {
         setNotice("USB label printer detected and connected: {name}.", {
           name: newlyConnected[0].name,
         });
@@ -1094,7 +1207,7 @@ function LabelPrinter() {
 
     const intervalId = window.setInterval(() => {
       refreshForUsb({ announce: true, wakeAgent: false });
-    }, 2500);
+    }, 1500);
 
     const onFocus = () => refreshForUsb({ announce: true, wakeAgent: true });
     const onVisibility = () => {
@@ -1138,22 +1251,12 @@ function LabelPrinter() {
 
   useEffect(() => {
     try {
-      const savedSizes = readStoredJson(CUSTOM_SIZE_STORAGE_KEY, []);
-      const savedProductLayouts = readStoredJson(PRODUCT_DESIGN_STORAGE_KEY, {});
       const savedDesignClipboard = readStoredJson(DESIGN_CLIPBOARD_STORAGE_KEY, null);
       const savedQueue = readStoredJson(QUEUE_STORAGE_KEY, []);
-      const savedPrintRotation = window.localStorage.getItem(PRINT_ROTATION_STORAGE_KEY);
-      const savedSelectedSizeId = window.localStorage.getItem(SELECTED_SIZE_STORAGE_KEY);
       const savedSelectedQueueItemId = window.localStorage.getItem(SELECTED_QUEUE_ITEM_STORAGE_KEY);
       const savedActiveLayer = window.localStorage.getItem(ACTIVE_LAYER_STORAGE_KEY);
 
-      if (Array.isArray(savedSizes)) setCustomSizes(savedSizes);
-      if (isPlainObject(savedProductLayouts)) setProductDesigns(savedProductLayouts);
       if (isPlainObject(savedDesignClipboard)) setDesignClipboard(savedDesignClipboard);
-      if (["normal", "clockwise", "counterclockwise"].includes(savedPrintRotation)) {
-        setPrintRotation(savedPrintRotation);
-      }
-      if (savedSelectedSizeId) setSelectedSizeId(savedSelectedSizeId);
       if (DEFAULT_LAYER_ORDER.includes(savedActiveLayer)) setActiveLayer(savedActiveLayer);
       window.localStorage.removeItem(DESIGN_STORAGE_KEY);
       window.localStorage.removeItem(DRAFT_ITEM_STORAGE_KEY);
@@ -1170,8 +1273,6 @@ function LabelPrinter() {
         setSelectedId(restoredQueue[0]?.id || "");
       }
     } catch {
-      setCustomSizes([]);
-      setProductDesigns({});
       setQueue([]);
       setDraftItem(null);
       setSelectedId("");
@@ -1182,19 +1283,15 @@ function LabelPrinter() {
 
   useEffect(() => {
     if (!storageReady) return;
-    window.localStorage.setItem(CUSTOM_SIZE_STORAGE_KEY, JSON.stringify(customSizes));
-    window.localStorage.setItem(PRODUCT_DESIGN_STORAGE_KEY, JSON.stringify(productDesigns));
     if (designClipboard) {
       window.localStorage.setItem(DESIGN_CLIPBOARD_STORAGE_KEY, JSON.stringify(designClipboard));
     } else {
       window.localStorage.removeItem(DESIGN_CLIPBOARD_STORAGE_KEY);
     }
-    window.localStorage.setItem(PRINT_ROTATION_STORAGE_KEY, printRotation);
     window.localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
-    window.localStorage.setItem(SELECTED_SIZE_STORAGE_KEY, selectedSizeId);
     window.localStorage.setItem(SELECTED_QUEUE_ITEM_STORAGE_KEY, selectedId);
     window.localStorage.setItem(ACTIVE_LAYER_STORAGE_KEY, activeLayer);
-  }, [activeLayer, customSizes, designClipboard, printRotation, productDesigns, queue, selectedId, selectedSizeId, storageReady]);
+  }, [activeLayer, designClipboard, queue, selectedId, storageReady]);
 
   const sizes = useMemo(() => [...DEFAULT_PRESETS, ...customSizes], [customSizes]);
   const activeSize = sizes.find((size) => size.id === selectedSizeId) || DEFAULT_PRESETS[0];

@@ -18,6 +18,21 @@ router = APIRouter()
 
 connected_agents: dict[str, dict[str, Any]] = {}
 pending_print_jobs: dict[str, asyncio.Future] = {}
+AGENT_ONLINE_SECONDS = 90
+AGENT_STALE_PRINTER_SECONDS = 90
+
+
+def _force_printers_offline(printers: list[Any], detail: str = "Print agent offline or USB disconnected.") -> list[dict[str, Any]]:
+    offline = []
+    for printer in printers:
+        if not isinstance(printer, dict):
+            continue
+        entry = dict(printer)
+        entry["is_connected"] = False
+        entry["status"] = "Offline"
+        entry["status_detail"] = detail
+        offline.append(entry)
+    return offline
 
 
 def get_db():
@@ -284,14 +299,22 @@ def list_printer_agents(db: Session = Depends(get_db)):
     
     result = []
     for agent in agents:
-        is_online = agent.last_heartbeat and (now - agent.last_heartbeat).total_seconds() < 90
+        is_online = agent.last_heartbeat and (now - agent.last_heartbeat).total_seconds() < AGENT_ONLINE_SECONDS
+        try:
+            printers = json.loads(agent.printers_json or "[]")
+        except Exception:
+            printers = []
+        if not isinstance(printers, list):
+            printers = []
+        if not is_online:
+            printers = _force_printers_offline(printers)
         result.append({
             "agent_id": agent.agent_id,
             "machine_name": agent.machine_name,
             "company_name": agent.company_name,
             "location": agent.location,
             "printer_name": agent.printer_name,
-            "printers": json.loads(agent.printers_json or "[]"),
+            "printers": printers,
             "status": "online" if is_online else "offline",
             "last_heartbeat": agent.last_heartbeat.isoformat() if agent.last_heartbeat else None,
         })
@@ -442,15 +465,22 @@ async def get_print_agent_printers(db: Session = Depends(get_db)):
     # DB Fallback for multi-process worker architecture
     now = datetime.utcnow()
     db_agent = db.query(PrintAgentRecord).order_by(desc(PrintAgentRecord.last_heartbeat)).first()
-    if db_agent and db_agent.last_heartbeat and (now - db_agent.last_heartbeat).total_seconds() < 300:
+    if db_agent and db_agent.last_heartbeat:
+        age_seconds = (now - db_agent.last_heartbeat).total_seconds()
         try:
             printers = json.loads(db_agent.printers_json or "[]")
         except Exception:
             printers = []
+        if not isinstance(printers, list):
+            printers = []
+        if age_seconds >= AGENT_STALE_PRINTER_SECONDS:
+            # Agent stopped heartbeating (laptop sleep / USB host gone) — do not keep Ready.
+            printers = _force_printers_offline(printers)
         return {
             "connection_scope": "print_agent",
             "agent": db_agent.machine_name or db_agent.agent_id,
-            "agent_count": 1,
+            "agent_count": 1 if age_seconds < AGENT_STALE_PRINTER_SECONDS else 0,
+            "agent_online": age_seconds < AGENT_STALE_PRINTER_SECONDS,
             "default_printer": db_agent.printer_name or (printers[0].get("name") if printers else ""),
             "default_printer_dpi": 300,
             "printers": printers,

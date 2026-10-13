@@ -78,8 +78,22 @@ except Exception as err:
             win32print.ClosePrinter(h)
 
 STATUS_INTERVAL_SECONDS = 8
+STATUS_WATCH_SECONDS = 1.5
 POLL_INTERVAL_SECONDS = 5
 RECONNECT_SECONDS = 5
+
+
+def _printers_fingerprint(status_info: dict) -> str:
+    printers = status_info.get("printers") if isinstance(status_info.get("printers"), list) else []
+    parts = []
+    for printer in printers:
+        if not isinstance(printer, dict):
+            continue
+        parts.append(
+            f"{printer.get('name')}|{0 if printer.get('is_connected') is False else 1}|{printer.get('status') or ''}"
+        )
+    parts.sort()
+    return ";".join(parts)
 
 
 def load_local_config() -> dict:
@@ -176,13 +190,19 @@ def register_rest(local_cfg: dict) -> str:
 
 
 def heartbeat_loop(local_cfg: dict) -> None:
-    """Background 30-second heartbeat thread."""
+    """Watch USB plug/unplug often; push live API immediately when connection changes."""
     url = f"{ERP_API.rstrip('/')}/api/printer-agents/heartbeat"
+    last_fingerprint = ""
+    last_forced_push = 0.0
     while True:
         try:
             status_info = read_printer_status()
+            fingerprint = _printers_fingerprint(status_info)
+            now = time.time()
+            changed = fingerprint != last_fingerprint
+            due = (now - last_forced_push) >= STATUS_INTERVAL_SECONDS
             token = local_cfg.get("security_token")
-            if token:
+            if token and (changed or due or not last_fingerprint):
                 payload = {
                     "agent_id": local_cfg["agent_id"],
                     "security_token": token,
@@ -191,9 +211,16 @@ def heartbeat_loop(local_cfg: dict) -> None:
                     "printers": status_info.get("printers") or [],
                 }
                 requests.post(url, json=payload, timeout=8)
-        except Exception as exc:
+                last_fingerprint = fingerprint
+                last_forced_push = now
+                if changed:
+                    connected = status_info.get("connected")
+                    print(
+                        f"Printer status changed -> {'connected' if connected else 'NOT connected'}; pushed to live API."
+                    )
+        except Exception:
             pass
-        time.sleep(STATUS_INTERVAL_SECONDS)
+        time.sleep(STATUS_WATCH_SECONDS)
 
 
 def rest_queue_polling_loop(local_cfg: dict) -> None:
