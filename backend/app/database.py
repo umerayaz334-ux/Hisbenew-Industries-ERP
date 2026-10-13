@@ -1452,7 +1452,12 @@ def migrate_database():
             result = connection.execute(text("PRAGMA table_info(shipping)"))
             shipping_columns = [row[1] for row in result]
             shipping_rate_columns = {
+                "courier_name": "VARCHAR",
+                "dispatch_agent": "VARCHAR",
+                "tracking_number": "VARCHAR",
                 "package_weight_kg": "FLOAT",
+                "shipping_cost": "FLOAT",
+                "shipping_note": "VARCHAR",
                 "shipping_service": "VARCHAR DEFAULT 'duty_paid'",
                 "destination_zip_prefix": "VARCHAR",
                 "shipping_zone": "VARCHAR",
