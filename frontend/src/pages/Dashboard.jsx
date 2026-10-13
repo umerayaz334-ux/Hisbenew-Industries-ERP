@@ -5,7 +5,8 @@ import "./Dashboard.css";
 
 const AMAZON_SALE_JOBS_STORAGE_KEY = "erpAmazonSaleNotificationJobsV1";
 const AMAZON_ORDER_SYNC_INTERVAL_MS = 2 * 60 * 1000;
-const dashboardNetworkErrorMessage = `Backend not connected. Please make sure FastAPI is running at ${API_BASE_URL}.`;
+const dashboardNetworkErrorMessage = () =>
+  `Backend not connected. Please make sure FastAPI is running at ${API_BASE_URL}.`;
 
 const dashboardResponseErrorMessage = async (response) => {
   let detail = "";
@@ -892,7 +893,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
         setBackendError(true);
         setDashboardErrorMessage(
           error?.name === "TypeError" || error?.message?.includes("Failed to fetch")
-            ? dashboardNetworkErrorMessage
+            ? dashboardNetworkErrorMessage()
             : error?.message || "Dashboard data could not be loaded."
         );
       }
@@ -1753,7 +1754,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
     return (
       <div className="dashboard-page">
         <div className="dashboard-state error">
-          {dashboardErrorMessage || dashboardNetworkErrorMessage}
+          {dashboardErrorMessage || dashboardNetworkErrorMessage()}
         </div>
       </div>
     );

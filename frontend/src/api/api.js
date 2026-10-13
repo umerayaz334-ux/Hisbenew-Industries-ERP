@@ -80,6 +80,13 @@ const isConfiguredLoopback =
     configuredApiBase
   );
 
+const PRODUCTION_API_BASE = "https://api.hisbenew.com";
+
+const isHisbenewProductionHost = (hostname) => {
+  const host = String(hostname || "").toLowerCase();
+  return host === "hisbenew.com" || host.endsWith(".hisbenew.com");
+};
+
 const resolveApiBaseUrl = () => {
   const storedApiBase = getStoredApiBase();
   const browserNetworkApiBase = getBrowserNetworkApiBase();
@@ -87,6 +94,22 @@ const resolveApiBaseUrl = () => {
 
   const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
   const isPublicDomain = currentHost && !isPrivateNetworkHost(currentHost);
+
+  // Live ERP domain must always talk to the public API — never a leftover LAN/localhost URL.
+  if (isHisbenewProductionHost(currentHost)) {
+    const storedHost = getUrlHostname(storedApiBase).toLowerCase();
+    if (storedApiBase && storedHost !== "api.hisbenew.com") {
+      try {
+        window.localStorage.removeItem("erpApiBaseUrl");
+      } catch {
+        // Ignore storage failures; production API still wins.
+      }
+    }
+    if (configuredApiBase && !isConfiguredLoopback && getUrlHostname(configuredApiBase).toLowerCase() === "api.hisbenew.com") {
+      return configuredApiBase;
+    }
+    return PRODUCTION_API_BASE;
+  }
 
   // Isolate local development (localhost:5173): strictly connect to local backend on PC
   if (isLoopbackHost(currentHost)) {
@@ -97,8 +120,8 @@ const resolveApiBaseUrl = () => {
     const storedHost = getUrlHostname(storedApiBase);
     const storedIsLoopback = isLoopbackHost(storedHost);
     
-    // On public production domain (hisbenew.com), never use a stored local loopback URL (127.0.0.1/localhost)
-    if (isPublicDomain && storedIsLoopback) {
+    // On public production domain, never use a stored local loopback URL (127.0.0.1/localhost)
+    if (isPublicDomain && (storedIsLoopback || isPrivateNetworkHost(storedHost))) {
       try {
         window.localStorage.removeItem("erpApiBaseUrl");
       } catch {}
@@ -119,9 +142,12 @@ const resolveApiBaseUrl = () => {
   if (configuredApiBase && !isConfiguredLoopback) return configuredApiBase;
   if (browserNetworkApiBase) return browserNetworkApiBase;
 
-  return import.meta.env.DEV ? "http://127.0.0.1:8000" : "https://api.hisbenew.com";
+  return import.meta.env.DEV ? "http://127.0.0.1:8000" : PRODUCTION_API_BASE;
 };
 
+export const getApiBaseUrl = () => resolveApiBaseUrl();
+
+// Resolved once per page load after clearing bad stored LAN URLs on hisbenew.com.
 export const API_BASE_URL = resolveApiBaseUrl();
 
 /** Display widths used like CDN image transforms (thumb / card / detail / hero). */
@@ -235,11 +261,47 @@ export const getAuthHeaders = (baseHeaders = {}) => {
   return headers;
 };
 
-export const apiFetch = (url, options = {}) =>
-  fetch(url, {
-    ...options,
-    headers: getAuthHeaders(options.headers || {}),
-  });
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+export const apiFetch = async (url, options = {}) => {
+  const maxAttempts = Number(options.retryAttempts) > 0 ? Number(options.retryAttempts) : 3;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: getAuthHeaders(options.headers || {}),
+      });
+
+      if (response.status === 401 && !isLoginRequest(url)) {
+        let detail = "Your session expired. Please sign in again.";
+        try {
+          const body = await response.clone().json();
+          if (body?.detail) detail = String(body.detail);
+        } catch {
+          // Keep the default session message.
+        }
+        notifyAuthExpired(detail);
+        return response;
+      }
+
+      // Retry transient gateway / restart failures from VPS deploys.
+      if ([502, 503, 504].includes(response.status) && attempt < maxAttempts) {
+        await sleep(700 * attempt);
+        continue;
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts) break;
+      await sleep(700 * attempt);
+    }
+  }
+
+  throw lastError || new Error("Network request failed.");
+};
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -247,6 +309,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl();
   config.headers = config.headers ?? {};
   Object.entries(getAuditHeaders()).forEach(([key, value]) => {
     if (config.headers[key] === undefined) {
@@ -262,8 +325,18 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error?.response?.status === 401 && !isLoginRequest(error?.config?.url)) {
+  async (error) => {
+    const status = error?.response?.status;
+    const config = error?.config || {};
+    const retryCount = Number(config.__retryCount || 0);
+
+    if ([502, 503, 504].includes(status) && retryCount < 2 && !isLoginRequest(config.url)) {
+      config.__retryCount = retryCount + 1;
+      await sleep(700 * (retryCount + 1));
+      return api.request(config);
+    }
+
+    if (status === 401 && !isLoginRequest(config.url)) {
       error.__authExpired = true;
       notifyAuthExpired(
         error.response?.data?.detail || "Your session expired. Please sign in again."

@@ -18148,7 +18148,23 @@ class ShippingWeightOverridePayload(BaseModel):
 
 @app.get("/shipping/usa-rate-card")
 def get_usa_shipping_rate_card():
-    return usa_rate_card_summary()
+    try:
+        return usa_rate_card_summary()
+    except Exception as exc:
+        # Never take down Shipping / Orders pages because the optional rate sheet failed.
+        return {
+            "carrier_product": "",
+            "currency": "USD",
+            "weight_unit": "kg",
+            "source_filename": "",
+            "source_date": "",
+            "uploaded_at": None,
+            "is_uploaded": False,
+            "default_service": "duty_paid",
+            "services": [],
+            "zone_counts": {},
+            "error": str(exc) or "USA rate card is unavailable.",
+        }
 
 
 @app.post("/shipping/usa-rate-card/upload")

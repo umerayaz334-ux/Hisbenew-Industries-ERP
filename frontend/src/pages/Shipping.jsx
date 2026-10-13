@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import JsBarcode from "jsbarcode";
-import api, { API_BASE_URL, apiFetch, getAuthHeaders, getStaticUrl } from "../api/api";
+import api, { API_BASE_URL, apiFetch, getApiBaseUrl, getAuthHeaders, getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
 import { formatUtcLocal, parseUtcLocal } from "../utils/dateUtils";
 import {
@@ -674,146 +674,75 @@ function Shipping({ userRole }) {
   }, [labelDirectPrinter]);
 
 
-  const loadShippingData = async ({ quiet = false } = {}) => {
-
-    if (!quiet) setRefreshing(true);
-
-    setLoadError("");
-
-
-
-    try {
-
-      const [pendingResponse, historyResponse, rateCardResponse] = await Promise.all([
-
-        apiFetch(`${API_BASE_URL}/shipping/pending`),
-
-        apiFetch(`${API_BASE_URL}/shipping`),
-
-        apiFetch(`${API_BASE_URL}/shipping/usa-rate-card`),
-
-      ]);
-
-
-
-      if (!pendingResponse.ok || !historyResponse.ok || !rateCardResponse.ok) {
-
-        throw new Error("Shipping data could not be loaded.");
-
-      }
-
-
-
-      const [pendingData, historyData, rateCardData] = await Promise.all([
-
-        pendingResponse.json(),
-
-        historyResponse.json(),
-
-        rateCardResponse.json(),
-
-      ]);
-
-
-
-      setPendingOrders(Array.isArray(pendingData) ? pendingData : []);
-
-      setShippingRecords(Array.isArray(historyData) ? historyData : []);
-
-      setRateCard(rateCardData);
-
-    } catch (error) {
-
-      console.error("Shipping data loading error:", error);
-
-      setLoadError("Unable to load shipping data. Check the backend and try again.");
-
-    } finally {
-
-      setRefreshing(false);
-
+  const describeShippingLoadError = (pendingResponse, historyResponse) => {
+    const status = pendingResponse?.status || historyResponse?.status || 0;
+    if (status === 401 || status === 403) {
+      return "Your session expired or this login cannot open Shipping. Sign in again.";
     }
-
+    if ([502, 503, 504].includes(status)) {
+      return "The live API is restarting. Retry in a moment.";
+    }
+    if (!status) {
+      return `Cannot reach the live API at ${getApiBaseUrl()}. Check your internet connection.`;
+    }
+    return `Unable to load shipping data (HTTP ${status}). Check the backend and try again.`;
   };
 
+  const loadShippingData = async ({ quiet = false } = {}) => {
+    if (!quiet) setRefreshing(true);
+    setLoadError("");
+    const apiBase = getApiBaseUrl();
 
+    try {
+      const [pendingResponse, historyResponse] = await Promise.all([
+        apiFetch(`${apiBase}/shipping/pending`),
+        apiFetch(`${apiBase}/shipping`),
+      ]);
+
+      if (!pendingResponse.ok || !historyResponse.ok) {
+        throw Object.assign(new Error("Shipping data could not be loaded."), {
+          pendingResponse,
+          historyResponse,
+        });
+      }
+
+      const [pendingData, historyData] = await Promise.all([
+        pendingResponse.json(),
+        historyResponse.json(),
+      ]);
+
+      setPendingOrders(Array.isArray(pendingData) ? pendingData : []);
+      setShippingRecords(Array.isArray(historyData) ? historyData : []);
+      setLoadError("");
+
+      // Rate card is helpful but must not block the shipping page.
+      try {
+        const rateCardResponse = await apiFetch(`${apiBase}/shipping/usa-rate-card`);
+        if (rateCardResponse.ok) {
+          setRateCard(await rateCardResponse.json());
+        }
+      } catch (rateError) {
+        console.warn("USA rate card could not be loaded.", rateError);
+      }
+    } catch (error) {
+      console.error("Shipping data loading error:", error);
+      setLoadError(
+        describeShippingLoadError(error?.pendingResponse, error?.historyResponse)
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-
     let active = true;
-
-
-
-    Promise.all([
-
-      apiFetch(`${API_BASE_URL}/shipping/pending`),
-
-      apiFetch(`${API_BASE_URL}/shipping`),
-
-      apiFetch(`${API_BASE_URL}/shipping/usa-rate-card`),
-
-    ])
-
-      .then(async ([pendingResponse, historyResponse, rateCardResponse]) => {
-
-        if (!pendingResponse.ok || !historyResponse.ok || !rateCardResponse.ok) {
-
-          throw new Error("Shipping data could not be loaded.");
-
-        }
-
-        return Promise.all([
-
-          pendingResponse.json(),
-
-          historyResponse.json(),
-
-          rateCardResponse.json(),
-
-        ]);
-
-      })
-
-      .then(([pendingData, historyData, rateCardData]) => {
-
-        if (!active) return;
-
-        setPendingOrders(Array.isArray(pendingData) ? pendingData : []);
-
-        setShippingRecords(Array.isArray(historyData) ? historyData : []);
-
-        setRateCard(rateCardData);
-
-        setLoadError("");
-
-      })
-
-      .catch((error) => {
-
-        console.error("Shipping data loading error:", error);
-
-        if (active) {
-
-          setLoadError("Unable to load shipping data. Check the backend and try again.");
-
-        }
-
-      })
-
-      .finally(() => {
-
-        if (active) setRefreshing(false);
-
-      });
-
-
-
+    loadShippingData().finally(() => {
+      if (!active) return;
+    });
     return () => {
-
       active = false;
-
     };
-
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
 
