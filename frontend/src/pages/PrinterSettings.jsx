@@ -132,7 +132,7 @@ export default function PrinterSettings() {
       const availablePrinters = Array.isArray(data.printers) ? data.printers : [];
       if (availablePrinters.length > 0) {
         setDirectPrinterState((current) => {
-          if (current && availablePrinters.some((p) => p.name === current && p.supports_direct_labels && p.is_connected !== false)) {
+          if (current) {
             return current;
           }
           const thermalP = availablePrinters.find((p) => p.supports_direct_labels && p.is_connected) || availablePrinters.find((p) => p.supports_direct_labels);

@@ -7,6 +7,8 @@ import { LABEL_PRINTER_LANGUAGE_KEY, translateLabelPrinter } from "../utils/labe
 import { removePrintedCopies, waitForLabelPrintJob } from "../utils/labelPrintQueue";
 import { useWorkspaceData } from "../utils/workspaceData";
 
+const DIRECT_PRINTER_STORAGE_KEY = "erpLabelPrinterDirectPrinter";
+
 const LABEL_PRINTER_WORKSPACE_KEY = "label-printer";
 
 const DEFAULT_PRESETS = [
@@ -132,17 +134,7 @@ const printerListFingerprint = (printers = []) =>
     .join(";");
 
 const pickPreferredLabelPrinter = (printers = [], currentName = "") => {
-  if (
-    currentName &&
-    printers.some(
-      (printer) =>
-        printer.name === currentName &&
-        printer.supports_direct_labels &&
-        printer.is_connected !== false
-    )
-  ) {
-    return currentName;
-  }
+  if (currentName) return currentName;
   const thermalConnected =
     printers.find((printer) => printer.supports_direct_labels && printer.is_connected !== false) ||
     printers.find((printer) => printer.supports_direct_labels);
@@ -905,7 +897,7 @@ function LabelPrinter() {
   const [designClipboard, setDesignClipboard] = useState(null);
   const [storageReady, setStorageReady] = useState(false);
   const [inlineEditingLayer, setInlineEditingLayer] = useState("");
-  const [directPrinter, setDirectPrinter] = useState("");
+  const [directPrinter, setDirectPrinter] = useState(() => readStoredText(DIRECT_PRINTER_STORAGE_KEY, ""));
   const [directPrinting, setDirectPrinting] = useState(false);
   const [printerOptions, setPrinterOptions] = useState([]);
   const [printerStatus, setPrinterStatus] = useState({ loading: true, error: "" });
@@ -913,7 +905,12 @@ function LabelPrinter() {
   const [localPrintBridgeUrl, setLocalPrintBridgeUrl] = useState(getInitialLocalPrintBridgeUrl);
   const liveEditorRef = useRef(null);
   const printerSnapshotRef = useRef("");
-  const directPrinterRef = useRef("");
+  const directPrinterRef = useRef(directPrinter);
+  useEffect(() => {
+    if (directPrinter) {
+      try { window.localStorage.setItem(DIRECT_PRINTER_STORAGE_KEY, directPrinter); } catch {}
+    }
+  }, [directPrinter]);
   const printerHotplugBusyRef = useRef(false);
 
   useEffect(() => {
@@ -1032,23 +1029,6 @@ function LabelPrinter() {
 
       setPrinterOptions(printers);
       setDirectPrinter((current) => {
-        const currentOffline =
-          current &&
-          printers.some(
-            (printer) => printer.name === current && printer.is_connected === false
-          );
-        const currentMissing = current && !printers.some((printer) => printer.name === current);
-        // Prefer a newly plugged USB thermal when the current selection is empty or offline.
-        if (detectHotplug && newlyConnected.length) {
-          // Always reselect the thermal that just came back online after USB plug-in.
-          directPrinterRef.current = newlyConnected[0].name;
-          return newlyConnected[0].name;
-        }
-        if (detectHotplug && (currentOffline || currentMissing)) {
-          const preferred = pickPreferredLabelPrinter(printers, "");
-          directPrinterRef.current = preferred;
-          return preferred;
-        }
         const preferred = pickPreferredLabelPrinter(printers, current);
         directPrinterRef.current = preferred;
         return preferred;
@@ -1076,8 +1056,7 @@ function LabelPrinter() {
       const detail = getPrinterApiError(error, "Printer status could not be checked.");
       if (!silent) {
         setPrinterOptions([]);
-        setDirectPrinter("");
-        directPrinterRef.current = "";
+
         setPrinterStatus({ loading: false, error: detail });
       }
       if (showNotice) setNotice("Printer status could not be checked: {detail}", { detail });
@@ -1123,11 +1102,10 @@ function LabelPrinter() {
             : "Local print agent started. Connecting printers..."
         );
         if (ensuredPrinters.length > 0) {
-          if (printerConnectionMode !== "local") {
-            setPrinterConnectionMode("local");
+          if (useLocalPrinterBridge) {
+            applyPrinterList(ensuredPrinters, "This laptop");
+            return;
           }
-          applyPrinterList(ensuredPrinters, "This laptop");
-          return;
         }
       }
 
@@ -1145,7 +1123,7 @@ function LabelPrinter() {
         } catch (error) {
           const detail = getPrinterApiError(error, "Printer status could not be checked.");
           setPrinterOptions([]);
-          setDirectPrinter("");
+
           setPrinterStatus({ loading: false, error: detail });
         }
         await new Promise((resolve) => window.setTimeout(resolve, 700));
