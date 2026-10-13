@@ -8,11 +8,45 @@ import re
 from datetime import datetime
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, HttpUrl
 from sqlalchemy.exc import IntegrityError
 
 from .models import MuseApiKey, MuseSubmission, User, Tenant, Order, Customer, Product
 from .schemas import OrderCreate, OrderItemCreate
+
+
+class MuseProduct(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    article_no: str = Field(min_length=1, max_length=255)
+    name: str = Field(min_length=1, max_length=500)
+    unit_price_usd: float = Field(ge=0, allow_inf_nan=False)
+    image_url: HttpUrl | None = None
+
+
+def product_result(product):
+    return {"id": product.id, "article_no": product.article_no,
+            "name": product.name, "unit_price_usd": product.selling_price or 0,
+            "image_url": product.image_url}
+
+
+def ensure_product(payload, db):
+    existing = db.query(Product).filter_by(article_no=payload.article_no).first()
+    if existing:
+        return product_result(existing)
+    product = Product(article_no=payload.article_no, name=payload.name,
+                      selling_price=payload.unit_price_usd,
+                      image_url=str(payload.image_url) if payload.image_url else None)
+    db.add(product)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(Product).filter_by(article_no=payload.article_no).first()
+        if existing:
+            return product_result(existing)
+        raise HTTPException(409, "Article number unavailable; contact your administrator")
+    db.refresh(product)
+    return product_result(product)
 
 
 class MuseItem(BaseModel):
@@ -197,9 +231,19 @@ class MuseQueueService:
     def __init__(self, engine, create_order, sync_accounting):
         self.args = engine, create_order, sync_accounting
         self.task = None
+        self.loop = None
+        self.wake = None
+        self.poll_interval_seconds = 5
 
     async def start(self):
+        self.loop = asyncio.get_running_loop()
+        self.wake = asyncio.Event()
         self.task = asyncio.create_task(self.run())
+
+    def notify(self):
+        # API handlers run in worker threads; wake the service on its own loop.
+        if self.loop and self.wake and not self.loop.is_closed():
+            self.loop.call_soon_threadsafe(self.wake.set)
 
     async def stop(self):
         if self.task:
@@ -211,11 +255,15 @@ class MuseQueueService:
 
     async def run(self):
         while True:
+            self.wake.clear()
             try:
                 await asyncio.to_thread(process_queue, *self.args)
             except Exception:
                 logging.getLogger(__name__).exception("Muse queue check failed")
-            await asyncio.sleep(600)
+            try:
+                await asyncio.wait_for(self.wake.wait(), timeout=self.poll_interval_seconds)
+            except asyncio.TimeoutError:
+                pass
 
 
 def record_payout(payload, db, sync_accounting):

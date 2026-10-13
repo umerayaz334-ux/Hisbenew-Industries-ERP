@@ -21891,7 +21891,7 @@ def app_install_info(request: Request):
     }
 
 
-from .muse_api import MuseOrder, MusePayout, MuseQueueService, enqueue, rotate_key, submission_result, order_result
+from .muse_api import MuseOrder, MusePayout, MuseProduct, MuseQueueService, enqueue, rotate_key, submission_result, order_result, product_result, ensure_product
 from .models import MuseSubmission, MuseApiKey
 
 
@@ -21912,7 +21912,8 @@ def muse_settings(request: Request, db: Session = Depends(get_db)):
     tenant_id = db.info["tenant_id"]
     rows = db.query(MuseSubmission).filter_by(tenant_id=tenant_id).order_by(MuseSubmission.id.desc()).limit(100).all()
     return {"configured": db.query(MuseApiKey).filter_by(tenant_id=tenant_id).first() is not None,
-            "poll_interval_minutes": 10, "submissions": [submission_result(row) for row in rows]}
+            "poll_interval_minutes": 5 / 60, "poll_interval_seconds": 5,
+            "processing_mode": "on_submission", "submissions": [submission_result(row) for row in rows]}
 
 
 @app.post("/muse-settings/retry/{submission_id}")
@@ -21923,17 +21924,32 @@ def muse_retry(submission_id: int, request: Request, db: Session = Depends(get_d
         raise HTTPException(409, "Failed submission not found")
     row.status, row.error = "Pending", None
     db.commit()
+    muse_queue_service.notify()
     return submission_result(row)
+
+
+@app.get("/integrations/muse/products")
+def muse_products(db: Session = Depends(get_db)):
+    return [product_result(product) for product in db.query(Product).order_by(Product.article_no).all()]
+
+
+@app.post("/integrations/muse/products")
+def muse_create_product(payload: MuseProduct, db: Session = Depends(get_db)):
+    return ensure_product(payload, db)
 
 
 @app.post("/integrations/muse/orders", status_code=202)
 def muse_order(payload: MuseOrder, db: Session = Depends(get_db)):
-    return enqueue(payload, "order", db)
+    result = enqueue(payload, "order", db)
+    muse_queue_service.notify()
+    return result
 
 
 @app.post("/integrations/muse/payouts", status_code=202)
 def muse_payout(payload: MusePayout, db: Session = Depends(get_db)):
-    return enqueue(payload, "payout", db)
+    result = enqueue(payload, "payout", db)
+    muse_queue_service.notify()
+    return result
 
 
 @app.get("/integrations/muse/pending-payouts")

@@ -14,6 +14,8 @@ All requests require `Authorization: Bearer <API_KEY>`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| GET | `/products` | List company products with id, article_no, name, unit_price_usd and image_url |
+| POST | `/products` | Immediately create a missing product or return the existing SKU |
 | POST | `/orders` | Queue order details and customer matching |
 | POST | `/payouts` | Queue a final actual payout |
 | GET | `/submissions` | Latest 100 submissions with Pending, Applied or Failed status |
@@ -23,8 +25,11 @@ POST bodies and examples are available in Orders settings and the FastAPI
 OpenAPI schema. Amounts are USD. Items refer to existing product article numbers;
 quantity is units, and unit price is the gross price per unit.
 
-The backend checks persisted submissions at startup and every 600 seconds while
-running. A successful POST returns 202, meaning queued, not applied. The batch
+The backend starts processing when an order, payout, or retry is submitted.
+It also checks persisted submissions at startup and every 5 seconds as a fallback
+while running. Processing time depends on server load; HTTP 202 is not a promise
+that processing has finished. Poll `/submissions` every 2 seconds until Applied
+or Failed. A successful POST returns 202, meaning queued, not applied. The batch
 processes up to 500 submissions per check. Failed submissions show an error in
 settings and can be corrected and resubmitted, or retried from settings after
 fixing the underlying customer/product data. Identical retries do not create
@@ -55,3 +60,30 @@ $env:SECRET_KEY='muse-test-only'
 Tests use the HTTP test client (`httpx`) and isolated SQLite tables. They cover
 tenant isolation, key rotation, validation, customer reuse, retries, inventory,
 transaction rollback, and the accounting integration.
+
+Product setup uses the same base URL and bearer key. Example `POST /products`:
+
+```json
+{"article_no": "SKU-NEW", "name": "Product name", "unit_price_usd": 25.50, "image_url": "https://example.com/catalog/product.jpg"}
+```
+
+Both product endpoints return HTTP 200. GET returns an array; POST returns one
+object with `id`, `article_no`, `name`, `unit_price_usd`, and `image_url`. Prices map to the ERP
+selling price in USD. New products start with zero stock. Article numbers and
+names are trimmed and cannot be blank; prices must be finite and nonnegative.
+Matching uses exact, case-sensitive article numbers. Repeating POST for an
+existing article returns it without overwriting its name, price, or image. A conflicting
+article unavailable to this company returns 409 without exposing other company data.
+
+Before sending an order, list products, create each missing SKU using its catalog
+wholesale price, verify it exists, then POST the order. After adding products for
+a Failed submission, resend that order and poll `/submissions` until Applied.
+Product creation is immediate and does not wait for the order queue. Existing
+Muse API keys work without rotation.
+
+`image_url` is optional and accepts an absolute HTTP/HTTPS URL (HTTPS recommended).
+Omit it or send null for products without an image. Use a publicly accessible
+direct image URL, not a product page. The ERP stores the URL without downloading
+or verifying the image; the source must remain available for display. GET and
+POST product responses include the stored URL, or null when absent. Existing
+products are unchanged by repeated POST requests, including their images.
