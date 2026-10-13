@@ -3208,29 +3208,21 @@ function Shipping({ userRole }) {
 
               disabled={filteredPendingOrders.length === 0}
 
-              onClick={() => openEasyshipReview(filteredPendingOrders)}
+              onClick={() =>
+                openEasyshipReview(
+                  selectedPendingOrders.length > 0
+                    ? selectedPendingOrders
+                    : filteredPendingOrders,
+                )
+              }
 
               type="button"
 
             >
 
-              Download all pending
-
-            </button>
-
-            <button
-
-              className="shipping-easyship-button shipping-easyship-button-secondary"
-
-              disabled={selectedPendingOrders.length === 0}
-
-              onClick={() => openEasyshipReview(selectedPendingOrders)}
-
-              type="button"
-
-            >
-
-              Download selected ({selectedPendingOrders.length})
+              {selectedPendingOrders.length > 0
+                ? `Download selected (${selectedPendingOrders.length})`
+                : `Download all pending (${filteredPendingOrders.length})`}
 
             </button>
 
@@ -5492,6 +5484,7 @@ function Shipping({ userRole }) {
               </button>
             </div>
 
+            <div className="shipping-easyship-modal-body">
             <div className="shipping-easyship-global-fields">
               <label>
                 <span>Choose courier by</span>
@@ -5638,13 +5631,13 @@ function Shipping({ userRole }) {
                               <option value="kg">kg</option>
                               <option value="lb">lb</option>
                             </select>
+                            {convertedHint ? (
+                              <small className="shipping-easyship-weight-hint">{convertedHint}</small>
+                            ) : null}
                           </div>
-                          {convertedHint ? (
-                            <small className="shipping-easyship-weight-hint">{convertedHint}</small>
-                          ) : null}
                         </label>
-                        <label>
-                          <span>Length (in) optional</span>
+                        <label className="shipping-easyship-dim-field">
+                          <span>L (in)</span>
                           <input
                             inputMode="decimal"
                             min="0.001"
@@ -5661,8 +5654,8 @@ function Shipping({ userRole }) {
                             value={pack.length_in ?? ""}
                           />
                         </label>
-                        <label>
-                          <span>Width (in) optional</span>
+                        <label className="shipping-easyship-dim-field">
+                          <span>W (in)</span>
                           <input
                             inputMode="decimal"
                             min="0.001"
@@ -5679,8 +5672,8 @@ function Shipping({ userRole }) {
                             value={pack.width_in ?? ""}
                           />
                         </label>
-                        <label>
-                          <span>Height (in) optional</span>
+                        <label className="shipping-easyship-dim-field">
+                          <span>H (in)</span>
                           <input
                             inputMode="decimal"
                             min="0.001"
@@ -5701,6 +5694,8 @@ function Shipping({ userRole }) {
                     </article>
                   );
                 })}
+            </div>
+
             </div>
 
             <div className="shipping-easyship-modal-actions">

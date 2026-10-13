@@ -4405,12 +4405,41 @@
 
 
 /* Easyship pending dispatch selection + review */
+.shipping-pending-panel > .shipping-panel-header {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shipping-pending-panel .shipping-panel-title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
 .shipping-pending-toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shipping-pending-toolbar .shipping-select-all,
+.shipping-pending-toolbar .shipping-easyship-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.shipping-pending-toolbar .shipping-search-box {
+  flex: 1 1 180px;
+  width: auto;
+  max-width: 240px;
+  min-width: 140px;
 }
 
 .shipping-select-all {
@@ -4488,21 +4517,29 @@
 .shipping-easyship-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 1200;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(15, 23, 42, 0.5);
 }
 
 .shipping-easyship-modal {
+  display: flex;
+  flex-direction: column;
   width: min(920px, 100%);
   max-height: min(90vh, 900px);
-  overflow: auto;
+  overflow: hidden;
   border-radius: 16px;
   background: #ffffff;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.shipping-easyship-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .shipping-easyship-modal-header {
@@ -4510,8 +4547,10 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  flex: 0 0 auto;
   padding: 20px 22px 12px;
   border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
 }
 
 .shipping-easyship-modal-header h3 {
@@ -4525,11 +4564,17 @@
   font-size: 0.92rem;
 }
 
-.shipping-easyship-global-fields,
-.shipping-easyship-package-fields {
+.shipping-easyship-global-fields {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
+}
+
+.shipping-easyship-package-fields {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 10px;
 }
 
 .shipping-easyship-global-fields {
@@ -4547,10 +4592,13 @@
   font-weight: 600;
 }
 
+.shipping-easyship-package-fields label span {
+  white-space: nowrap;
+}
+
 .shipping-easyship-global-fields input,
 .shipping-easyship-global-fields select,
 .shipping-easyship-package-fields input {
-  width: 100%;
   border: 1px solid #d0d7de;
   border-radius: 10px;
   padding: 9px 11px;
@@ -4558,6 +4606,12 @@
   font-weight: 500;
   color: #0f172a;
   background: #fff;
+  box-sizing: border-box;
+}
+
+.shipping-easyship-global-fields input,
+.shipping-easyship-global-fields select {
+  width: 100%;
 }
 
 .shipping-easyship-order-list {
@@ -4657,36 +4711,69 @@
 }
 
 .shipping-easyship-weight-field {
-  min-width: 160px;
+  flex: 0 0 auto;
+  min-width: 260px;
+  max-width: 300px;
 }
 
 .shipping-easyship-weight-input {
-  display: grid;
-  grid-template-columns: 1fr 64px;
-  gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.shipping-easyship-weight-input input {
+  flex: 0 0 84px;
+  width: 84px;
+  min-width: 84px;
 }
 
 .shipping-easyship-weight-input select {
+  flex: 0 0 58px;
+  width: 58px;
   border: 1px solid #d0d7de;
   border-radius: 10px;
-  padding: 9px 8px;
+  padding: 9px 6px;
   font: inherit;
   font-weight: 600;
   background: #fff;
 }
 
 .shipping-easyship-weight-hint {
+  flex: 0 0 auto;
+  min-width: 4.8rem;
+  margin-left: 2px;
+  padding: 0 2px;
+  white-space: nowrap;
   color: #64748b;
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.shipping-easyship-dim-field {
+  flex: 0 0 78px;
+  width: 78px;
+  max-width: 78px;
+}
+
+.shipping-easyship-dim-field input {
+  width: 100%;
+  max-width: 78px;
+  padding-left: 8px;
+  padding-right: 8px;
+  text-align: center;
 }
 
 .shipping-easyship-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  flex: 0 0 auto;
   padding: 14px 22px 20px;
   border-top: 1px solid #e5e7eb;
+  background: #ffffff;
 }
 
 .shipping-easyship-modal-actions button {
@@ -4712,12 +4799,21 @@
 }
 
 @media (max-width: 720px) {
+  .shipping-pending-panel > .shipping-panel-header {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
   .shipping-pending-toolbar {
-    justify-content: stretch;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .shipping-pending-toolbar .shipping-search-box {
-    width: 100%;
+    flex: 1 1 160px;
+    max-width: none;
+    width: auto;
   }
 
   .shipping-order-select {
