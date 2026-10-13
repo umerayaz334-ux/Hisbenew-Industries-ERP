@@ -24,6 +24,7 @@ export const useWorkspaceData = ({
   loadLocal,
   normalize,
   saveLocal,
+  preferServer = false,
 }) => {
   const [initialLocal] = useState(() => {
     const loaded = loadLocal();
@@ -111,12 +112,15 @@ export const useWorkspaceData = ({
           initialLocal.updatedAt > serverUpdatedAt;
 
         hydratedRef.current = true;
-        if (changedBeforeHydrationRef.current || localIsNewer) {
+        // Shared company data (label designs): always take the ERP copy when it exists,
+        // so phone/laptop stay identical. Only push local when the server has nothing yet
+        // or this tab already edited before hydrate finished.
+        if (changedBeforeHydrationRef.current) {
           queueServerSave(dataRef.current);
           return;
         }
 
-        if (serverFound) {
+        if (serverFound && (preferServer || !localIsNewer)) {
           const serverData = normalize(response.data.data);
           dataRef.current = serverData;
           setDataState(serverData);
@@ -125,7 +129,7 @@ export const useWorkspaceData = ({
           return;
         }
 
-        if (initialLocal.exists) {
+        if (localIsNewer || initialLocal.exists) {
           queueServerSave(dataRef.current);
         } else {
           setSyncStatus("synced");

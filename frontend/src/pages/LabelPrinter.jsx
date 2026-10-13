@@ -854,6 +854,7 @@ function LabelPrinter() {
     loadLocal: loadLabelPrinterWorkspaceLocal,
     normalize: normalizeLabelPrinterWorkspace,
     saveLocal: saveLabelPrinterWorkspaceLocal,
+    preferServer: true,
   });
   const customSizes = sharedDesign.customSizes;
   const productDesigns = sharedDesign.productDesigns;

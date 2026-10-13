@@ -577,59 +577,23 @@ def ensure_accounting_schema_sqlite(connection, default_tenant_id: int) -> None:
             if index_columns == ["name"]:
                 unique_name_indexes.append(index_name)
         if unique_name_indexes:
-            connection.execute(text("PRAGMA foreign_keys=OFF"))
-            connection.execute(text("DROP TABLE IF EXISTS accounting_accounts_new"))
-            connection.execute(text("""
-                CREATE TABLE accounting_accounts_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tenant_id INTEGER,
-                    name VARCHAR NOT NULL,
-                    account_type VARCHAR DEFAULT 'Bank',
-                    platform VARCHAR,
-                    currency VARCHAR DEFAULT 'PKR',
-                    opening_balance FLOAT DEFAULT 0,
-                    notes TEXT,
-                    is_active BOOLEAN DEFAULT 1,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(tenant_id, name),
-                    FOREIGN KEY(tenant_id) REFERENCES tenants(id)
-                )
-            """))
-            connection.execute(text("""
-                INSERT INTO accounting_accounts_new (
-                    id,
-                    tenant_id,
-                    name,
-                    account_type,
-                    platform,
-                    currency,
-                    opening_balance,
-                    notes,
-                    is_active,
-                    created_at,
-                    updated_at
-                )
-                SELECT
-                    id,
-                    COALESCE(tenant_id, :tenant_id),
-                    name,
-                    account_type,
-                    platform,
-                    currency,
-                    opening_balance,
-                    notes,
-                    is_active,
-                    created_at,
-                    updated_at
-                FROM accounting_accounts
-            """), {"tenant_id": default_tenant_id})
-            connection.execute(text("DROP TABLE accounting_accounts"))
-            connection.execute(text("ALTER TABLE accounting_accounts_new RENAME TO accounting_accounts"))
-            connection.execute(text("PRAGMA foreign_keys=ON"))
+            # Drop name-only unique indexes in place. Rebuilding the whole table with
+            # DROP TABLE fails on live when child FKs still reference accounting_accounts
+            # (PRAGMA foreign_keys=OFF is unreliable inside SQLAlchemy transactions).
+            for index_name in unique_name_indexes:
+                safe_name = str(index_name or "").replace('"', "")
+                if not safe_name:
+                    continue
+                try:
+                    connection.execute(text(f'DROP INDEX IF EXISTS "{safe_name}"'))
+                except Exception as exc:
+                    print(f"Could not drop accounting_accounts index {safe_name}: {exc}")
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_accounts_tenant_id ON accounting_accounts(tenant_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_accounts_name ON accounting_accounts(name)"))
-        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_accounting_account_tenant_name ON accounting_accounts(tenant_id, name)"))
+        try:
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_accounting_account_tenant_name ON accounting_accounts(tenant_id, name)"))
+        except Exception as exc:
+            print(f"Could not ensure accounting_accounts tenant/name unique index: {exc}")
 
     try:
         transaction_columns = sqlite_table_columns(connection, "accounting_transactions")
