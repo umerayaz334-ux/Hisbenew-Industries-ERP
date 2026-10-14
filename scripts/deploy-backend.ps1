@@ -262,7 +262,7 @@ Invoke-Step `
             $runnerBackend `
             $backendPath `
             /E `
-            /XD ".venv" "venv" "__pycache__" ".git" `
+            /XD ".venv" "venv" "__pycache__" ".git" "uploads" "optimized" `
             /XF "*.pyc" "*.db" "*.sqlite" `
             /R:1 /W:2 /NFL /NDL /NJH /NJS
 

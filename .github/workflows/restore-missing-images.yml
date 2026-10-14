@@ -1,0 +1,38 @@
+name: Restore missing images
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      sha256:
+        required: true
+        type: string
+concurrency:
+  group: backend-vps-production
+  cancel-in-progress: false
+jobs:
+  restore:
+    runs-on: self-hosted
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore only missing images
+        env:
+          ERP_ROOT: ${{ vars.ERP_ROOT }}
+          ERP_BACKEND_VENV: ${{ vars.ERP_BACKEND_VENV }}
+          IMAGE_RECOVERY_URL: https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/${{ inputs.release_tag }}/images.enc
+          IMAGE_RECOVERY_SHA256: ${{ inputs.sha256 }}
+          IMAGE_RECOVERY_KEY: ${{ secrets.IMAGE_RECOVERY_KEY }}
+        run: |
+          $root = if ($env:ERP_ROOT) { $env:ERP_ROOT } else { 'C:\HisbenewERP' }
+          $backend = Join-Path $root 'backend'
+          $venv = if ($env:ERP_BACKEND_VENV) { $env:ERP_BACKEND_VENV } elseif (Test-Path (Join-Path $backend 'venv\Scripts\python.exe')) { Join-Path $backend 'venv' } else { Join-Path $backend '.venv' }
+          $python = Join-Path $venv 'Scripts\python.exe'
+          $script = Join-Path $env:GITHUB_WORKSPACE 'scripts\restore_missing_images.py'
+          Set-Location $backend
+          & $python $script $backend
+          if ($LASTEXITCODE -ne 0) { throw 'Image recovery failed' }
