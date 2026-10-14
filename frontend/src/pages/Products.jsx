@@ -1627,7 +1627,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
           <div className="products-worker-grid">
             {productsPagination.items.map((product) => {
               const stockStatus = getStockStatus(product);
-              const imageUrl = getStaticUrl(product.image_url);
+              const imageUrl = getStaticUrl(product.image_url, { w: 360 });
 
               return (
                 <article className="products-worker-card" key={product.id}>
@@ -1741,7 +1741,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                               <img loading="lazy" decoding="async"
                                 alt={product.name}
                                 className="products-thumbnail"
-                                src={getStaticUrl(product.image_url)}
+                                src={getStaticUrl(product.image_url, { w: 160 })}
                               />
                             ) : (
                               <span className="products-thumbnail-placeholder">
@@ -1919,7 +1919,7 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                       })}
                       type="checkbox"
                     />
-                    <img loading="lazy" decoding="async" alt="" src={getStaticUrl(product.image_url)} />
+                    <img loading="lazy" decoding="async" alt="" src={getStaticUrl(product.image_url, { w: 160 })} />
                     <span>
                       <strong>{product.name}</strong>
                       <small>SKU {product.article_no} | {product.category || "Uncategorized"}</small>

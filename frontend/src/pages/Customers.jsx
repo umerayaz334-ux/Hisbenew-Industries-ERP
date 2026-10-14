@@ -1604,9 +1604,9 @@ function Customers({ onCreateOrder = null }) {
                         {detailTopProductList.map((item) => (
                           <div className="customers-profile-product" key={item.key}>
                             {item.product_image_url ? (
-                              <img
+                              <img decoding="async" loading="lazy"
                                 alt={item.product_name}
-                                src={getStaticUrl(item.product_image_url)}
+                                src={getStaticUrl(item.product_image_url, { w: 160 })}
                               />
                             ) : (
                               <span>{getCustomerInitials({ name: item.article_no || item.product_name })}</span>
@@ -1641,10 +1641,10 @@ function Customers({ onCreateOrder = null }) {
                           <div className="customers-order-product-cell">
                             <div className="customers-order-thumbnails">
                               {getOrderImageItems(order, 3).map((item) => (
-                                <img
+                                <img decoding="async" loading="lazy"
                                   alt={item.product_name || item.article_no || "Product"}
                                   key={`${order.id}-${item.id || item.article_no}`}
-                                  src={getStaticUrl(item.product_image_url)}
+                                  src={getStaticUrl(item.product_image_url, { w: 160 })}
                                 />
                               ))}
                             </div>
@@ -1689,10 +1689,10 @@ function Customers({ onCreateOrder = null }) {
                           <span>{formatCustomerDate(order.order_date)}</span>
                           <div className="customers-order-thumbnails">
                             {getOrderImageItems(order, 4).map((item) => (
-                              <img
+                              <img decoding="async" loading="lazy"
                                 alt={item.product_name || item.article_no || "Product"}
                                 key={`${order.id}-history-${item.id || item.article_no}`}
-                                src={getStaticUrl(item.product_image_url)}
+                                src={getStaticUrl(item.product_image_url, { w: 160 })}
                               />
                             ))}
                           </div>

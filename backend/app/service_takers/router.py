@@ -1443,6 +1443,12 @@ def save_product_image(upload: UploadFile) -> str:
                 output.write(chunk)
         if total_bytes == 0:
             raise HTTPException(status_code=400, detail="The product image is empty.")
+        from PIL import Image
+        try:
+            with Image.open(destination) as image:
+                image.verify()
+        except Exception as exc:
+            raise HTTPException(400, "Invalid or damaged product image.") from exc
     except Exception:
         destination.unlink(missing_ok=True)
         raise
@@ -1485,6 +1491,13 @@ def save_payment_proof(upload: UploadFile) -> tuple[str, str]:
                 if total_bytes > MAX_PAYMENT_PROOF_BYTES:
                     raise HTTPException(status_code=400, detail='Payment proof must be 8 MB or smaller.')
                 output.write(chunk)
+        if extension != '.pdf':
+            from PIL import Image
+            try:
+                with Image.open(destination) as image:
+                    image.verify()
+            except Exception as exc:
+                raise HTTPException(400, "Invalid or damaged payment proof image.") from exc
     except Exception:
         destination.unlink(missing_ok=True)
         raise

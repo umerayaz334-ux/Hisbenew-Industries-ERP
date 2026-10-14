@@ -433,7 +433,7 @@ const ShippingLabelPreview = ({ item, size }) => {
     }
     if (layerId === "image") {
       return item.showImage && item.imageUrl ? (
-        <div className="shipping-label-preview-image"><img alt="" src={getStaticUrl(item.imageUrl)} /></div>
+        <div className="shipping-label-preview-image"><img decoding="async" loading="lazy" alt="" src={getStaticUrl(item.imageUrl, { w: 160 })} /></div>
       ) : null;
     }
     if (layerId === "barcode") {
@@ -1938,7 +1938,7 @@ function Shipping({ userRole }) {
         <tr>
           <td style="text-align: center; width: 40px; color: #000000; font-weight: 800; font-size: 14px; border: 1.5px solid #000000;">${idx + 1}</td>
           <td style="width: 76px; text-align: center; border: 1.5px solid #000000;">
-            ${imgUrl ? `<img src="${imgUrl}" alt="${articleNo}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 2px solid #000000; display: block; margin: auto;" />` : `<div style="width: 60px; height: 60px; border-radius: 4px; background: #ffffff; border: 2px solid #000000; display: flex; align-items: center; justify-content: center; font-weight: 900; color: #000000; margin: auto; font-size: 18px;">${initials}</div>`}
+            ${imgUrl ? `<img decoding="async" loading="lazy" src="${imgUrl}" alt="${articleNo}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 2px solid #000000; display: block; margin: auto;" />` : `<div style="width: 60px; height: 60px; border-radius: 4px; background: #ffffff; border: 2px solid #000000; display: flex; align-items: center; justify-content: center; font-weight: 900; color: #000000; margin: auto; font-size: 18px;">${initials}</div>`}
           </td>
           <td style="border: 1.5px solid #000000;">
             <div style="font-weight: 900; font-size: 16.5px; color: #000000; letter-spacing: -0.01em;">${articleNo}</div>
@@ -3742,7 +3742,7 @@ function Shipping({ userRole }) {
 
                                   onClick={() => openProductDetail(item)}
 
-                                  src={getStaticUrl(item.product_image_url)}
+                                  src={getStaticUrl(item.product_image_url, { w: 160 })}
 
                                   title="Click to view product details"
 
@@ -5823,10 +5823,10 @@ function Shipping({ userRole }) {
                         <div className="shipping-easyship-thumbs" aria-label="Product thumbnails">
                           {visibleThumbs.length > 0 ? (
                             visibleThumbs.map((item, index) => (
-                              <img
+                              <img decoding="async" loading="lazy"
                                 alt={item.product_name || item.article_no || "Product"}
                                 key={`${order.order_id}-thumb-${item.product_id || item.article_no || index}`}
-                                src={getStaticUrl(item.product_image_url)}
+                                src={getStaticUrl(item.product_image_url, { w: 160 })}
                               />
                             ))
                           ) : (

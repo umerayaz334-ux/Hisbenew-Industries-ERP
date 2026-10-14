@@ -1725,9 +1725,9 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
       row.kind === "product" &&
       Number(cell.column) === 1;
     if (showProductImage) {
-      const imageUrl = getStaticUrl(row.product?.image_url);
+      const imageUrl = getStaticUrl(row.product?.image_url, { w: 160 });
       return imageUrl ? (
-        <img
+        <img decoding="async" loading="lazy"
           alt={row.product?.sku || row.product?.name || "Product"}
           className="orders-excel-product-image"
           src={imageUrl}
@@ -2204,9 +2204,9 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
                           key={`${order.key}-${item.sku || item.product_name}`}
                         >
                           {thumbnail ? (
-                            <img
+                            <img decoding="async" loading="lazy"
                               alt={product.name || item.product_name || "Product"}
-                              src={getStaticUrl(thumbnail)}
+                              src={getStaticUrl(thumbnail, { w: 160 })}
                             />
                           ) : (
                             <span>
@@ -2409,10 +2409,10 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
                         }`}
                       >
                         {selectedProduct?.image_url ? (
-                          <img
+                          <img decoding="async" loading="lazy"
                             alt={selectedProduct.name || "Selected product"}
                             className="orders-product-thumbnail"
-                            src={getStaticUrl(selectedProduct.image_url)}
+                            src={getStaticUrl(selectedProduct.image_url, { w: 160 })}
                           />
                         ) : selectedProduct ? (
                           <span className="orders-product-thumbnail-placeholder">
@@ -2724,10 +2724,10 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
                           key={item.id || `${item.product_id}-${item.article_no}`}
                         >
                           {item.product_image_url ? (
-                            <img
+                            <img decoding="async" loading="lazy"
                               alt={item.article_no || item.product_name || "Product"}
                               className="orders-product-thumbnail"
-                              src={getStaticUrl(item.product_image_url)}
+                              src={getStaticUrl(item.product_image_url, { w: 160 })}
                             />
                           ) : (
                             <span className="orders-product-thumbnail-placeholder">

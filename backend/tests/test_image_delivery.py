@@ -54,3 +54,17 @@ class ImageDeliveryTests(unittest.TestCase):
         (self.root/'existing.png').write_bytes(b'keep original')
         self.assertEqual(mod.restore_images(archive.getvalue(),self.root),{'restored':1,'existing_preserved':1})
         self.assertEqual((self.root/'existing.png').read_bytes(),b'keep original')
+
+    def test_service_and_school_reject_damaged_images(self):
+        import asyncio
+        import importlib
+        service = importlib.import_module("app.service_takers.router")
+        from app.school import admissions
+        with patch.object(service, 'UPLOAD_DIR', self.root):
+            for save in (service.save_product_image, service.save_payment_proof):
+                with self.assertRaises(HTTPException):
+                    save(UploadFile(filename='bad.jpg',file=io.BytesIO(b'not an image')))
+        with patch.object(admissions, 'STUDENT_UPLOAD_DIR', self.root):
+            with self.assertRaises(HTTPException):
+                asyncio.run(admissions.save_school_file(UploadFile(filename='bad.jpg',file=io.BytesIO(b'not an image'))))
+        self.assertEqual(list(self.root.iterdir()), [])

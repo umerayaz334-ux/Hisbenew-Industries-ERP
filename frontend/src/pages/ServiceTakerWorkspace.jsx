@@ -2300,7 +2300,7 @@ const tabs = [
                                   }}
                                 >
                                   {imageUrl ? (
-                                    <img alt={order.product_name} src={getStaticUrl(imageUrl)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                    <img decoding="async" loading="lazy" alt={order.product_name} src={getStaticUrl(imageUrl, { w: 160 })} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                                   ) : (
                                     <span style={{ fontSize: 14, fontWeight: 800, color: "#64748b" }}>
                                       {String(order.product_name || order.request_no).charAt(0)}
@@ -2549,9 +2549,9 @@ const tabs = [
                         <div className="service-product-table-cell">
                           <div>
                             {product.image_url ? (
-                              <img
+                              <img decoding="async" loading="lazy"
                                 alt={product.name}
-                                src={getStaticUrl(product.image_url)}
+                                src={getStaticUrl(product.image_url, { w: 160 })}
                               />
                             ) : (
                               <span>{String(product.name || product.sku).charAt(0)}</span>
@@ -2663,7 +2663,7 @@ const tabs = [
                         <div className="service-product-table-cell">
                           <div>
                             {product.image_url ? (
-                              <img alt="" src={getStaticUrl(product.image_url)} />
+                              <img decoding="async" loading="lazy" alt="" src={getStaticUrl(product.image_url, { w: 160 })} />
                             ) : (
                               <span>{String(product.name || product.sku).charAt(0)}</span>
                             )}
@@ -3373,7 +3373,7 @@ const tabs = [
                                   }}
                                 >
                                   {imageUrl ? (
-                                    <img alt={order.product_name} src={getStaticUrl(imageUrl)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                    <img decoding="async" loading="lazy" alt={order.product_name} src={getStaticUrl(imageUrl, { w: 160 })} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                                   ) : (
                                     <span style={{ fontSize: 16, fontWeight: 800, color: "#64748b" }}>
                                       {String(order.product_name || order.request_no).charAt(0)}
@@ -3655,7 +3655,7 @@ const tabs = [
                             <div className="service-product-table-cell service-manufacturing-product-cell">
                               <div>
                                 {order.image_url ? (
-                                  <img alt={order.product_name} src={getStaticUrl(order.image_url)} />
+                                  <img decoding="async" loading="lazy" alt={order.product_name} src={getStaticUrl(order.image_url, { w: 160 })} />
                                 ) : (
                                   <span>{String(order.product_name || order.request_no).charAt(0)}</span>
                                 )}
@@ -3832,7 +3832,7 @@ const tabs = [
                               }}
                             >
                               {imageUrl ? (
-                                <img alt={order.product_name} src={getStaticUrl(imageUrl)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                <img decoding="async" loading="lazy" alt={order.product_name} src={getStaticUrl(imageUrl, { w: 160 })} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                               ) : (
                                 <span style={{ fontSize: 16, fontWeight: 800, color: "#64748b" }}>
                                   {String(order.product_name || order.request_no).charAt(0)}
@@ -4437,9 +4437,9 @@ const tabs = [
             <div className="service-process-specs-container">
               <div className="service-process-spec-image-box">
                 {selectedManufacturing.image_url ? (
-                  <img
+                  <img decoding="async" loading="lazy"
                     alt={selectedManufacturing.product_name}
-                    src={getStaticUrl(selectedManufacturing.image_url)}
+                    src={getStaticUrl(selectedManufacturing.image_url, { w: 900 })}
                   />
                 ) : (
                   <div className="service-process-spec-no-image">
@@ -5089,7 +5089,7 @@ const tabs = [
                         <div className="service-account-proof-thumb">
                           {proofUrl ? (
                             <a href={proofUrl} rel="noreferrer" target="_blank">
-                              {proofIsImage(payment.proof_url) ? <img alt="Payment proof" src={proofUrl} /> : <span>PDF</span>}
+                              {proofIsImage(payment.proof_url) ? <img decoding="async" loading="lazy" alt="Payment proof" src={proofUrl} /> : <span>PDF</span>}
                             </a>
                           ) : (
                             <span>No proof</span>

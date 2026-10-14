@@ -172,15 +172,25 @@ const clampImageWidth = (value) => {
  */
 export const getStaticUrl = (path, options = {}) => {
   if (!path) return null;
-  if (path.startsWith("http")) {
-    // External URLs (Unsplash, etc.) keep their own sizing query when present.
-    return path;
+  const value = String(path).trim();
+  if (/^(blob:|data:)/i.test(value)) return value;
+  const width = clampImageWidth(options?.w ?? options?.width);
+  if (/^https?:\/\//i.test(value)) {
+    const url = new URL(value);
+    const apiHost = getUrlHostname(API_BASE_URL);
+    const ownUpload = url.pathname.startsWith("/static/uploads/") &&
+      [apiHost, "api.hisbenew.com", "hisbenew.com", "www.hisbenew.com", "localhost", "127.0.0.1"].includes(url.hostname);
+    if (!ownUpload) return value;
+    path = url.pathname + url.search;
+  } else {
+    path = value.startsWith("/") ? value : `/${value}`;
   }
   const baseUrl = `${API_BASE_URL}${path}`;
-  const width = clampImageWidth(options?.w ?? options?.width);
   if (!width) return baseUrl;
-  const separator = baseUrl.includes("?") ? "&" : "?";
-  return `${baseUrl}${separator}w=${width}`;
+  const [pathname, query = ""] = baseUrl.split("?");
+  const params = new URLSearchParams(query);
+  params.set("w", String(width));
+  return `${pathname}?${params}`;
 };
 
 /** Responsive srcset for product cards — browser picks the smallest fit. */

@@ -949,25 +949,7 @@ function App() {
       if (active) setSidebarCounts(nextCounts);
     };
 
-    const warmCommonPages = () => {
-      const warmList = [
-        "Orders",
-        "Shipping",
-        "Products",
-        "Customers",
-        "Accounting",
-        "Amazon Finances",
-        "Amazon FBA Orders",
-        "Warehouse / Fulfillment",
-      ].filter((page) => allowedPagesForCounts.includes(page));
-      warmList.forEach((page) => prefetchPageModule(page));
-    };
-
     const initialLoadId = setTimeout(loadSidebarCounts, 0);
-    const warmId =
-      typeof window !== "undefined" && "requestIdleCallback" in window
-        ? window.requestIdleCallback(warmCommonPages, { timeout: 2500 })
-        : setTimeout(warmCommonPages, 900);
     const intervalId = setInterval(loadSidebarCounts, 30000);
     const handleRefresh = () => {
       loadSidebarCounts();
@@ -980,11 +962,6 @@ function App() {
     return () => {
       active = false;
       clearTimeout(initialLoadId);
-      if (typeof window !== "undefined" && "cancelIdleCallback" in window && typeof warmId === "number") {
-        window.cancelIdleCallback(warmId);
-      } else {
-        clearTimeout(warmId);
-      }
       clearInterval(intervalId);
       window.removeEventListener("erp:refresh-sidebar-counts", handleRefresh);
       window.removeEventListener("erp:shipping-updated", handleRefresh);

@@ -1161,6 +1161,14 @@ async def save_school_file(file: UploadFile) -> tuple[str, str, int, str]:
         raise HTTPException(status_code=400, detail="The selected file is empty.")
     if len(content) > 15 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Files must be 15 MB or smaller.")
+    if extension in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}:
+        from PIL import Image
+        from io import BytesIO
+        try:
+            with Image.open(BytesIO(content)) as image:
+                image.verify()
+        except Exception as exc:
+            raise HTTPException(400, "Invalid or damaged image.") from exc
     STUDENT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     stored_name = f"{uuid.uuid4().hex}{extension}"
     stored_path = (STUDENT_UPLOAD_DIR / stored_name).resolve()

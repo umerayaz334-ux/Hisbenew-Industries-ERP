@@ -1179,7 +1179,7 @@ function Inventory() {
                       {product.image_url ? (
                         <img loading="lazy" decoding="async"
                           alt={product.article_no || "Product"}
-                          src={getImageUrl(product.image_url)}
+                          src={getImageUrl(product.image_url, { w: 160 })}
                         />
                       ) : (
                         <span>
@@ -1415,7 +1415,7 @@ function Inventory() {
                           <img loading="lazy" decoding="async"
                             alt={product.article_no || "Product"}
                             className="inventory-thumbnail"
-                            src={getImageUrl(product.image_url)}
+                            src={getImageUrl(product.image_url, { w: 160 })}
                           />
                         ) : (
                           <span className="inventory-thumbnail-placeholder">
@@ -1629,7 +1629,7 @@ function Inventory() {
                         {imageUrl ? (
                           <img loading="lazy" decoding="async"
                             alt={movement.product_name || movement.article_no}
-                            src={getImageUrl(imageUrl)}
+                            src={getImageUrl(imageUrl, { w: 160 })}
                           />
                         ) : (
                           <span>
@@ -1722,7 +1722,7 @@ function Inventory() {
                     {movingProduct.image_url ? (
                       <img loading="lazy" decoding="async"
                         alt={movingProduct.article_no || "Product"}
-                        src={getImageUrl(movingProduct.image_url)}
+                        src={getImageUrl(movingProduct.image_url, { w: 160 })}
                       />
                     ) : (
                       <span>
@@ -1886,7 +1886,7 @@ function Inventory() {
                     {editingProduct.image_url ? (
                       <img loading="lazy" decoding="async"
                         alt={editingProduct.article_no || "Product"}
-                        src={getImageUrl(editingProduct.image_url)}
+                        src={getImageUrl(editingProduct.image_url, { w: 160 })}
                       />
                     ) : (
                       <span>
@@ -2055,7 +2055,7 @@ function Inventory() {
                             {product.image_url ? (
                               <img loading="lazy" decoding="async"
                                 alt={product.article_no || "Product"}
-                                src={getImageUrl(product.image_url)}
+                                src={getImageUrl(product.image_url, { w: 160 })}
                               />
                             ) : (
                               <span>
@@ -2130,7 +2130,7 @@ function Inventory() {
                     {addingProduct?.image_url ? (
                       <img loading="lazy" decoding="async"
                         alt={addingProduct.article_no || "Product"}
-                        src={getImageUrl(addingProduct.image_url)}
+                        src={getImageUrl(addingProduct.image_url, { w: 160 })}
                       />
                     ) : (
                       <span>
