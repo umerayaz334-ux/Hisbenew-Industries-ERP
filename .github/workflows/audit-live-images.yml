@@ -1,0 +1,23 @@
+name: Audit live images
+on:
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit image references and upload delivery
+        shell: powershell
+        env:
+          ERP_ROOT: ${{ vars.ERP_ROOT }}
+          ERP_BACKEND_VENV: ${{ vars.ERP_BACKEND_VENV }}
+        run: |
+          $root = if ($env:ERP_ROOT) { $env:ERP_ROOT } else { 'C:\HisbenewERP' }
+          $backend = Join-Path $root 'backend'
+          $venv = if ($env:ERP_BACKEND_VENV) { $env:ERP_BACKEND_VENV } elseif (Test-Path (Join-Path $backend 'venv\Scripts\python.exe')) { Join-Path $backend 'venv' } else { Join-Path $backend '.venv' }
+          $python = Join-Path $venv 'Scripts\python.exe'
+          $script = Join-Path $env:GITHUB_WORKSPACE 'scripts\audit_live_images.py'
+          Set-Location $backend
+          & $python $script $backend
+          if ($LASTEXITCODE -ne 0) { throw 'Image audit failed' }
