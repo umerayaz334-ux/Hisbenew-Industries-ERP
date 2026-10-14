@@ -1396,6 +1396,7 @@ function Inventory() {
                   <th>PK</th>
                   <th>USA</th>
                   <th>Front Room</th>
+                  <th>Reserved</th>
                   <th>Available</th>
                   <th>Status</th>
                   <th aria-label="Actions" />
@@ -1462,6 +1463,11 @@ function Inventory() {
                       >
                         <strong className="inventory-stock-value">
                           {formatNumber(product.front_room_stock)}
+                        </strong>
+                      </td>
+                      <td data-label="Reserved">
+                        <strong className="inventory-stock-value" title="Stock reserved for orders">
+                          {formatNumber(product.reserved_stock)}
                         </strong>
                       </td>
                       <td data-label="Available">

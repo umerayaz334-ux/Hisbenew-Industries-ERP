@@ -2590,10 +2590,12 @@
 .inventory-bulk-edit-table th:nth-child(3),
 .inventory-bulk-edit-table th:nth-child(4),
 .inventory-bulk-edit-table th:nth-child(5),
+.inventory-bulk-edit-table th:nth-child(6),
 .inventory-bulk-edit-table td:nth-child(2),
 .inventory-bulk-edit-table td:nth-child(3),
 .inventory-bulk-edit-table td:nth-child(4),
-.inventory-bulk-edit-table td:nth-child(5) {
+.inventory-bulk-edit-table td:nth-child(5),
+.inventory-bulk-edit-table td:nth-child(6) {
   width: 118px;
   min-width: 118px;
   padding-right: 22px;
