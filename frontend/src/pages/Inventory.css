@@ -1053,7 +1053,7 @@
 }
 
 .inventory-product-option img,
-.inventory-product-option > span {
+.inventory-product-option-thumbnail {
   display: grid;
   flex: 0 0 auto;
   width: 44px;
@@ -1072,6 +1072,7 @@
 
 .inventory-product-option-copy {
   display: grid;
+  flex: 1 1 0;
   min-width: 0;
   gap: 2px;
 }
@@ -2577,13 +2578,13 @@
 }
 
 .inventory-bulk-edit-table {
-  min-width: 1080px;
+  min-width: 0;
 }
 
 .inventory-bulk-edit-table th:first-child,
 .inventory-bulk-edit-table td:first-child {
-  width: 220px;
-  max-width: 220px;
+  width: 190px;
+  max-width: 190px;
 }
 
 .inventory-bulk-edit-table th:nth-child(2),
@@ -2596,10 +2597,10 @@
 .inventory-bulk-edit-table td:nth-child(4),
 .inventory-bulk-edit-table td:nth-child(5),
 .inventory-bulk-edit-table td:nth-child(6) {
-  width: 118px;
-  min-width: 118px;
-  padding-right: 22px;
-  padding-left: 22px;
+  width: 76px;
+  min-width: 0;
+  padding-right: 8px;
+  padding-left: 8px;
   text-align: center;
 }
 
@@ -2733,7 +2734,7 @@
 }
 
 .inventory-product-option img,
-.inventory-product-option > span {
+.inventory-product-option-thumbnail {
   width: 42px;
   height: 42px;
   border-radius: 6px;
@@ -2757,6 +2758,33 @@
 .inventory-product-option-copy em {
   color: #858585;
   font-size: 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.inventory-bulk-edit-table th:first-child,
+.inventory-bulk-edit-table td:first-child {
+  padding-left: 16px;
+  padding-right: 10px;
+}
+
+.inventory-bulk-edit-table th:last-child,
+.inventory-bulk-edit-table td:last-child {
+  padding-left: 8px;
+  padding-right: 16px;
+}
+
+.inventory-bulk-edit-table .inventory-row-actions {
+  flex-wrap: wrap;
+  gap: 6px;
+  white-space: normal;
+}
+
+.inventory-bulk-edit-table .inventory-adjust-button,
+.inventory-bulk-edit-table .inventory-add-button {
+  min-width: 0;
+  padding: 0 8px;
+  white-space: nowrap;
 }
 
 .inventory-modal-intro {

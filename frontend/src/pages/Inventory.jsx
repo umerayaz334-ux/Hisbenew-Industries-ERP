@@ -2064,7 +2064,7 @@ function Inventory() {
                                 src={getImageUrl(product.image_url, { w: 160 })}
                               />
                             ) : (
-                              <span>
+                              <span className="inventory-product-option-thumbnail">
                                 <Icon name="image" size={18} />
                               </span>
                             )}
