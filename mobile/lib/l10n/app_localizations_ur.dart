@@ -10,7 +10,7 @@ class AppLocalizationsUr extends AppLocalizations {
   AppLocalizationsUr([String locale = 'ur']) : super(locale);
 
   @override
-  String get appTitle => 'ہزبنیو ای آر پی';
+  String get appTitle => 'ہزبنیو';
 
   @override
   String get brandLine => 'فیکٹری ورک اسپیس';

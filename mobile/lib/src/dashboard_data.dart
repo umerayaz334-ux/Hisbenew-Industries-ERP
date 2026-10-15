@@ -42,6 +42,8 @@ class OrderBrief {
 
 class ShipmentRecord {
   const ShipmentRecord({
+    required this.id,
+    required this.orderId,
     required this.orderNo,
     required this.customer,
     required this.when,
@@ -53,6 +55,8 @@ class ShipmentRecord {
     required this.note,
   });
 
+  final int id;
+  final int orderId;
   final String orderNo;
   final String customer;
   final String when;
@@ -65,6 +69,8 @@ class ShipmentRecord {
 
   factory ShipmentRecord.fromJson(Map<String, dynamic> json, int units) {
     return ShipmentRecord(
+      id: asInt(json['id']),
+      orderId: asInt(json['order_id']),
       orderNo: asText(json['order_no']),
       customer: asText(json['customer_name']),
       when: asText(json['shipped_at']).isNotEmpty ? asText(json['shipped_at']) : asText(json['created_at']),

@@ -173,6 +173,115 @@ class ErpApi {
     );
   }
 
+  Future<List<Map<String, dynamic>>> customers(ErpSession session) async {
+    return _sendList(url: '${session.baseUrl}/customers', token: session.token);
+  }
+
+  Future<void> saveCustomer(ErpSession session, Map<String, String> body, {int? id}) async {
+    await _send(
+      method: id == null ? 'POST' : 'PUT',
+      url: id == null ? '${session.baseUrl}/customers' : '${session.baseUrl}/customers/$id',
+      token: session.token,
+      body: body,
+    );
+  }
+
+  Future<void> deleteCustomer(ErpSession session, int id) async {
+    await _request(method: 'DELETE', url: '${session.baseUrl}/customers/$id', token: session.token);
+  }
+
+  Future<List<Map<String, dynamic>>> orders(ErpSession session) async {
+    return _sendList(url: '${session.baseUrl}/orders', token: session.token);
+  }
+
+  Future<List<Map<String, dynamic>>> pendingShipping(ErpSession session) async {
+    return _sendList(url: '${session.baseUrl}/shipping/pending', token: session.token);
+  }
+
+  Future<void> markShipped({
+    required ErpSession session,
+    required int orderId,
+    required String courier,
+    required String tracking,
+    required String note,
+    required double weightKg,
+  }) async {
+    await _send(
+      method: 'POST',
+      url: '${session.baseUrl}/shipping/mark-shipped',
+      token: session.token,
+      body: {
+        'order_id': orderId,
+        'courier_name': courier,
+        'tracking_number': tracking,
+        'shipping_note': note,
+        'shipping_service': 'duty_paid',
+        if (weightKg > 0) 'package_weight_kg': weightKg,
+      },
+    );
+  }
+
+  Future<void> updateShipment({
+    required ErpSession session,
+    required int shippingId,
+    required String courier,
+    required String tracking,
+    required String note,
+    required double weightKg,
+  }) async {
+    await _send(
+      method: 'PATCH',
+      url: '${session.baseUrl}/shipping/$shippingId',
+      token: session.token,
+      body: {
+        'courier_name': courier,
+        'tracking_number': tracking,
+        'shipping_note': note,
+        if (weightKg > 0) 'package_weight_kg': weightKg,
+      },
+    );
+  }
+
+  Future<void> updateShipmentStatus({
+    required ErpSession session,
+    required int shippingId,
+    required String stage,
+  }) async {
+    await _send(
+      method: 'POST',
+      url: '${session.baseUrl}/shipping/$shippingId/status',
+      token: session.token,
+      body: {'status_stage': stage},
+    );
+  }
+
+  Future<void> updateProductStock({
+    required ErpSession session,
+    required int productId,
+    required int factoryStock,
+    required int usaStock,
+  }) async {
+    final response = await _client
+        .patch(
+          Uri.parse('${session.baseUrl}/products/$productId/update-stock'),
+          headers: {
+            'Accept': 'application/json',
+            if (session.token.isNotEmpty) 'Authorization': 'Bearer ${session.token}',
+          },
+          body: {
+            'factory_stock': '$factoryStock',
+            'usa_stock': '$usaStock',
+          },
+        )
+        .timeout(const Duration(seconds: 25));
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw const ErpException('invalidLogin');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw const ErpException('server');
+    }
+  }
+
   Future<DashboardData> dashboard(ErpSession session) async {
     final body = await _send(
       method: 'GET',
@@ -222,9 +331,14 @@ class ErpApi {
     late http.Response response;
     try {
       final uri = Uri.parse(url);
-      final request = method == 'POST'
-          ? _client.post(uri, headers: headers, body: jsonEncode(body))
-          : _client.get(uri, headers: headers);
+      final encoded = body == null ? null : jsonEncode(body);
+      final Future<http.Response> request = switch (method) {
+        'POST' => _client.post(uri, headers: headers, body: encoded),
+        'PUT' => _client.put(uri, headers: headers, body: encoded),
+        'PATCH' => _client.patch(uri, headers: headers, body: encoded),
+        'DELETE' => _client.delete(uri, headers: headers),
+        _ => _client.get(uri, headers: headers),
+      };
       response = await request.timeout(const Duration(seconds: 25));
     } on TimeoutException {
       throw const ErpException('unreachable');

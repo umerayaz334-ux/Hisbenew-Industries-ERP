@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
-const hisbenewInk = Color(0xFF1C1917);
-const hisbenewMuted = Color(0xFF7A7268);
-const hisbenewLine = Color(0xFFE4DDD2);
-const hisbenewCanvas = Color(0xFFF3EFE7);
-const hisbenewCard = Color(0xFFFFFCF7);
-const hisbenewForest = Color(0xFF1F3D34);
-const hisbenewBrass = Color(0xFFA68456);
-const hisbenewClay = Color(0xFF9C4A3C);
+const hisbenewInk = Color(0xFF0B1220);
+const hisbenewMuted = Color(0xFF667085);
+const hisbenewLine = Color(0xFFE4E7EC);
+const hisbenewCanvas = Color(0xFFF3F5FB);
+const hisbenewCard = Color(0xFFFFFFFF);
+const hisbenewForest = Color(0xFF4F46E5);
+const hisbenewBrass = Color(0xFF0F9F8F);
+const hisbenewClay = Color(0xFFE11D48);
+const hisbenewAmber = Color(0xFFF59E0B);
 
 ThemeData hisbenewTheme() {
   final scheme = ColorScheme.fromSeed(

@@ -24,7 +24,7 @@ class HisbenewApp extends StatelessWidget {
       listenable: model,
       builder: (context, _) {
         return MaterialApp(
-          title: 'Hisbenew ERP',
+          title: 'Hisbenew',
           debugShowCheckedModeBanner: false,
           theme: hisbenewTheme(),
           locale: model.locale,

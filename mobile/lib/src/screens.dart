@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import 'app_model.dart';
-import 'dashboard_data.dart';
+import 'customers_page.dart';
 import 'dashboard_view.dart';
+import 'labels_page.dart';
+import 'orders_page.dart';
+import 'page_kit.dart';
+import 'products_page.dart';
+import 'shipping_page.dart';
 import 'theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -132,43 +136,69 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   int _index = 0;
   final _scaffold = GlobalKey<ScaffoldState>();
 
+  static const _bottom = [0, 1, 2, 4, 3];
+
   @override
   Widget build(BuildContext context) {
-    final copy = AppLocalizations.of(context);
     final pages = [
       DashboardView(model: widget.model),
       OrdersPage(model: widget.model),
       ShippingPage(model: widget.model),
+      CustomersPage(model: widget.model),
+      ProductsPage(model: widget.model),
+      AmazonPage(model: widget.model),
+      LabelsPage(model: widget.model),
       AccountPage(model: widget.model),
     ];
-    final labels = [copy.home, copy.orders, copy.shipping, copy.account];
+    final labels = [
+      phrase(context, 'Home', 'ہوم'),
+      phrase(context, 'Orders', 'آرڈرز'),
+      phrase(context, 'Shipping', 'شپنگ'),
+      phrase(context, 'Customers', 'گاہک'),
+      phrase(context, 'Products', 'پروڈکٹس'),
+      phrase(context, 'Amazon', 'ایمیزون'),
+      phrase(context, 'Labels', 'لیبل'),
+      phrase(context, 'Account', 'اکاؤنٹ'),
+    ];
+    final icons = [
+      Icons.home_rounded,
+      Icons.receipt_long_rounded,
+      Icons.local_shipping_rounded,
+      Icons.groups_rounded,
+      Icons.inventory_2_rounded,
+      Icons.storefront_rounded,
+      Icons.sell_rounded,
+      Icons.person_rounded,
+    ];
 
     return Scaffold(
       key: _scaffold,
-      drawer: _SideMenu(
-        labels: labels,
-        index: _index,
-        onSelect: (value) {
-          setState(() => _index = value);
-          Navigator.pop(context);
-        },
-      ),
+      drawer: _index == 0
+          ? _SideMenu(
+              labels: labels,
+              icons: icons,
+              index: _index,
+              onSelect: (value) {
+                setState(() => _index = value);
+                Navigator.pop(context);
+              },
+            )
+          : null,
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 12, 0),
+              padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
               child: Row(
                 children: [
-                  IconButton(
-                    onPressed: () => _scaffold.currentState?.openDrawer(),
-                    icon: const Icon(Icons.menu_rounded, color: hisbenewInk),
-                  ),
-                  const Spacer(),
-                  Text(
-                    labels[_index],
-                    style: const TextStyle(color: hisbenewMuted, fontSize: 12, letterSpacing: 1.2, fontWeight: FontWeight.w600),
-                  ),
+                  if (_index == 0)
+                    IconButton(
+                      onPressed: () => _scaffold.currentState?.openDrawer(),
+                      icon: const Icon(Icons.menu_rounded, color: hisbenewInk),
+                    )
+                  else
+                    const SizedBox(width: 12),
+                  Text(labels[_index], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
                 ],
               ),
             ),
@@ -176,14 +206,24 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
           ],
         ),
       ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _bottom.contains(_index) ? _bottom.indexOf(_index) : 0,
+        indicatorColor: const Color(0xFFE0E7FF),
+        onDestinationSelected: (value) => setState(() => _index = _bottom[value]),
+        destinations: [
+          for (final slot in _bottom)
+            NavigationDestination(icon: Icon(icons[slot]), label: labels[slot]),
+        ],
+      ),
     );
   }
 }
 
 class _SideMenu extends StatelessWidget {
-  const _SideMenu({required this.labels, required this.index, required this.onSelect});
+  const _SideMenu({required this.labels, required this.icons, required this.index, required this.onSelect});
 
   final List<String> labels;
+  final List<IconData> icons;
   final int index;
   final ValueChanged<int> onSelect;
 
@@ -200,7 +240,7 @@ class _SideMenu extends StatelessWidget {
             children: [
               const Text(
                 'Hisbenew',
-                style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w500, letterSpacing: -0.6),
+                style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.6),
               ),
               const SizedBox(height: 6),
               Container(width: 28, height: 1.5, color: hisbenewBrass),
@@ -214,11 +254,7 @@ class _SideMenu extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       child: Row(
                         children: [
-                          Container(
-                            width: 2,
-                            height: 16,
-                            color: i == index ? hisbenewBrass : Colors.transparent,
-                          ),
+                          Icon(icons[i], size: 18, color: i == index ? hisbenewBrass : const Color(0xFFB7AFA4)),
                           const SizedBox(width: 12),
                           Text(
                             labels[i],
@@ -237,57 +273,6 @@ class _SideMenu extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class OrdersPage extends StatelessWidget {
-  const OrdersPage({required this.model, super.key});
-
-  final AppModel model;
-
-  @override
-  Widget build(BuildContext context) {
-    final copy = AppLocalizations.of(context);
-    final orders = model.dashboard?.orders ?? const <OrderBrief>[];
-    return _RecordPage(
-      title: copy.recentOrders,
-      loading: model.loadingDashboard && model.dashboard == null,
-      empty: orders.isEmpty,
-      emptyText: copy.emptyOrders,
-      error: model.dashboardError != null && model.dashboard == null,
-      onRefresh: model.refreshDashboard,
-      children: [
-        for (final order in orders) _RecordTile(title: order.orderNo, subtitle: _orderSubtitle(order), trailing: order.status),
-      ],
-    );
-  }
-}
-
-class ShippingPage extends StatelessWidget {
-  const ShippingPage({required this.model, super.key});
-
-  final AppModel model;
-
-  @override
-  Widget build(BuildContext context) {
-    final copy = AppLocalizations.of(context);
-    final shipments = model.dashboard?.shipments ?? const <ShipBrief>[];
-    return _RecordPage(
-      title: copy.waitingShip,
-      loading: model.loadingDashboard && model.dashboard == null,
-      empty: shipments.isEmpty,
-      emptyText: copy.emptyShipping,
-      error: model.dashboardError != null && model.dashboard == null,
-      onRefresh: model.refreshDashboard,
-      children: [
-        for (final shipment in shipments)
-          _RecordTile(
-            title: shipment.orderNo,
-            subtitle: [shipment.customer, shipment.platform].where((part) => part.isNotEmpty).join(' · '),
-            trailing: shipment.status,
-          ),
-      ],
     );
   }
 }
@@ -368,89 +353,6 @@ class _BrandMark extends StatelessWidget {
   }
 }
 
-class _RecordPage extends StatelessWidget {
-  const _RecordPage({
-    required this.title,
-    required this.loading,
-    required this.empty,
-    required this.emptyText,
-    required this.error,
-    required this.onRefresh,
-    required this.children,
-  });
-
-  final String title;
-  final bool loading;
-  final bool empty;
-  final String emptyText;
-  final bool error;
-  final Future<void> Function() onRefresh;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final copy = AppLocalizations.of(context);
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-        children: [
-          Text(title, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 16),
-          if (loading)
-            const Padding(padding: EdgeInsets.only(top: 48), child: Center(child: CircularProgressIndicator()))
-          else if (error)
-            _StatusCard(message: copy.couldNotLoad, action: copy.retry, onPressed: onRefresh)
-          else if (empty)
-            _StatusCard(message: emptyText)
-          else
-            ...children,
-        ],
-      ),
-    );
-  }
-}
-
-class _RecordTile extends StatelessWidget {
-  const _RecordTile({required this.title, required this.subtitle, required this.trailing});
-
-  final String title;
-  final String subtitle;
-  final String trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: hisbenewLine),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title.isEmpty ? '—' : title, style: const TextStyle(fontWeight: FontWeight.w800)),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(subtitle, style: const TextStyle(color: hisbenewMuted, fontSize: 13)),
-                ],
-              ],
-            ),
-          ),
-          if (trailing.isNotEmpty)
-            Text(trailing, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-        ],
-      ),
-    );
-  }
-}
-
 class _InfoRow extends StatelessWidget {
   const _InfoRow(this.label, this.value);
 
@@ -472,36 +374,6 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.message, this.action, this.onPressed});
-
-  final String message;
-  final String? action;
-  final Future<void> Function()? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: hisbenewLine),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(message, style: const TextStyle(height: 1.4)),
-          if (action != null && onPressed != null) ...[
-            const SizedBox(height: 12),
-            TextButton(onPressed: onPressed, child: Text(action!)),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 String? _loginMessage(AppLocalizations copy, String? code) {
   return switch (code) {
     'missingServer' => copy.serverRule,
@@ -513,13 +385,4 @@ String? _loginMessage(AppLocalizations copy, String? code) {
     null || '' => null,
     _ => copy.serverRejected,
   };
-}
-
-String _orderSubtitle(OrderBrief order) {
-  final parts = <String>[
-    if (order.customer.isNotEmpty) order.customer,
-    if (order.platform.isNotEmpty) order.platform,
-    if (order.amountUsd > 0) NumberFormat.simpleCurrency(name: 'USD').format(order.amountUsd),
-  ];
-  return parts.join(' · ');
 }

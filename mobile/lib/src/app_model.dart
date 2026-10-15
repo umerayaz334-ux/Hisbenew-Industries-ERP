@@ -9,6 +9,8 @@ class AppModel extends ChangeNotifier {
 
   final ErpApi _api;
 
+  ErpApi get api => _api;
+
   Locale locale = const Locale('en');
   ErpSession? session;
   bool booting = true;

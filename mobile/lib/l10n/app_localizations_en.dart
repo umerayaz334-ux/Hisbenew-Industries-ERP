@@ -10,7 +10,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Hisbenew ERP';
+  String get appTitle => 'Hisbenew';
 
   @override
   String get brandLine => 'Factory workspace';
