@@ -11,8 +11,6 @@ class AppModel extends ChangeNotifier {
 
   Locale locale = const Locale('en');
   ErpSession? session;
-  String rememberedServer = '';
-  String rememberedCompany = '';
   bool booting = true;
   bool signingIn = false;
   bool loadingDashboard = false;
@@ -24,20 +22,17 @@ class AppModel extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final language = prefs.getString('erp.locale') ?? 'en';
     locale = Locale(language == 'ur' ? 'ur' : 'en');
-    rememberedServer = prefs.getString('erp.server') ?? '';
-    rememberedCompany = prefs.getString('erp.company') ?? '';
     final token = prefs.getString('erp.token') ?? '';
-    final baseUrl = prefs.getString('erp.baseUrl') ?? '';
-    if (token.isNotEmpty && baseUrl.isNotEmpty) {
+    if (token.isNotEmpty) {
       session = ErpSession(
-        baseUrl: baseUrl,
+        baseUrl: erpApiBase,
         token: token,
         name: prefs.getString('erp.name') ?? '',
         username: prefs.getString('erp.username') ?? '',
         role: prefs.getString('erp.role') ?? '',
         tenantSlug: prefs.getString('erp.tenantSlug') ?? '',
         tenantName: prefs.getString('erp.tenantName') ?? '',
-        companyCode: rememberedCompany,
+        companyCode: '',
       );
     }
     booting = false;
@@ -55,17 +50,9 @@ class AppModel extends ChangeNotifier {
   }
 
   Future<bool> signIn({
-    required String server,
-    required String companyCode,
     required String username,
     required String pin,
   }) async {
-    final baseUrl = normalizeServerUrl(server);
-    if (baseUrl.isEmpty) {
-      loginError = 'missingServer';
-      notifyListeners();
-      return false;
-    }
     if (username.trim().isEmpty) {
       loginError = 'username';
       notifyListeners();
@@ -81,15 +68,8 @@ class AppModel extends ChangeNotifier {
     loginError = null;
     notifyListeners();
     try {
-      final next = await _api.login(
-        baseUrl: baseUrl,
-        username: username,
-        pin: pin,
-        companyCode: companyCode,
-      );
+      final next = await _api.login(username: username, pin: pin);
       session = next;
-      rememberedServer = baseUrl;
-      rememberedCompany = companyCode.trim().toLowerCase();
       dashboard = null;
       dashboardError = null;
       await _storeSession(next);

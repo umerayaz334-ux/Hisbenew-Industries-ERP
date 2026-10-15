@@ -15,12 +15,7 @@ function FactoryAppDownloadNotice() {
         HI
       </div>
       <div className="erp-app-download-copy">
-        <span>Factory phone app</span>
-        <strong>Hisbenew ERP is available on your phone</strong>
-        <p>
-          Install the Android app on a phone, then sign in with the same
-          company code, username, and 4-digit PIN you use on this site.
-        </p>
+        <strong>Hisbenew ERP</strong>
       </div>
       <a
         className="erp-app-download-action"

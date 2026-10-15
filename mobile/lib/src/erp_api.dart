@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 
 import 'dashboard_data.dart';
 
+const erpApiBase = 'https://api.hisbenew.com';
+
 class ErpException implements Exception {
   const ErpException(this.code);
 
@@ -65,33 +67,109 @@ class ErpApi {
   final http.Client _client;
 
   Future<ErpSession> login({
-    required String baseUrl,
     required String username,
     required String pin,
-    required String companyCode,
   }) async {
-    final company = companyCode.trim().toLowerCase();
-    final payload = <String, String>{
-      'username': username.trim(),
-      'pin': pin.trim(),
-      if (company.isNotEmpty) 'tenant_slug': company,
-    };
     final body = await _send(
       method: 'POST',
-      url: '$baseUrl/login',
-      body: payload,
+      url: '$erpApiBase/login',
+      body: {
+        'username': username.trim(),
+        'pin': pin.trim(),
+      },
     );
     final token = asText(body['access_token']);
     if (token.isEmpty) throw const ErpException('server');
     return ErpSession(
-      baseUrl: baseUrl,
+      baseUrl: erpApiBase,
       token: token,
       name: asText(body['name']),
       username: asText(body['username']).isEmpty ? username.trim() : asText(body['username']),
       role: asText(body['role']),
       tenantSlug: asText(body['tenant_slug']),
       tenantName: asText(body['tenant_name']),
-      companyCode: company,
+      companyCode: '',
+    );
+  }
+
+  Future<List<ShipmentRecord>> shipments(ErpSession session) async {
+    final records = await _sendList(url: '${session.baseUrl}/shipping', token: session.token);
+    final orders = await _sendList(url: '${session.baseUrl}/orders', token: session.token);
+    final unitsByOrder = <int, int>{};
+    for (final order in orders) {
+      final items = order['items'];
+      var units = 0;
+      if (items is List) {
+        for (final item in items) {
+          if (item is Map) units += asInt(item['quantity']);
+        }
+      }
+      unitsByOrder[asInt(order['id'])] = units;
+    }
+    return [
+      for (final record in records) ShipmentRecord.fromJson(record, unitsByOrder[asInt(record['order_id'])] ?? 0),
+    ];
+  }
+
+  Future<List<AmazonOrderBrief>> openAmazonOrders(ErpSession session) async {
+    final raw = await _request(
+      method: 'GET',
+      url: '${session.baseUrl}/amazon/orders?limit=100',
+      token: session.token,
+    );
+    if (raw is! Map) return const [];
+    final items = raw['items'];
+    if (items is! List) return const [];
+    return [
+      for (final item in items)
+        if (item is Map) AmazonOrderBrief.fromJson(Map<String, dynamic>.from(item)),
+    ].where((order) => order.isOpen).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> products(ErpSession session) async {
+    return _sendList(url: '${session.baseUrl}/products', token: session.token);
+  }
+
+  Future<List<String>> labelPrinters(ErpSession session) async {
+    final raw = await _request(method: 'GET', url: '${session.baseUrl}/label-printers', token: session.token);
+    if (raw is! Map) return const [];
+    final printers = raw['printers'];
+    if (printers is! List) return const [];
+    return [
+      for (final printer in printers)
+        if (printer is Map && asText(printer['name']).isNotEmpty) asText(printer['name']),
+    ];
+  }
+
+  Future<void> printLabel({
+    required ErpSession session,
+    required String printerName,
+    required String title,
+    required String sku,
+    required int copies,
+  }) async {
+    await _send(
+      method: 'POST',
+      url: '${session.baseUrl}/label-printers/print',
+      token: session.token,
+      body: {
+        'printer_name': printerName,
+        'size': {'width': '50', 'height': '25', 'gap': '2'},
+        'labels': [
+          {
+            'title': title,
+            'sku': sku,
+            'barcode': sku,
+            'articleNo': sku,
+            'productName': title,
+            'quantity': '$copies',
+            'brand': 'HISBENEW INDUSTRIES',
+            'showBarcode': 'true',
+            'showBrand': 'false',
+            'showPrice': 'false',
+          },
+        ],
+      },
     );
   }
 
@@ -104,11 +182,35 @@ class ErpApi {
     return DashboardData.fromJson(body);
   }
 
+  Future<List<Map<String, dynamic>>> _sendList({
+    required String url,
+    String? token,
+  }) async {
+    final raw = await _request(method: 'GET', url: url, token: token);
+    if (raw is! List) return const [];
+    return [
+      for (final item in raw)
+        if (item is Map) Map<String, dynamic>.from(item),
+    ];
+  }
+
   Future<Map<String, dynamic>> _send({
     required String method,
     required String url,
     String? token,
-    Map<String, String>? body,
+    Object? body,
+  }) async {
+    final raw = await _request(method: method, url: url, token: token, body: body);
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return const {};
+  }
+
+  Future<Object?> _request({
+    required String method,
+    required String url,
+    String? token,
+    Object? body,
   }) async {
     final headers = <String, String>{
       'Accept': 'application/json',
@@ -132,13 +234,12 @@ class ErpApi {
       throw const ErpException('unreachable');
     }
 
-    Map<String, dynamic> decoded = const {};
+    Object? decoded;
     if (response.body.isNotEmpty) {
       try {
-        final raw = jsonDecode(response.body);
-        if (raw is Map) decoded = Map<String, dynamic>.from(raw);
+        decoded = jsonDecode(response.body);
       } catch (_) {
-        decoded = const {};
+        decoded = null;
       }
     }
 

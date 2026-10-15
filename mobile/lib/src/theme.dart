@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
-const hisbenewInk = Color(0xFF0F172A);
-const hisbenewMuted = Color(0xFF64748B);
-const hisbenewLine = Color(0xFFE6E8EC);
-const hisbenewCanvas = Color(0xFFF6F7F9);
+const hisbenewInk = Color(0xFF1C1917);
+const hisbenewMuted = Color(0xFF7A7268);
+const hisbenewLine = Color(0xFFE4DDD2);
+const hisbenewCanvas = Color(0xFFF3EFE7);
+const hisbenewCard = Color(0xFFFFFCF7);
+const hisbenewForest = Color(0xFF1F3D34);
+const hisbenewBrass = Color(0xFFA68456);
+const hisbenewClay = Color(0xFF9C4A3C);
 
 ThemeData hisbenewTheme() {
   final scheme = ColorScheme.fromSeed(
@@ -27,7 +31,7 @@ ThemeData hisbenewTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: const Color(0xFFF8FAFC),
+      fillColor: hisbenewCard,
       labelStyle: const TextStyle(color: hisbenewMuted, fontWeight: FontWeight.w600),
       hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -47,7 +51,7 @@ ThemeData hisbenewTheme() {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size.fromHeight(48),
-        backgroundColor: hisbenewInk,
+        backgroundColor: hisbenewForest,
         foregroundColor: Colors.white,
         textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
