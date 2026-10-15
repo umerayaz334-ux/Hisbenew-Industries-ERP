@@ -273,7 +273,7 @@ class ErpApi {
             'usa_stock': '$usaStock',
           },
         )
-        .timeout(const Duration(seconds: 25));
+        .timeout(const Duration(seconds: 90));
     if (response.statusCode == 401 || response.statusCode == 403) {
       throw const ErpException('invalidLogin');
     }
@@ -339,7 +339,7 @@ class ErpApi {
         'DELETE' => _client.delete(uri, headers: headers),
         _ => _client.get(uri, headers: headers),
       };
-      response = await request.timeout(const Duration(seconds: 25));
+      response = await request.timeout(const Duration(seconds: 90));
     } on TimeoutException {
       throw const ErpException('unreachable');
     } on ErpException {

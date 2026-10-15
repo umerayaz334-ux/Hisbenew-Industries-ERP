@@ -64,7 +64,7 @@ class _ShippingPageState extends State<ShippingPage> {
   final _search = TextEditingController();
   var _loading = true;
   var _error = false;
-  var _shippedTab = false;
+  var _historyTab = true;
   List<PendingShip> _pending = const [];
   List<ShipmentRecord> _shipped = const [];
 
@@ -136,11 +136,11 @@ class _ShippingPageState extends State<ShippingPage> {
               selectedForegroundColor: Colors.white,
             ),
             segments: [
+              ButtonSegment(value: true, label: Text('${phrase(context, 'History', 'تاریخ')} ${_shipped.length}')),
               ButtonSegment(value: false, label: Text('${phrase(context, 'To ship', 'بھیجنا')} ${_pending.length}')),
-              ButtonSegment(value: true, label: Text('${phrase(context, 'Shipped', 'بھیجے')} ${_shipped.length}')),
             ],
-            selected: {_shippedTab},
-            onSelectionChanged: (value) => setState(() => _shippedTab = value.first),
+            selected: {_historyTab},
+            onSelectionChanged: (value) => setState(() => _historyTab = value.first),
           ),
         ),
         Expanded(
@@ -152,7 +152,7 @@ class _ShippingPageState extends State<ShippingPage> {
                 : ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                    children: _shippedTab
+                    children: _historyTab
                         ? [
                             for (final row in shipped) _ShippedTile(row: row, onChanged: _load, model: widget.model),
                           ]

@@ -145,7 +145,7 @@ class _OrdersPageState extends State<OrdersPage> {
                             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
                             shape: const Border(),
                             title: Text(order.customer.isEmpty ? order.orderNo : order.customer, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            subtitle: Text('${order.orderNo}  ·  ${order.status}', style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
+                            subtitle: Text('${prettyWhen(order.when)}  ·  ${order.orderNo}  ·  ${order.status}', style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
                             trailing: Text(order.total > 0 ? usd(order.total) : '${order.units}', style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewForest)),
                             children: [
                               DetailLine(phrase(context, 'Date', 'تاریخ'), prettyWhen(order.when)),
