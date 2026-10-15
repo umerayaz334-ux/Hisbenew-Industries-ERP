@@ -8,6 +8,31 @@ const AMAZON_ORDER_SYNC_INTERVAL_MS = 2 * 60 * 1000;
 const dashboardNetworkErrorMessage = () =>
   `Backend not connected. Please make sure FastAPI is running at ${API_BASE_URL}.`;
 
+function FactoryAppDownloadNotice() {
+  return (
+    <aside className="erp-app-download" aria-label="Download the factory phone app">
+      <div className="erp-app-download-mark" aria-hidden="true">
+        HI
+      </div>
+      <div className="erp-app-download-copy">
+        <span>Factory phone app</span>
+        <strong>Hisbenew ERP is available on your phone</strong>
+        <p>
+          Install the Android app on a phone, then sign in with the same
+          company code, username, and 4-digit PIN you use on this site.
+        </p>
+      </div>
+      <a
+        className="erp-app-download-action"
+        href="/downloads/hisbenew-factory-erp.apk"
+        download="hisbenew-factory-erp.apk"
+      >
+        Download Android app
+      </a>
+    </aside>
+  );
+}
+
 const dashboardResponseErrorMessage = async (response) => {
   let detail = "";
   try {
@@ -1685,7 +1710,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
 
   const focusMetrics = [
     {
-      detail: `${pluralize(newOrdersLast7Days, "order")}  ERP + Amazon${
+      detail: `${pluralize(newOrdersLast7Days, "order")}${
         fourteenDaySalesTotal > 0
           ? `  (14-day: $${fourteenDaySalesTotal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })})`
           : ""
@@ -1858,6 +1883,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
 
     return (
       <div className="dashboard-page is-warehouse-dashboard">
+        <FactoryAppDownloadNotice />
         {!isMobileDashboard && (
           <header className="dashboard-topbar warehouse-dashboard-topbar">
             <div>
@@ -2038,6 +2064,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
   if (userRole !== "worker") {
     return (
       <div className="dashboard-page is-focus-dashboard">
+        <FactoryAppDownloadNotice />
         {amazonSaleNotice ? (
           <aside
             aria-live="assertive"
@@ -2511,6 +2538,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
         userRole === "worker" ? "is-worker-dashboard" : "is-command-dashboard"
       }`}
     >
+      <FactoryAppDownloadNotice />
       {!isMobileDashboard && (
         <header className="dashboard-topbar">
           <div>

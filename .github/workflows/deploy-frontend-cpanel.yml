@@ -12,7 +12,7 @@ jobs:
   build-and-deploy:
     name: Build and upload frontend
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     env:
       VITE_API_BASE_URL: "${{ vars.VITE_API_BASE_URL || 'https://api.hisbenew.com' }}"
@@ -20,6 +20,26 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Android install file
+        working-directory: mobile
+        run: |
+          flutter pub get
+          flutter build apk --release
+          mkdir -p ../frontend/public/downloads
+          cp build/app/outputs/flutter-apk/app-release.apk ../frontend/public/downloads/hisbenew-factory-erp.apk
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -48,4 +68,6 @@ jobs:
           server-dir: ${{ vars.CPANEL_PUBLIC_HTML_DIR || 'public_html/' }}
 
       - name: Verify live frontend
-        run: curl --fail --silent --show-error --retry 5 --retry-delay 10 https://hisbenew.com/
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-delay 10 https://hisbenew.com/
+          curl --fail --silent --show-error --retry 5 --retry-delay 10 -I https://hisbenew.com/downloads/hisbenew-factory-erp.apk

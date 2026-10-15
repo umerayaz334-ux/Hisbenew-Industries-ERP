@@ -1,0 +1,159 @@
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'dashboard_data.dart';
+import 'erp_api.dart';
+
+class AppModel extends ChangeNotifier {
+  AppModel({ErpApi? api}) : _api = api ?? ErpApi();
+
+  final ErpApi _api;
+
+  Locale locale = const Locale('en');
+  ErpSession? session;
+  String rememberedServer = '';
+  String rememberedCompany = '';
+  bool booting = true;
+  bool signingIn = false;
+  bool loadingDashboard = false;
+  String? loginError;
+  String? dashboardError;
+  DashboardData? dashboard;
+
+  Future<void> restore() async {
+    final prefs = await SharedPreferences.getInstance();
+    final language = prefs.getString('erp.locale') ?? 'en';
+    locale = Locale(language == 'ur' ? 'ur' : 'en');
+    rememberedServer = prefs.getString('erp.server') ?? '';
+    rememberedCompany = prefs.getString('erp.company') ?? '';
+    final token = prefs.getString('erp.token') ?? '';
+    final baseUrl = prefs.getString('erp.baseUrl') ?? '';
+    if (token.isNotEmpty && baseUrl.isNotEmpty) {
+      session = ErpSession(
+        baseUrl: baseUrl,
+        token: token,
+        name: prefs.getString('erp.name') ?? '',
+        username: prefs.getString('erp.username') ?? '',
+        role: prefs.getString('erp.role') ?? '',
+        tenantSlug: prefs.getString('erp.tenantSlug') ?? '',
+        tenantName: prefs.getString('erp.tenantName') ?? '',
+        companyCode: rememberedCompany,
+      );
+    }
+    booting = false;
+    notifyListeners();
+    if (session != null) {
+      await refreshDashboard();
+    }
+  }
+
+  Future<void> setLocale(Locale next) async {
+    locale = next;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('erp.locale', next.languageCode);
+  }
+
+  Future<bool> signIn({
+    required String server,
+    required String companyCode,
+    required String username,
+    required String pin,
+  }) async {
+    final baseUrl = normalizeServerUrl(server);
+    if (baseUrl.isEmpty) {
+      loginError = 'missingServer';
+      notifyListeners();
+      return false;
+    }
+    if (username.trim().isEmpty) {
+      loginError = 'username';
+      notifyListeners();
+      return false;
+    }
+    if (!RegExp(r'^\d{4}$').hasMatch(pin.trim())) {
+      loginError = 'pin';
+      notifyListeners();
+      return false;
+    }
+
+    signingIn = true;
+    loginError = null;
+    notifyListeners();
+    try {
+      final next = await _api.login(
+        baseUrl: baseUrl,
+        username: username,
+        pin: pin,
+        companyCode: companyCode,
+      );
+      session = next;
+      rememberedServer = baseUrl;
+      rememberedCompany = companyCode.trim().toLowerCase();
+      dashboard = null;
+      dashboardError = null;
+      await _storeSession(next);
+      signingIn = false;
+      notifyListeners();
+      await refreshDashboard();
+      return true;
+    } on ErpException catch (error) {
+      loginError = error.code;
+      signingIn = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> refreshDashboard() async {
+    final current = session;
+    if (current == null) return;
+    loadingDashboard = true;
+    dashboardError = null;
+    notifyListeners();
+    try {
+      dashboard = await _api.dashboard(current);
+      loadingDashboard = false;
+      notifyListeners();
+    } on ErpException catch (error) {
+      if (error.code == 'invalidLogin') {
+        await signOut();
+        return;
+      }
+      loadingDashboard = false;
+      dashboardError = error.code;
+      notifyListeners();
+    }
+  }
+
+  Future<void> signOut() async {
+    session = null;
+    dashboard = null;
+    dashboardError = null;
+    loadingDashboard = false;
+    loginError = null;
+    signingIn = false;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('erp.token');
+    await prefs.remove('erp.baseUrl');
+    await prefs.remove('erp.name');
+    await prefs.remove('erp.username');
+    await prefs.remove('erp.role');
+    await prefs.remove('erp.tenantSlug');
+    await prefs.remove('erp.tenantName');
+  }
+
+  Future<void> _storeSession(ErpSession next) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('erp.server', next.baseUrl);
+    await prefs.setString('erp.company', next.companyCode);
+    await prefs.setString('erp.baseUrl', next.baseUrl);
+    await prefs.setString('erp.token', next.token);
+    await prefs.setString('erp.name', next.name);
+    await prefs.setString('erp.username', next.username);
+    await prefs.setString('erp.role', next.role);
+    await prefs.setString('erp.tenantSlug', next.tenantSlug);
+    await prefs.setString('erp.tenantName', next.tenantName);
+  }
+}

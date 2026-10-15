@@ -6583,6 +6583,99 @@
   margin-top: 10px;
 }
 
+.erp-app-download {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid #d9e2f2;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, #f8fbff 0%, #ffffff 70%),
+    #ffffff;
+  box-shadow: 0 10px 24px -18px rgba(15, 23, 42, 0.45);
+}
+
+.erp-app-download-mark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
+.erp-app-download-copy {
+  min-width: 0;
+}
+
+.erp-app-download-copy span,
+.erp-app-download-copy strong,
+.erp-app-download-copy p {
+  display: block;
+  margin: 0;
+}
+
+.erp-app-download-copy span {
+  color: #6366f1;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.erp-app-download-copy strong {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.erp-app-download-copy p {
+  margin-top: 6px;
+  max-width: 720px;
+  color: #475569;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.erp-app-download-action {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 750;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.erp-app-download-action:hover {
+  background: #1e293b;
+}
+
+@media (max-width: 800px) {
+  .erp-app-download {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .erp-app-download-action {
+    grid-column: 1 / -1;
+  }
+}
+
 /* Responsive adjustments */
 @media (max-width: 1024px) {
   .dashboard-modern-insights,
