@@ -1,7 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'dashboard_data.dart';
+import 'erp_api.dart';
 import 'theme.dart';
+
+String? productImageUrl(String path, {int width = 160}) {
+  final value = path.trim();
+  if (value.isEmpty || value.startsWith('data:') || value.startsWith('blob:')) return null;
+  String route;
+  if (value.startsWith('http://') || value.startsWith('https://')) {
+    final uri = Uri.tryParse(value);
+    if (uri == null) return value;
+    final ownUpload = uri.path.startsWith('/static/uploads/') &&
+        const {'api.hisbenew.com', 'hisbenew.com', 'www.hisbenew.com'}.contains(uri.host);
+    if (!ownUpload) return value;
+    route = uri.path;
+  } else {
+    route = value.startsWith('/') ? value : '/$value';
+  }
+  return '$erpApiBase$route?w=$width';
+}
 
 String phrase(BuildContext context, String en, String ur) {
   return Localizations.localeOf(context).languageCode == 'ur' ? ur : en;
@@ -14,6 +33,96 @@ String prettyWhen(String raw) {
 }
 
 String usd(double value) => NumberFormat.simpleCurrency(name: 'USD').format(value);
+
+class ProductThumb extends StatelessWidget {
+  const ProductThumb({required this.path, this.size = 46, super.key});
+
+  final String path;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = productImageUrl(path, width: (size * 3).round());
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: url == null
+            ? const ColoredBox(color: Color(0xFFEEF2FF), child: Icon(Icons.image_outlined, size: 18, color: hisbenewMuted))
+            : Image.network(
+                url,
+                fit: BoxFit.cover,
+                cacheWidth: (size * 3).round(),
+                errorBuilder: (context, error, stack) => const ColoredBox(
+                  color: Color(0xFFEEF2FF),
+                  child: Icon(Icons.image_outlined, size: 18, color: hisbenewMuted),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class ThumbStrip extends StatelessWidget {
+  const ThumbStrip({required this.items, super.key});
+
+  final List<ItemShot> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final pictured = items.where((item) => item.image.isNotEmpty).toList();
+    if (pictured.isEmpty) return const SizedBox.shrink();
+    final shown = pictured.take(4).toList();
+    final extra = pictured.length - shown.length;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          for (final item in shown)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: ProductThumb(path: item.image, size: 42),
+            ),
+          if (extra > 0) Text('+$extra', style: const TextStyle(color: hisbenewMuted, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class ProductLine extends StatelessWidget {
+  const ProductLine({required this.item, super.key});
+
+  final ItemShot item;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = item.name.isEmpty ? item.article : item.name;
+    final detail = [
+      if (item.article.isNotEmpty && item.article != title) item.article,
+      if (item.qty > 0) '× ${item.qty}',
+    ].join('  ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          ProductThumb(path: item.image, size: 44),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title.isEmpty ? '—' : title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (detail.isNotEmpty) Text(detail, style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class WorkSearch extends StatelessWidget {
   const WorkSearch({required this.controller, required this.hint, super.key});

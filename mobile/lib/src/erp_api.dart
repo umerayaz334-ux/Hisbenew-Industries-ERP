@@ -96,18 +96,24 @@ class ErpApi {
     final records = await _sendList(url: '${session.baseUrl}/shipping', token: session.token);
     final orders = await _sendList(url: '${session.baseUrl}/orders', token: session.token);
     final unitsByOrder = <int, int>{};
+    final itemsByOrder = <int, List<ItemShot>>{};
     for (final order in orders) {
-      final items = order['items'];
+      final shots = itemShotsOf(order['items']);
       var units = 0;
-      if (items is List) {
-        for (final item in items) {
-          if (item is Map) units += asInt(item['quantity']);
-        }
+      for (final shot in shots) {
+        units += shot.qty;
       }
-      unitsByOrder[asInt(order['id'])] = units;
+      final id = asInt(order['id']);
+      unitsByOrder[id] = units;
+      itemsByOrder[id] = shots;
     }
     return [
-      for (final record in records) ShipmentRecord.fromJson(record, unitsByOrder[asInt(record['order_id'])] ?? 0),
+      for (final record in records)
+        ShipmentRecord.fromJson(
+          record,
+          unitsByOrder[asInt(record['order_id'])] ?? 0,
+          itemsByOrder[asInt(record['order_id'])] ?? const [],
+        ),
     ];
   }
 

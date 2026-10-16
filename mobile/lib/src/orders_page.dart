@@ -31,22 +31,11 @@ class FactoryOrder {
   final double total;
   final String notes;
   final int units;
-  final List<String> items;
+  final List<ItemShot> items;
 
   factory FactoryOrder.fromJson(Map<String, dynamic> json) {
-    final rawItems = json['items'];
-    final lines = <String>[];
-    var units = 0;
-    if (rawItems is List) {
-      for (final item in rawItems) {
-        if (item is! Map) continue;
-        final qty = asInt(item['quantity']);
-        units += qty;
-        final name = asText(item['product_name']);
-        final article = asText(item['article_no']);
-        lines.add('${article.isEmpty ? name : '$article · $name'}  × $qty');
-      }
-    }
+    final lines = itemShotsOf(json['items']);
+    final units = lines.fold<int>(0, (sum, item) => sum + item.qty);
     return FactoryOrder(
       orderNo: asText(json['order_no']),
       customer: asText(json['customer_name']),
@@ -144,8 +133,15 @@ class _OrdersPageState extends State<OrdersPage> {
                             tilePadding: const EdgeInsets.symmetric(horizontal: 14),
                             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
                             shape: const Border(),
-                            title: Text(order.customer.isEmpty ? order.orderNo : order.customer, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            subtitle: Text('${prettyWhen(order.when)}  ·  ${order.orderNo}  ·  ${order.status}', style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
+                            leading: order.items.isEmpty ? null : ProductThumb(path: order.items.first.image, size: 48),
+                            title: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(order.customer.isEmpty ? order.orderNo : order.customer, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                Text('${prettyWhen(order.when)}  ·  ${order.orderNo}  ·  ${order.status}', style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
+                                ThumbStrip(items: order.items.skip(1).toList()),
+                              ],
+                            ),
                             trailing: Text(order.total > 0 ? usd(order.total) : '${order.units}', style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewForest)),
                             children: [
                               DetailLine(phrase(context, 'Date', 'تاریخ'), prettyWhen(order.when)),
@@ -153,7 +149,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               DetailLine(phrase(context, 'Payment', 'ادائیگی'), order.payment),
                               DetailLine(phrase(context, 'Shipping', 'شپنگ'), order.shipping),
                               DetailLine(phrase(context, 'Note', 'نوٹ'), order.notes),
-                              for (final line in order.items) Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(line)),
+                              for (final line in order.items) ProductLine(item: line),
                             ],
                           ),
                         ),

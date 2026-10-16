@@ -17,6 +17,7 @@ class PendingShip {
     required this.units,
     required this.phone,
     required this.address,
+    required this.items,
   });
 
   final int orderId;
@@ -28,15 +29,11 @@ class PendingShip {
   final int units;
   final String phone;
   final String address;
+  final List<ItemShot> items;
 
   factory PendingShip.fromJson(Map<String, dynamic> json) {
-    final items = json['items'];
-    var units = 0;
-    if (items is List) {
-      for (final item in items) {
-        if (item is Map) units += asInt(item['quantity']);
-      }
-    }
+    final items = itemShotsOf(json['items']);
+    final units = items.fold<int>(0, (sum, item) => sum + item.qty);
     return PendingShip(
       orderId: asInt(json['order_id']),
       orderNo: asText(json['order_no']),
@@ -47,6 +44,7 @@ class PendingShip {
       units: units,
       phone: asText(json['shipping_phone']),
       address: asText(json['customer_address']),
+      items: items,
     );
   }
 }
@@ -168,30 +166,41 @@ class _ShippingPageState extends State<ShippingPage> {
 }
 
 class _CollapsedTitle extends StatelessWidget {
-  const _CollapsedTitle({required this.when, required this.customer, required this.units});
+  const _CollapsedTitle({required this.when, required this.customer, required this.units, required this.items});
 
   final String when;
   final String customer;
   final int units;
+  final List<ItemShot> items;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 64,
-          child: Text(prettyWhen(when), style: const TextStyle(color: hisbenewForest, fontWeight: FontWeight.w700, fontSize: 13)),
+        Row(
+          children: [
+            if (items.isNotEmpty) ...[
+              ProductThumb(path: items.first.image, size: 42),
+              const SizedBox(width: 8),
+            ],
+            SizedBox(
+              width: 58,
+              child: Text(prettyWhen(when), style: const TextStyle(color: hisbenewForest, fontWeight: FontWeight.w700, fontSize: 13)),
+            ),
+            Expanded(
+              child: Text(
+                customer.isEmpty ? '—' : customer,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+              ),
+            ),
+            if (units > 0)
+              Text('$units', style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
+          ],
         ),
-        Expanded(
-          child: Text(
-            customer.isEmpty ? '—' : customer,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-        ),
-        if (units > 0)
-          Text('$units', style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
+        ThumbStrip(items: items.skip(1).toList()),
       ],
     );
   }
@@ -211,8 +220,9 @@ class _PendingTile extends StatelessWidget {
         tilePadding: const EdgeInsets.symmetric(horizontal: 14),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         shape: const Border(),
-        title: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units),
+        title: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units, items: row.items),
         children: [
+          for (final item in row.items) ProductLine(item: item),
           DetailLine(phrase(context, 'Order', 'آرڈر'), row.orderNo),
           DetailLine(phrase(context, 'Status', 'حالت'), row.status),
           DetailLine(phrase(context, 'Platform', 'پلیٹ فارم'), row.platform),
@@ -289,8 +299,9 @@ class _ShippedTile extends StatelessWidget {
         tilePadding: const EdgeInsets.symmetric(horizontal: 14),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         shape: const Border(),
-        title: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units),
+        title: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units, items: row.items),
         children: [
+          for (final item in row.items) ProductLine(item: item),
           DetailLine(phrase(context, 'Order', 'آرڈر'), row.orderNo),
           DetailLine(phrase(context, 'Status', 'حالت'), row.status),
           DetailLine(phrase(context, 'Courier', 'کوریئر'), row.courier),

@@ -40,6 +40,32 @@ class OrderBrief {
   }
 }
 
+class ItemShot {
+  const ItemShot({required this.name, required this.article, required this.image, required this.qty});
+
+  final String name;
+  final String article;
+  final String image;
+  final int qty;
+
+  factory ItemShot.fromJson(Map<dynamic, dynamic> json) {
+    return ItemShot(
+      name: asText(json['product_name']).isNotEmpty ? asText(json['product_name']) : asText(json['name']),
+      article: asText(json['article_no']),
+      image: asText(json['product_image_url']).isNotEmpty ? asText(json['product_image_url']) : asText(json['image_url']),
+      qty: asInt(json['quantity']),
+    );
+  }
+}
+
+List<ItemShot> itemShotsOf(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map) ItemShot.fromJson(item),
+  ];
+}
+
 class ShipmentRecord {
   const ShipmentRecord({
     required this.id,
@@ -53,6 +79,7 @@ class ShipmentRecord {
     required this.tracking,
     required this.weightKg,
     required this.note,
+    required this.items,
   });
 
   final int id;
@@ -66,8 +93,9 @@ class ShipmentRecord {
   final String tracking;
   final String weightKg;
   final String note;
+  final List<ItemShot> items;
 
-  factory ShipmentRecord.fromJson(Map<String, dynamic> json, int units) {
+  factory ShipmentRecord.fromJson(Map<String, dynamic> json, int units, List<ItemShot> items) {
     return ShipmentRecord(
       id: asInt(json['id']),
       orderId: asInt(json['order_id']),
@@ -80,6 +108,7 @@ class ShipmentRecord {
       tracking: asText(json['tracking_number']),
       weightKg: asText(json['package_weight_kg']),
       note: asText(json['shipping_note']),
+      items: items,
     );
   }
 }

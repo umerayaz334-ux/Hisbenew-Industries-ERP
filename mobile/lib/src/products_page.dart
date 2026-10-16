@@ -18,6 +18,7 @@ class ProductRow {
     required this.price,
     required this.cost,
     required this.low,
+    required this.image,
   });
 
   final int id;
@@ -30,6 +31,7 @@ class ProductRow {
   final double price;
   final double cost;
   final int low;
+  final String image;
 
   factory ProductRow.fromJson(Map<String, dynamic> json) {
     return ProductRow(
@@ -43,6 +45,7 @@ class ProductRow {
       price: asDouble(json['selling_price']),
       cost: asDouble(json['cost_price']),
       low: asInt(json['low_stock_alert']),
+      image: asText(json['image_url']),
     );
   }
 
@@ -131,6 +134,7 @@ class _ProductsPageState extends State<ProductsPage> {
                             tilePadding: const EdgeInsets.symmetric(horizontal: 14),
                             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
                             shape: const Border(),
+                            leading: ProductThumb(path: row.image, size: 52),
                             title: Text(row.name.isEmpty ? row.article : row.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
                             subtitle: Text(row.article, style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
                             trailing: Text('${row.factory}', style: TextStyle(fontWeight: FontWeight.w800, color: row.lowStock ? hisbenewClay : hisbenewForest)),

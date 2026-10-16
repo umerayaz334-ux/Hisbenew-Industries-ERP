@@ -111,7 +111,13 @@ class _LabelsPageState extends State<LabelsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_selected!.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                  Row(
+                    children: [
+                      ProductThumb(path: _selected!.image, size: 64),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(_selected!.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+                    ],
+                  ),
                   Text(_selected!.article, style: const TextStyle(color: hisbenewMuted)),
                   const SizedBox(height: 12),
                   Row(
@@ -147,6 +153,7 @@ class _LabelsPageState extends State<LabelsPage> {
           for (final row in visible)
             WorkCard(
               child: ListTile(
+                leading: ProductThumb(path: row.image, size: 46),
                 title: Text(row.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                 subtitle: Text(row.article),
                 onTap: () => setState(() => _selected = row),
