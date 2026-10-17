@@ -712,6 +712,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
     tasks: [],
     orderTasks: [],
     payments: [],
+    expenses: [],
   });
   const [loading, setLoading] = useState(true);
   const [backendError, setBackendError] = useState(false);
@@ -809,7 +810,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
         secondaryLoads.push(
           (async () => {
             try {
-              const [orderTasksResponse, workerTasksResponse, workerPaymentsResponse] =
+              const [orderTasksResponse, workerTasksResponse, workerPaymentsResponse, workerExpensesResponse] =
                 await Promise.all([
                   apiFetch(
                     `${API_BASE_URL}/order-workflow/tasks?worker_id=${workerId}&refresh=${Date.now()}`,
@@ -821,6 +822,10 @@ function OperationalDashboard({ userRole, workerId, userName }) {
                   ),
                   apiFetch(
                     `${API_BASE_URL}/worker-payments?worker_id=${workerId}&refresh=${Date.now()}`,
+                    freshFetchOptions
+                  ),
+                  apiFetch(
+                    `${API_BASE_URL}/worker-expenses?worker_id=${workerId}&refresh=${Date.now()}`,
                     freshFetchOptions
                   ),
                 ]);
@@ -847,11 +852,17 @@ function OperationalDashboard({ userRole, workerId, userName }) {
               const workerPaymentsData = workerPaymentsResponse.ok
                 ? await workerPaymentsResponse.json()
                 : [];
+              const workerExpensesData = workerExpensesResponse.ok
+                ? await workerExpensesResponse.json()
+                : [];
               setWorkerPayoutData({
                 tasks: Array.isArray(workerTasksData) ? workerTasksData : [],
                 orderTasks: nextOrderTasks,
                 payments: Array.isArray(workerPaymentsData)
                   ? workerPaymentsData
+                  : [],
+                expenses: Array.isArray(workerExpensesData)
+                  ? workerExpensesData
                   : [],
               });
             } catch (error) {
@@ -862,6 +873,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
                   tasks: [],
                   orderTasks: [],
                   payments: [],
+                  expenses: [],
                 });
               }
             }
@@ -869,7 +881,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
         );
       } else if (requestId === dashboardRequestIdRef.current) {
         setOrderTasks([]);
-        setWorkerPayoutData({ tasks: [], orderTasks: [], payments: [] });
+        setWorkerPayoutData({ tasks: [], orderTasks: [], payments: [], expenses: [] });
       }
 
       // Load active In-Transit shipments with live tracking (non-blocking)
@@ -1374,10 +1386,15 @@ function OperationalDashboard({ userRole, workerId, userName }) {
       (total, payment) => total + Number(payment.amount || 0),
       0
     );
+    const spent = (workerPayoutData.expenses || []).reduce(
+      (total, expense) => total + Number(expense.amount || 0),
+      0
+    );
     return {
       earned,
+      spent,
       paid,
-      balance: earned - paid,
+      balance: earned + spent - paid,
       completed: completedTasks.length + completedOrderTasks.length,
     };
   }, [workerPayoutData]);
@@ -2588,12 +2605,17 @@ function OperationalDashboard({ userRole, workerId, userName }) {
                 <small>Recorded payouts</small>
               </article>
               <article className="is-balance">
+                <span>Spent</span>
+                <strong>{formatAmount(workerPayoutSummary.spent)}</strong>
+                <small>Factory money you sent</small>
+              </article>
+              <article className="is-balance">
                 <span>Balance</span>
                 <strong>{formatAmount(workerPayoutSummary.balance)}</strong>
                 <small>
                   {workerPayoutSummary.balance < 0
-                    ? "Overpaid against tasks"
-                    : "Remaining task payout"}
+                    ? "Overpaid against tasks and spending"
+                    : "Still to pay, including spending"}
                 </small>
               </article>
             </div>

@@ -203,15 +203,15 @@ class _CollapsedTitle extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFEEF2FF),
+              color: const Color(0xFFE7F2EB),
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: const Color(0xFFC7D2FE)),
+              border: Border.all(color: const Color(0xFFC5D9CC)),
             ),
             child: Text(
               unitLabel,
               maxLines: 1,
               softWrap: false,
-              style: const TextStyle(color: Color(0xFF3730A3), fontWeight: FontWeight.w800, fontSize: 12, height: 1.1),
+              style: const TextStyle(color: hisbenewForest, fontWeight: FontWeight.w800, fontSize: 12, height: 1.1),
             ),
           ),
         ],

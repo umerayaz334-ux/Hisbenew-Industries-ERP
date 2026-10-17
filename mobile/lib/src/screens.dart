@@ -44,79 +44,121 @@ class _LoginScreenState extends State<LoginScreen> {
     final model = widget.model;
     final error = _loginMessage(copy, model.loginError);
 
+    final fieldBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: const BorderSide(color: Color(0xFFE4D8C4)),
+    );
+
     return Scaffold(
+      backgroundColor: const Color(0xFF141210),
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 8, 18, 0),
+              child: Row(
                 children: [
-                  const _BrandMark(),
-                  const SizedBox(height: 28),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: SegmentedButton<String>(
-                      style: SegmentedButton.styleFrom(
-                        backgroundColor: hisbenewCard,
-                        selectedBackgroundColor: hisbenewForest,
-                        selectedForegroundColor: Colors.white,
-                        side: const BorderSide(color: hisbenewLine),
-                      ),
-                      segments: [
-                        ButtonSegment(value: 'en', label: Text(copy.english)),
-                        ButtonSegment(value: 'ur', label: Text(copy.urdu)),
-                      ],
-                      selected: {model.locale.languageCode},
-                      onSelectionChanged: (value) {
-                        model.setLocale(Locale(value.first));
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  TextField(
-                    controller: _username,
-                    textInputAction: TextInputAction.next,
-                    autocorrect: false,
-                    decoration: InputDecoration(labelText: copy.username),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _pin,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    obscureText: !_showPin,
-                    decoration: InputDecoration(
-                      labelText: copy.pin,
-                      counterText: '',
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(() => _showPin = !_showPin),
-                        icon: Icon(_showPin ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                      ),
-                    ),
-                  ),
-                  if (error != null) ...[
-                    const SizedBox(height: 8),
-                    Text(error, style: const TextStyle(color: Color(0xFFA43A2D), fontWeight: FontWeight.w600)),
-                  ],
-                  const SizedBox(height: 18),
-                  FilledButton(
-                    onPressed: model.signingIn
-                        ? null
-                        : () {
-                            model.signIn(
-                              username: _username.text,
-                              pin: _pin.text,
-                            );
-                          },
-                    child: Text(model.signingIn ? copy.signingIn : copy.signIn),
+                  const Spacer(),
+                  _LanguageSwitch(
+                    english: copy.english,
+                    urdu: copy.urdu,
+                    selected: model.locale.languageCode,
+                    onChanged: (code) => model.setLocale(Locale(code)),
                   ),
                 ],
               ),
             ),
-          ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 18, 24, 22),
+              child: _BrandMark(),
+            ),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF7F2EA),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                ),
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(copy.signIn, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -0.8, color: hisbenewInk)),
+                          const SizedBox(height: 6),
+                          Text(
+                            phrase(context, 'Username and PIN. Your role opens on its own.', 'صارف نام اور پن۔ کردار خود کھل جائے گا۔'),
+                            style: const TextStyle(color: hisbenewMuted, height: 1.35),
+                          ),
+                          const SizedBox(height: 22),
+                          TextField(
+                            controller: _username,
+                            textInputAction: TextInputAction.next,
+                            autocorrect: false,
+                            style: const TextStyle(fontWeight: FontWeight.w600, color: hisbenewInk),
+                            decoration: InputDecoration(
+                              labelText: copy.username,
+                              filled: true,
+                              fillColor: Colors.white,
+                              enabledBorder: fieldBorder,
+                              focusedBorder: fieldBorder.copyWith(borderSide: const BorderSide(color: hisbenewForest, width: 1.5)),
+                              border: fieldBorder,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _pin,
+                            keyboardType: TextInputType.number,
+                            maxLength: 4,
+                            obscureText: !_showPin,
+                            style: const TextStyle(fontWeight: FontWeight.w700, letterSpacing: 4, color: hisbenewInk),
+                            decoration: InputDecoration(
+                              labelText: copy.pin,
+                              counterText: '',
+                              filled: true,
+                              fillColor: Colors.white,
+                              enabledBorder: fieldBorder,
+                              focusedBorder: fieldBorder.copyWith(borderSide: const BorderSide(color: hisbenewForest, width: 1.5)),
+                              border: fieldBorder,
+                              suffixIcon: IconButton(
+                                onPressed: () => setState(() => _showPin = !_showPin),
+                                icon: Icon(_showPin ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: hisbenewMuted),
+                              ),
+                            ),
+                          ),
+                          if (error != null) ...[
+                            const SizedBox(height: 10),
+                            Text(error, style: const TextStyle(color: Color(0xFF9F3A2F), fontWeight: FontWeight.w700)),
+                          ],
+                          const SizedBox(height: 18),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: hisbenewInk,
+                              foregroundColor: const Color(0xFFF7F2EA),
+                              minimumSize: const Size.fromHeight(54),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            onPressed: model.signingIn
+                                ? null
+                                : () {
+                                    model.signIn(
+                                      username: _username.text,
+                                      pin: _pin.text,
+                                    );
+                                  },
+                            child: Text(model.signingIn ? copy.signingIn : copy.signIn),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -208,7 +250,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _bottom.contains(_index) ? _bottom.indexOf(_index) : 0,
-        indicatorColor: const Color(0xFFE0E7FF),
+        indicatorColor: const Color(0xFFF3E6C8),
         onDestinationSelected: (value) => setState(() => _index = _bottom[value]),
         destinations: [
           for (final slot in _bottom)
@@ -326,28 +368,76 @@ class AccountPage extends StatelessWidget {
   }
 }
 
+class _LanguageSwitch extends StatelessWidget {
+  const _LanguageSwitch({required this.english, required this.urdu, required this.selected, required this.onChanged});
+
+  final String english;
+  final String urdu;
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF241F1A),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _LanguageChip(label: english, selected: selected == 'en', onTap: () => onChanged('en')),
+          _LanguageChip(label: urdu, selected: selected == 'ur', onTap: () => onChanged('ur')),
+        ],
+      ),
+    );
+  }
+}
+
+class _LanguageChip extends StatelessWidget {
+  const _LanguageChip({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? hisbenewBrass : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? const Color(0xFF1C1917) : const Color(0xFFD8CBB8),
+            fontWeight: FontWeight.w800,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BrandMark extends StatelessWidget {
   const _BrandMark();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 44,
-          height: 44,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(color: hisbenewInk, borderRadius: BorderRadius.circular(12)),
-          child: const Text('HI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, letterSpacing: 0.6)),
-        ),
-        const SizedBox(width: 12),
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Hisbenew', style: TextStyle(fontWeight: FontWeight.w500, fontSize: 22, letterSpacing: -0.4)),
-            Text('Industries', style: TextStyle(color: hisbenewMuted, fontSize: 13)),
-          ],
-        ),
+        SizedBox(width: 36, height: 3, child: ColoredBox(color: hisbenewBrass)),
+        SizedBox(height: 16),
+        Text('Hisbenew', style: TextStyle(color: Color(0xFFF7F2EA), fontSize: 40, fontWeight: FontWeight.w700, letterSpacing: -1.2, height: 1)),
+        SizedBox(height: 6),
+        Text('Industries', style: TextStyle(color: Color(0xFFD8CBB8), fontSize: 15, letterSpacing: 1.4)),
       ],
     );
   }

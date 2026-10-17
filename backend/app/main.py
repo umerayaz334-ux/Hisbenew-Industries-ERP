@@ -39,7 +39,7 @@ from urllib import request as urllib_request
 
 from .config import APP_DATA_DIR, BACKEND_DIR, CORS_ALLOW_ORIGINS, CORS_ALLOW_ORIGIN_REGEX, FRONTEND_DIST_DIR, INTERNAL_CALL_ICE_SERVERS, PROJECT_DIR, STATIC_DIR, UPLOAD_DIR
 from .database import Base, DEFAULT_TENANT_NAME, DEFAULT_TENANT_SLUG, engine, SessionLocal, ensure_scaling_indexes, migrate_database
-from .models import Tenant, Module, TenantModule, CustomPage, Product, Customer, User, ActivityLog, UserRoleRequest, PublicAccessRequest, InternalMessage, InternalMessageContactRequest, WebsiteVisitorSession, WebsiteVisitorActivity, WebsiteVisitorMessage, InternalCall, InternalCallSignal, InspirationItem, OrderImportBatch, Order, OrderItem, StockMovement, Supplier, SupplierOrderItem, SupplierSupplyItem, SupplierTransaction, SupplierPayment, WorkflowStep, Worker, WorkerPayment, Shipping, FulfillmentShipment, FulfillmentBox, FulfillmentBoxItem, FulfillmentInventoryDiscrepancy, FulfillmentOrder, FulfillmentOrderItem, FulfillmentPick, CourierPayment, RegularBill, RegularBillPayment, AccountingSettings, AccountingFiscalYear, AccountingPeriodLock, AccountingCurrencyRate, AccountingJournalEntry, AccountingJournalLine, AccountingAccount, AccountingTransaction, AccountingDocument, AccountingDocumentLine, AccountingDocumentPayment, AccountingBankTransaction, AccountingBankRule, AccountingRecurringTemplate, ProductionBatch, ProductionTask, SharedData, WorkspaceData, OrderWorkflowTask, OrderFollowUp
+from .models import Tenant, Module, TenantModule, CustomPage, Product, Customer, User, ActivityLog, UserRoleRequest, PublicAccessRequest, InternalMessage, InternalMessageContactRequest, WebsiteVisitorSession, WebsiteVisitorActivity, WebsiteVisitorMessage, InternalCall, InternalCallSignal, InspirationItem, OrderImportBatch, Order, OrderItem, StockMovement, Supplier, SupplierOrderItem, SupplierSupplyItem, SupplierTransaction, SupplierPayment, WorkflowStep, Worker, WorkerPayment, WorkerExpense, Shipping, FulfillmentShipment, FulfillmentBox, FulfillmentBoxItem, FulfillmentInventoryDiscrepancy, FulfillmentOrder, FulfillmentOrderItem, FulfillmentPick, CourierPayment, RegularBill, RegularBillPayment, AccountingSettings, AccountingFiscalYear, AccountingPeriodLock, AccountingCurrencyRate, AccountingJournalEntry, AccountingJournalLine, AccountingAccount, AccountingTransaction, AccountingDocument, AccountingDocumentLine, AccountingDocumentPayment, AccountingBankTransaction, AccountingBankRule, AccountingRecurringTemplate, ProductionBatch, ProductionTask, SharedData, WorkspaceData, OrderWorkflowTask, OrderFollowUp
 from .integrations.amazon import router as amazon_router
 from .integrations.amazon.autosync import amazon_auto_sync_service
 from .integrations.amazon.constants import (
@@ -125,7 +125,7 @@ from .schemas import (
     OrderCreate, OrderOut, OrderPayoutUpdate,
     StockMovementOut, StockMovementUpdate,
     WorkflowStepCreate, WorkflowStepUpdate, WorkflowCopyRequest, WorkflowStepOut,
-    WorkerCreate, WorkerOut, WorkerPaymentCreate, WorkerPaymentOut,
+    WorkerCreate, WorkerOut, WorkerPaymentCreate, WorkerPaymentOut, WorkerExpenseCreate, WorkerExpenseOut,
     ShippingCreate, ShippingUpdate, ShippingOut,
     FulfillmentShipmentCreate, FulfillmentShipmentOut, FulfillmentShipmentReceiptUpdate,
     FulfillmentOrderItemCreate,
@@ -11423,6 +11423,29 @@ def accounting_balance_sheet_report(
     }
 
 
+def worker_expense_response(expense: WorkerExpense) -> dict:
+    return {
+        "id": expense.id,
+        "worker_id": expense.worker_id,
+        "worker_name": expense.worker.name if expense.worker else None,
+        "amount": expense.amount,
+        "note": expense.note,
+        "spent_at": expense.spent_at,
+        "created_at": expense.created_at,
+    }
+
+
+def worker_expense_scope(request: Request, db: Session, requested_worker_id: int | None) -> int | None:
+    user = get_authenticated_user(request, db)
+    if (user.role or "").strip().lower() != "worker":
+        return requested_worker_id
+    if user.worker_id is None:
+        raise HTTPException(status_code=400, detail="This login is not linked to a worker.")
+    if requested_worker_id is not None and requested_worker_id != user.worker_id:
+        raise HTTPException(status_code=403, detail="You can only see your own factory spending.")
+    return user.worker_id
+
+
 def worker_payment_response(payment: WorkerPayment) -> dict:
     return {
         "id": payment.id,
@@ -19456,6 +19479,65 @@ def get_worker_payments(
         .all()
     )
     return [worker_payment_response(payment) for payment in payments]
+
+
+@app.get("/worker-expenses", response_model=list[WorkerExpenseOut])
+def get_worker_expenses(
+    request: Request,
+    worker_id: int | None = Query(default=None),
+    limit: int = Query(default=500, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    scoped_worker_id = worker_expense_scope(request, db, worker_id)
+    query = db.query(WorkerExpense).options(joinedload(WorkerExpense.worker))
+    if scoped_worker_id is not None:
+        query = query.filter(WorkerExpense.worker_id == scoped_worker_id)
+    expenses = (
+        query.order_by(WorkerExpense.spent_at.desc(), WorkerExpense.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [worker_expense_response(expense) for expense in expenses]
+
+
+@app.post("/worker-expenses", response_model=WorkerExpenseOut)
+def create_worker_expense(
+    payload: WorkerExpenseCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = get_authenticated_user(request, db)
+    if (user.role or "").strip().lower() == "worker":
+        target_worker_id = user.worker_id
+    else:
+        target_worker_id = payload.worker_id
+    if not target_worker_id:
+        raise HTTPException(status_code=400, detail="Worker ID is required.")
+
+    worker = db.query(Worker).filter(Worker.id == target_worker_id).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    amount = float(payload.amount or 0)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+    note = (payload.note or "").strip()
+    if not note:
+        raise HTTPException(status_code=400, detail="A note is required")
+
+    expense = WorkerExpense(
+        tenant_id=worker.tenant_id or user.tenant_id,
+        worker_id=worker.id,
+        amount=amount,
+        note=note,
+        spent_at=payload.spent_at or datetime.utcnow(),
+        created_at=datetime.utcnow(),
+        created_by_user_id=user.id,
+    )
+    db.add(expense)
+    db.commit()
+    db.refresh(expense)
+    return worker_expense_response(expense)
 
 
 @app.post("/worker-payments", response_model=WorkerPaymentOut)

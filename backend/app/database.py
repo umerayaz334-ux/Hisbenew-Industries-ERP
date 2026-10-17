@@ -93,6 +93,7 @@ TENANT_SCOPED_TABLES = (
     "workflow_steps",
     "workers",
     "worker_payments",
+    "worker_expenses",
     "shipping",
     "fulfillment_shipments",
     "fulfillment_boxes",
@@ -1337,6 +1338,20 @@ def migrate_database():
             """))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_internal_message_contact_requests_tenant_id ON internal_message_contact_requests(tenant_id)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_website_visitor_sessions_tenant_id ON website_visitor_sessions(tenant_id)"))
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS worker_expenses (
+                    id SERIAL PRIMARY KEY,
+                    tenant_id INTEGER REFERENCES tenants(id),
+                    worker_id INTEGER NOT NULL REFERENCES workers(id),
+                    amount DOUBLE PRECISION DEFAULT 0,
+                    note TEXT NOT NULL,
+                    spent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_by_user_id INTEGER REFERENCES users(id)
+                )
+            """))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_worker_expenses_tenant_id ON worker_expenses(tenant_id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_worker_expenses_worker_id ON worker_expenses(worker_id)"))
             ensure_website_visitor_chat_schema(connection)
         return
     with engine.connect() as connection:
@@ -1776,6 +1791,27 @@ def migrate_database():
                 print("Added 'accounting_transaction_id' column to worker_payments table")
         except Exception as e:
             print(f"Error creating worker payments table: {e}")
+
+        try:
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS worker_expenses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id INTEGER,
+                    worker_id INTEGER NOT NULL,
+                    amount FLOAT DEFAULT 0,
+                    note VARCHAR NOT NULL,
+                    spent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    created_by_user_id INTEGER,
+                    FOREIGN KEY(worker_id) REFERENCES workers(id),
+                    FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+                    FOREIGN KEY(created_by_user_id) REFERENCES users(id)
+                )
+            """))
+            connection.commit()
+            print("Created worker_expenses table (or already exists)")
+        except Exception as e:
+            print(f"Error creating worker expenses table: {e}")
 
         # Check and add warehouse fulfillment box location
         try:

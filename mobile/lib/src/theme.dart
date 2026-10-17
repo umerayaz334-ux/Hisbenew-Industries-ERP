@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-const hisbenewInk = Color(0xFF0B1220);
-const hisbenewMuted = Color(0xFF667085);
-const hisbenewLine = Color(0xFFE4E7EC);
-const hisbenewCanvas = Color(0xFFF3F5FB);
-const hisbenewCard = Color(0xFFFFFFFF);
-const hisbenewForest = Color(0xFF4F46E5);
-const hisbenewBrass = Color(0xFF0F9F8F);
+const hisbenewInk = Color(0xFF1C1917);
+const hisbenewMuted = Color(0xFF7A7168);
+const hisbenewLine = Color(0xFFE6DDD0);
+const hisbenewCanvas = Color(0xFFF4EFE6);
+const hisbenewCard = Color(0xFFFFFCF7);
+const hisbenewForest = Color(0xFF1F4D3A);
+const hisbenewBrass = Color(0xFFC4A15A);
 const hisbenewClay = Color(0xFFE11D48);
 const hisbenewAmber = Color(0xFFF59E0B);
 
@@ -60,7 +60,7 @@ ThemeData hisbenewTheme() {
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: Colors.white,
-      indicatorColor: const Color(0xFFE8EDF5),
+      indicatorColor: const Color(0xFFF3E6C8),
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return TextStyle(

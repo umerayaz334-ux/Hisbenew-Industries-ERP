@@ -936,6 +936,27 @@ class WorkerPaymentOut(BaseModel):
     }
 
 
+class WorkerExpenseCreate(BaseModel):
+    amount: float
+    note: str
+    spent_at: datetime | None = None
+    worker_id: int | None = None
+
+
+class WorkerExpenseOut(BaseModel):
+    id: int
+    worker_id: int
+    worker_name: str | None = None
+    amount: float
+    note: str
+    spent_at: datetime
+    created_at: datetime
+
+    model_config = {
+        "from_attributes": True
+    }
+
+
 class ShippingCreate(BaseModel):
     order_id: int
     courier_name: str | None = None

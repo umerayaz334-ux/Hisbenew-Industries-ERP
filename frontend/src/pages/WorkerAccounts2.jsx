@@ -86,6 +86,7 @@ export default function WorkerAccounts2() {
   const [productionTasks, setProductionTasks] = useState([]);
   const [orderWorkflowTasks, setOrderWorkflowTasks] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [expenses, setExpenses] = useState([]);
   const [accounts, setAccounts] = useState([]);
 
   // UI Control States
@@ -148,13 +149,14 @@ export default function WorkerAccounts2() {
     setLoading(true);
     setError("");
     try {
-      const [workersRes, productsRes, prodTasksRes, orderTasksRes, paymentsRes, accountsRes] =
+      const [workersRes, productsRes, prodTasksRes, orderTasksRes, paymentsRes, expensesRes, accountsRes] =
         await Promise.all([
           api.get("/workers"),
           api.get("/products"),
           api.get("/production/tasks"),
           api.get("/order-workflow/tasks"),
           api.get("/worker-payments"),
+          api.get("/worker-expenses").catch(() => ({ data: [] })),
           api.get("/accounts").catch(() => ({ data: [] })),
         ]);
 
@@ -163,6 +165,7 @@ export default function WorkerAccounts2() {
       setProductionTasks(prodTasksRes.data || []);
       setOrderWorkflowTasks(orderTasksRes.data || []);
       setPayments(paymentsRes.data || []);
+      setExpenses(expensesRes.data || []);
       setAccounts(accountsRes.data || []);
     } catch (err) {
       console.error("Error loading worker accounts data:", err);
@@ -211,6 +214,7 @@ export default function WorkerAccounts2() {
       map[w.id] = {
         worker: w,
         totalEarned: 0,
+        totalSpent: 0,
         totalPaid: 0,
         balance: 0,
         openTasksCount: 0,
@@ -238,13 +242,18 @@ export default function WorkerAccounts2() {
       }
     });
 
-    // Net balance = Earned - Paid
+    (expenses || []).forEach((expense) => {
+      if (expense.worker_id && map[expense.worker_id]) {
+        map[expense.worker_id].totalSpent += Number(expense.amount || 0);
+      }
+    });
+
     Object.keys(map).forEach((id) => {
-      map[id].balance = map[id].totalEarned - map[id].totalPaid;
+      map[id].balance = map[id].totalEarned + map[id].totalSpent - map[id].totalPaid;
     });
 
     return map;
-  }, [workers, allTasks, payments]);
+  }, [workers, allTasks, payments, expenses]);
 
   // Filtered workers list for Directory Table
   const filteredWorkersList = useMemo(() => {
@@ -825,6 +834,7 @@ export default function WorkerAccounts2() {
                 <th>Rate / Piece</th>
                 <th>Open Jobs</th>
                 <th>Earned (PKR)</th>
+                <th>Spent (PKR)</th>
                 <th>Paid (PKR)</th>
                 <th>Net Balance</th>
                 <th>Actions</th>
@@ -833,13 +843,13 @@ export default function WorkerAccounts2() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: "center", padding: "2rem" }}>
+                  <td colSpan="8" style={{ textAlign: "center", padding: "2rem" }}>
                     Loading worker accounts...
                   </td>
                 </tr>
               ) : filteredWorkersList.length === 0 ? (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: "center", padding: "2rem" }}>
+                  <td colSpan="8" style={{ textAlign: "center", padding: "2rem" }}>
                     No worker accounts match your filter.
                   </td>
                 </tr>
@@ -892,6 +902,9 @@ export default function WorkerAccounts2() {
                       </td>
                       <td>
                         <strong>{formatCurrency(summary.totalEarned)}</strong>
+                      </td>
+                      <td>
+                        <strong>{formatCurrency(summary.totalSpent || 0)}</strong>
                       </td>
                       <td>
                         <strong>{formatCurrency(summary.totalPaid)}</strong>
@@ -1725,6 +1738,7 @@ export default function WorkerAccounts2() {
           workers={workers}
           tasks={allTasks}
           payments={payments}
+          expenses={expenses}
           onClose={() => setSelectedLedgerWorker(null)}
           onSelectWorker={(w) => setSelectedLedgerWorker(w)}
           onTasksChange={loadData}

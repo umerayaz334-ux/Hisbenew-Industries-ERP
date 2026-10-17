@@ -20,6 +20,7 @@ class ErpSession {
     required this.name,
     required this.username,
     required this.role,
+    required this.workerId,
     required this.tenantSlug,
     required this.tenantName,
     required this.companyCode,
@@ -30,6 +31,7 @@ class ErpSession {
   final String name;
   final String username;
   final String role;
+  final int workerId;
   final String tenantSlug;
   final String tenantName;
   final String companyCode;
@@ -41,6 +43,7 @@ class ErpSession {
       'name': name,
       'username': username,
       'role': role,
+      'workerId': '$workerId',
       'tenantSlug': tenantSlug,
       'tenantName': tenantName,
       'companyCode': companyCode,
@@ -54,6 +57,7 @@ class ErpSession {
       name: values['name'] ?? '',
       username: values['username'] ?? '',
       role: values['role'] ?? '',
+      workerId: int.tryParse(values['workerId'] ?? '') ?? 0,
       tenantSlug: values['tenantSlug'] ?? '',
       tenantName: values['tenantName'] ?? '',
       companyCode: values['companyCode'] ?? '',
@@ -86,6 +90,7 @@ class ErpApi {
       name: asText(body['name']),
       username: asText(body['username']).isEmpty ? username.trim() : asText(body['username']),
       role: asText(body['role']),
+      workerId: asInt(body['worker_id']),
       tenantSlug: asText(body['tenant_slug']),
       tenantName: asText(body['tenant_name']),
       companyCode: '',
@@ -286,6 +291,44 @@ class ErpApi {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw const ErpException('server');
     }
+  }
+
+  Future<List<Map<String, dynamic>>> workerTasks(ErpSession session) async {
+    if (session.workerId <= 0) return const [];
+    return _sendList(url: '${session.baseUrl}/production/tasks?worker_id=${session.workerId}', token: session.token);
+  }
+
+  Future<List<Map<String, dynamic>>> workerOrderTasks(ErpSession session) async {
+    if (session.workerId <= 0) return const [];
+    return _sendList(url: '${session.baseUrl}/order-workflow/tasks?worker_id=${session.workerId}', token: session.token);
+  }
+
+  Future<List<Map<String, dynamic>>> workerPayments(ErpSession session) async {
+    if (session.workerId <= 0) return const [];
+    return _sendList(url: '${session.baseUrl}/worker-payments?worker_id=${session.workerId}', token: session.token);
+  }
+
+  Future<List<Map<String, dynamic>>> workerExpenses(ErpSession session) async {
+    if (session.workerId <= 0) return const [];
+    return _sendList(url: '${session.baseUrl}/worker-expenses?worker_id=${session.workerId}', token: session.token);
+  }
+
+  Future<void> sendWorkerExpense({
+    required ErpSession session,
+    required double amount,
+    required String note,
+    required DateTime spentAt,
+  }) async {
+    await _send(
+      method: 'POST',
+      url: '${session.baseUrl}/worker-expenses',
+      token: session.token,
+      body: {
+        'amount': amount,
+        'note': note.trim(),
+        'spent_at': spentAt.toUtc().toIso8601String(),
+      },
+    );
   }
 
   Future<DashboardData> dashboard(ErpSession session) async {

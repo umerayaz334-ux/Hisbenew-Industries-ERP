@@ -1568,6 +1568,7 @@ class Worker(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     payments = relationship("WorkerPayment", back_populates="worker", cascade="all, delete")
+    expenses = relationship("WorkerExpense", back_populates="worker", cascade="all, delete")
 
 
 class WorkerPayment(Base):
@@ -1586,6 +1587,21 @@ class WorkerPayment(Base):
 
     worker = relationship("Worker", back_populates="payments")
     accounting_transaction = relationship("AccountingTransaction")
+
+
+class WorkerExpense(Base):
+    __tablename__ = "worker_expenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    worker_id = Column(Integer, ForeignKey("workers.id"), nullable=False, index=True)
+    amount = Column(Float, default=0)
+    note = Column(String, nullable=False)
+    spent_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    worker = relationship("Worker", back_populates="expenses")
 
 
 class Shipping(Base):
@@ -2338,6 +2354,7 @@ TENANT_SCOPED_MODELS = (
     WorkflowStep,
     Worker,
     WorkerPayment,
+    WorkerExpense,
     Shipping,
     FulfillmentShipment,
     FulfillmentBox,

@@ -169,6 +169,13 @@ function WorkerPayouts({ userRole, workerId, userName }) {
   const [workers, setWorkers] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [spendForm, setSpendForm] = useState({
+    amount: "",
+    note: "",
+    spent_at: new Date().toISOString().slice(0, 10),
+  });
+  const [savingSpend, setSavingSpend] = useState(false);
   const [accounts, setAccounts] = useState([]);
   const [workerFilter, setWorkerFilter] = useState(
     isWorkerPortal && workerId ? String(workerId) : "all"
@@ -201,11 +208,12 @@ function WorkerPayouts({ userRole, workerId, userName }) {
     setError("");
     try {
       const workerQuery = isWorkerPortal && workerId ? `?worker_id=${workerId}` : "";
-      const [tasksResponse, orderTasksResponse, paymentsResponse, workersResponse, accountsResponse] =
+      const [tasksResponse, orderTasksResponse, paymentsResponse, expensesResponse, workersResponse, accountsResponse] =
         await Promise.all([
           api.get(`/production/tasks${workerQuery}`),
           api.get(`/order-workflow/tasks${workerQuery}`),
           api.get(`/worker-payments${workerQuery}`),
+          api.get(`/worker-expenses${workerQuery}`),
           isWorkerPortal
             ? Promise.resolve({
                 data: workerId
@@ -224,6 +232,7 @@ function WorkerPayouts({ userRole, workerId, userName }) {
         : [];
       setTasks([...productionTasks, ...orderLedgerTasks]);
       setPayments(Array.isArray(paymentsResponse.data) ? paymentsResponse.data : []);
+      setExpenses(Array.isArray(expensesResponse.data) ? expensesResponse.data : []);
       setWorkers(Array.isArray(workersResponse.data) ? workersResponse.data : []);
       setAccounts(Array.isArray(accountsResponse.data) ? accountsResponse.data : []);
     } catch (loadError) {
@@ -259,15 +268,20 @@ function WorkerPayouts({ userRole, workerId, userName }) {
         const paid = payments
           .filter((payment) => String(payment.worker_id) === String(worker.id))
           .reduce((total, payment) => total + Number(payment.amount || 0), 0);
-        const balance = earned - paid;
+        const spent = expenses
+          .filter((expense) => String(expense.worker_id) === String(worker.id))
+          .reduce((total, expense) => total + Number(expense.amount || 0), 0);
+        const owed = earned + spent;
+        const balance = owed - paid;
         const settlementPercent =
-          earned > 0
-            ? Math.min(100, Math.max(0, Math.round((paid / earned) * 100)))
+          owed > 0
+            ? Math.min(100, Math.max(0, Math.round((paid / owed) * 100)))
             : 0;
 
         return {
           worker,
           earned,
+          spent,
           paid,
           balance,
           settlementPercent,
@@ -276,7 +290,7 @@ function WorkerPayouts({ userRole, workerId, userName }) {
           status: balance > 0 ? "payable" : balance < 0 ? "advance" : "clear",
         };
       }),
-    [payments, tasks, workers]
+    [expenses, payments, tasks, workers]
   );
 
   const totals = useMemo(
@@ -284,6 +298,7 @@ function WorkerPayouts({ userRole, workerId, userName }) {
       ledger.reduce(
         (summary, item) => ({
           earned: summary.earned + item.earned,
+          spent: summary.spent + item.spent,
           paid: summary.paid + item.paid,
           balance: summary.balance + item.balance,
           completed: summary.completed + item.completedTasks,
@@ -295,6 +310,7 @@ function WorkerPayouts({ userRole, workerId, userName }) {
         }),
         {
           earned: 0,
+          spent: 0,
           paid: 0,
           balance: 0,
           completed: 0,
@@ -309,9 +325,45 @@ function WorkerPayouts({ userRole, workerId, userName }) {
   );
 
   const settlementPercent =
-    totals.earned > 0
-      ? Math.min(100, Math.max(0, Math.round((totals.paid / totals.earned) * 100)))
+    totals.earned + totals.spent > 0
+      ? Math.min(100, Math.max(0, Math.round((totals.paid / (totals.earned + totals.spent)) * 100)))
       : 0;
+
+  const submitSpend = async (event) => {
+    event.preventDefault();
+    const amount = Number(spendForm.amount);
+    const note = spendForm.note.trim();
+    if (!note) {
+      setError("Add a short note for what was spent.");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Amount must be greater than 0.");
+      return;
+    }
+    setSavingSpend(true);
+    setError("");
+    setNotice("");
+    try {
+      await api.post("/worker-expenses", {
+        amount,
+        note,
+        spent_at: spendForm.spent_at ? `${spendForm.spent_at}T12:00:00` : null,
+      });
+      setSpendForm({
+        amount: "",
+        note: "",
+        spent_at: new Date().toISOString().slice(0, 10),
+      });
+      setNotice("Factory spending sent.");
+      await loadData();
+    } catch (saveError) {
+      console.error("Worker expense save error:", saveError);
+      setError("Factory spending could not be sent.");
+    } finally {
+      setSavingSpend(false);
+    }
+  };
 
   const filteredLedger = useMemo(() => {
     const query = accountSearch.trim().toLowerCase();
@@ -338,6 +390,12 @@ function WorkerPayouts({ userRole, workerId, userName }) {
     }
     return new Set([String(workerFilter)]);
   }, [workerFilter, workers]);
+
+  const visibleExpenses = useMemo(() => {
+    return expenses
+      .filter((expense) => selectedWorkerIds.has(String(expense.worker_id || "")))
+      .sort((a, b) => new Date(b.spent_at || 0) - new Date(a.spent_at || 0));
+  }, [expenses, selectedWorkerIds]);
 
   const visibleTasks = useMemo(() => {
     const query = taskSearch.trim().toLowerCase();
@@ -592,6 +650,80 @@ function WorkerPayouts({ userRole, workerId, userName }) {
         </article>
       </section>
 
+      <section className="wa-panel">
+        <div className="wa-panel-toolbar">
+          <div>
+            <h2>Factory spending</h2>
+            <p>
+              {visibleExpenses.length} note{visibleExpenses.length === 1 ? "" : "s"} sent from the worker app
+            </p>
+          </div>
+        </div>
+        {isWorkerPortal && (
+          <form className="wa-ledger-filters" onSubmit={submitSpend} style={{ padding: "0 1.25rem 1rem", alignItems: "end" }}>
+            <label className="wa-field">
+              <span>Amount (PKR)</span>
+              <input
+                inputMode="decimal"
+                min="1"
+                onChange={(event) => setSpendForm((current) => ({ ...current, amount: event.target.value }))}
+                placeholder="0"
+                type="number"
+                value={spendForm.amount}
+              />
+            </label>
+            <label className="wa-field">
+              <span>Date</span>
+              <input
+                onChange={(event) => setSpendForm((current) => ({ ...current, spent_at: event.target.value }))}
+                type="date"
+                value={spendForm.spent_at}
+              />
+            </label>
+            <label className="wa-field wa-note-field">
+              <span>Note</span>
+              <input
+                onChange={(event) => setSpendForm((current) => ({ ...current, note: event.target.value }))}
+                placeholder="What was this for?"
+                value={spendForm.note}
+              />
+            </label>
+            <button className="wa-primary-button" disabled={savingSpend} type="submit">
+              {savingSpend ? "Sending" : "Send spending"}
+            </button>
+          </form>
+        )}
+        {visibleExpenses.length === 0 ? (
+          <div className="wa-empty-state wa-empty-ledger">
+            <h3>No factory spending yet</h3>
+            <p>When a worker sends a note, amount, and date, it shows up here.</p>
+          </div>
+        ) : (
+          <div className="wa-table-wrap">
+            <table className="wa-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Worker</th>
+                  <th>Note</th>
+                  <th className="wa-align-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleExpenses.map((expense) => (
+                  <tr key={expense.id}>
+                    <td>{formatUtcLocal(expense.spent_at)}</td>
+                    <td>{expense.worker_name || "Worker"}</td>
+                    <td>{expense.note}</td>
+                    <td className="wa-amount-cell">{formatCurrency(expense.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <section className="wa-panel wa-accounts-panel">
         <div className="wa-panel-toolbar">
           <div>
@@ -694,6 +826,10 @@ function WorkerPayouts({ userRole, workerId, userName }) {
                     <div>
                       <span>Earned</span>
                       <strong>{formatCurrency(item.earned)}</strong>
+                    </div>
+                    <div>
+                      <span>Spent</span>
+                      <strong>{formatCurrency(item.spent)}</strong>
                     </div>
                     <div>
                       <span>Paid</span>
@@ -1104,6 +1240,7 @@ function WorkerPayouts({ userRole, workerId, userName }) {
           workers={workers}
           tasks={tasks}
           payments={payments}
+          expenses={expenses}
           onClose={() => setSelectedLedgerWorker(null)}
           onSelectWorker={(w) => setSelectedLedgerWorker(w)}
           onRecordPayout={(w) => {

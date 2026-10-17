@@ -132,21 +132,31 @@ class _OrdersPageState extends State<OrdersPage> {
                           sheetTitle: order.customer.isEmpty ? order.orderNo : order.customer,
                           summary: Row(
                             children: [
-                              if (order.items.isNotEmpty) ...[
-                                ProductThumb(path: order.items.first.image, size: 40),
-                                const SizedBox(width: 10),
-                              ],
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(order.customer.isEmpty ? order.orderNo : order.customer, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                                    Text('${prettyWhen(order.when)}  ·  ${order.orderNo}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
+                                    Text(
+                                      [
+                                        if (prettyWhen(order.when).isNotEmpty) prettyWhen(order.when),
+                                        if (order.customer.isNotEmpty) order.customer,
+                                      ].join('  ·  '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                    ),
+                                    if (order.orderNo.isNotEmpty)
+                                      Text(
+                                        '#${order.orderNo}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: hisbenewMuted, fontSize: 12, fontWeight: FontWeight.w600),
+                                      ),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Text(order.total > 0 ? usd(order.total) : '${order.units}', style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewForest)),
+                              _OrderPhotos(items: order.items),
                             ],
                           ),
                           details: Column(
@@ -166,6 +176,57 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _OrderPhotos extends StatelessWidget {
+  const _OrderPhotos({required this.items});
+
+  final List<ItemShot> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final pictured = items.where((item) => item.image.isNotEmpty).toList();
+    if (pictured.isEmpty) return const SizedBox.shrink();
+    final shown = pictured.take(3).toList();
+    final extra = pictured.length - shown.length;
+    const size = 38.0;
+    const step = 24.0;
+    final slots = shown.length + (extra > 0 ? 1 : 0);
+    return SizedBox(
+      width: size + (slots - 1) * step,
+      height: size,
+      child: Stack(
+        children: [
+          for (var i = 0; i < shown.length; i++)
+            Positioned(
+              left: i * step,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: ProductThumb(path: shown[i].image, size: size - 4),
+              ),
+            ),
+          if (extra > 0)
+            Positioned(
+              left: shown.length * step,
+              child: Container(
+                width: size,
+                height: size,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEEF2FF),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: Text('+$extra', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: hisbenewInk)),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

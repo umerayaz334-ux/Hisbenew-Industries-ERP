@@ -5,6 +5,7 @@ import 'l10n/app_localizations.dart';
 import 'src/app_model.dart';
 import 'src/screens.dart';
 import 'src/theme.dart';
+import 'src/worker_portal.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,7 +40,9 @@ class HisbenewApp extends StatelessWidget {
               ? const Scaffold(body: Center(child: CircularProgressIndicator()))
               : model.session == null
                   ? LoginScreen(model: model)
-                  : WorkspaceScreen(model: model),
+                  : model.isWorker
+                      ? WorkerPortal(model: model)
+                      : WorkspaceScreen(model: model),
         );
       },
     );

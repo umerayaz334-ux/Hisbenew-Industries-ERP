@@ -32,6 +32,7 @@ class AppModel extends ChangeNotifier {
         name: prefs.getString('erp.name') ?? '',
         username: prefs.getString('erp.username') ?? '',
         role: prefs.getString('erp.role') ?? '',
+        workerId: int.tryParse(prefs.getString('erp.workerId') ?? '') ?? 0,
         tenantSlug: prefs.getString('erp.tenantSlug') ?? '',
         tenantName: prefs.getString('erp.tenantName') ?? '',
         companyCode: '',
@@ -39,10 +40,12 @@ class AppModel extends ChangeNotifier {
     }
     booting = false;
     notifyListeners();
-    if (session != null) {
+    if (session != null && !isWorker) {
       await refreshDashboard();
     }
   }
+
+  bool get isWorker => (session?.role ?? '').trim().toLowerCase() == 'worker';
 
   Future<void> setLocale(Locale next) async {
     locale = next;
@@ -77,7 +80,9 @@ class AppModel extends ChangeNotifier {
       await _storeSession(next);
       signingIn = false;
       notifyListeners();
-      await refreshDashboard();
+      if (next.role.trim().toLowerCase() != 'worker') {
+        await refreshDashboard();
+      }
       return true;
     } on ErpException catch (error) {
       loginError = error.code;
@@ -122,6 +127,7 @@ class AppModel extends ChangeNotifier {
     await prefs.remove('erp.name');
     await prefs.remove('erp.username');
     await prefs.remove('erp.role');
+    await prefs.remove('erp.workerId');
     await prefs.remove('erp.tenantSlug');
     await prefs.remove('erp.tenantName');
   }
@@ -135,6 +141,7 @@ class AppModel extends ChangeNotifier {
     await prefs.setString('erp.name', next.name);
     await prefs.setString('erp.username', next.username);
     await prefs.setString('erp.role', next.role);
+    await prefs.setString('erp.workerId', '${next.workerId}');
     await prefs.setString('erp.tenantSlug', next.tenantSlug);
     await prefs.setString('erp.tenantName', next.tenantName);
   }

@@ -16,7 +16,7 @@ const getTaskEarning = (task) =>
         Number(task.rate_per_piece || 0)
   );
 
-export function buildWorkerLedgerEntries(workerId, tasks, payments) {
+export function buildWorkerLedgerEntries(workerId, tasks, payments, expenses = []) {
   if (!workerId) return { entries: [], totalEarned: 0, totalPaid: 0, balance: 0 };
 
   const taskEntries = (tasks || [])
@@ -76,7 +76,28 @@ export function buildWorkerLedgerEntries(workerId, tasks, payments) {
       };
     });
 
-  const sortedEntries = [...taskEntries, ...paymentEntries].sort((a, b) => {
+  const expenseEntries = (expenses || [])
+    .filter((expense) => String(expense.worker_id) === String(workerId))
+    .map((expense) => {
+      const amount = Number(expense.amount || 0);
+      const rawDate = expense.spent_at || expense.created_at;
+      return {
+        id: `expense-${expense.id}`,
+        rawDate,
+        dateFormatted: rawDate ? formatUtcLocal(rawDate) : "Factory spending",
+        type: "spend",
+        typeLabel: "Factory spending",
+        title: expense.note || "Factory spending",
+        subtitle: "Sent by the worker",
+        quantity: null,
+        rate: null,
+        earned: amount,
+        paid: 0,
+        note: expense.note || "",
+      };
+    });
+
+  const sortedEntries = [...taskEntries, ...expenseEntries, ...paymentEntries].sort((a, b) => {
     const timeA = a.rawDate ? new Date(a.rawDate).getTime() : 0;
     const timeB = b.rawDate ? new Date(b.rawDate).getTime() : 0;
     return timeA - timeB;
@@ -109,6 +130,7 @@ export default function WorkerLedgerModal({
   workers = [],
   tasks = [],
   payments = [],
+  expenses = [],
   onClose,
   onRecordPayout,
   onSelectWorker,
@@ -117,6 +139,7 @@ export default function WorkerLedgerModal({
   const confirmDialog = useConfirmDialog();
   const [fetchedTasks, setFetchedTasks] = useState([]);
   const [fetchedPayments, setFetchedPayments] = useState([]);
+  const [fetchedExpenses, setFetchedExpenses] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState(null);
   const [actionError, setActionError] = useState("");
@@ -137,12 +160,14 @@ export default function WorkerLedgerModal({
         api.get("/production/tasks").catch(() => ({ data: [] })),
         api.get("/order-workflow/tasks").catch(() => ({ data: [] })),
         api.get("/worker-payments").catch(() => ({ data: [] })),
+        api.get("/worker-expenses").catch(() => ({ data: [] })),
       ])
-        .then(([prodRes, orderRes, payRes]) => {
+        .then(([prodRes, orderRes, payRes, expenseRes]) => {
           const prodTasks = prodRes.data || [];
           const orderTasks = orderRes.data || [];
           setFetchedTasks([...prodTasks, ...orderTasks]);
           setFetchedPayments(payRes.data || []);
+          setFetchedExpenses(expenseRes.data || []);
         })
         .finally(() => {
           setLoadingData(false);
@@ -152,10 +177,11 @@ export default function WorkerLedgerModal({
 
   const activeTasks = tasks.length > 0 ? tasks : fetchedTasks;
   const activePayments = payments.length > 0 ? payments : fetchedPayments;
+  const activeExpenses = expenses.length > 0 ? expenses : fetchedExpenses;
 
   const ledgerData = useMemo(
-    () => buildWorkerLedgerEntries(currentWorkerId, activeTasks, activePayments),
-    [currentWorkerId, activeTasks, activePayments]
+    () => buildWorkerLedgerEntries(currentWorkerId, activeTasks, activePayments, activeExpenses),
+    [currentWorkerId, activeTasks, activePayments, activeExpenses]
   );
 
   const filteredEntries = useMemo(() => {

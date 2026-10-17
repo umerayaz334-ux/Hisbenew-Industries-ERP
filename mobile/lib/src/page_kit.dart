@@ -91,6 +91,69 @@ class ThumbStrip extends StatelessWidget {
   }
 }
 
+void openProductPhoto(BuildContext context, {required String path, String title = ''}) {
+  final url = productImageUrl(path, width: 1400);
+  if (url == null) return;
+  showDialog<void>(
+    context: context,
+    barrierColor: const Color(0xF2000000),
+    builder: (context) {
+      final size = MediaQuery.sizeOf(context);
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.pop(context),
+            ),
+          ),
+          Center(
+            child: SizedBox(
+              width: size.width,
+              height: size.height * 0.78,
+              child: InteractiveViewer(
+                minScale: 1,
+                maxScale: 4,
+                child: Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return const Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2));
+                  },
+                  errorBuilder: (context, error, stack) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+              ),
+            ),
+          ),
+          if (title.trim().isNotEmpty)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 64, 12),
+                  child: Text(
+                    title.trim(),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
+  );
+}
+
 class ProductLine extends StatelessWidget {
   const ProductLine({required this.item, super.key});
 
@@ -103,11 +166,15 @@ class ProductLine extends StatelessWidget {
       if (item.article.isNotEmpty && item.article != title) item.article,
       if (item.qty > 0) '× ${item.qty}',
     ].join('  ');
+    final canOpen = productImageUrl(item.image) != null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          ProductThumb(path: item.image, size: 44),
+          GestureDetector(
+            onTap: canOpen ? () => openProductPhoto(context, path: item.image, title: title) : null,
+            child: ProductThumb(path: item.image, size: 44),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
