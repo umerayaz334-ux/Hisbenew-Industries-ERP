@@ -313,6 +313,103 @@ class ErpApi {
     return _sendList(url: '${session.baseUrl}/worker-expenses?worker_id=${session.workerId}', token: session.token);
   }
 
+  Future<List<Map<String, dynamic>>> messageUsers(ErpSession session) async {
+    return _sendList(url: '${session.baseUrl}/internal-message-users', token: session.token);
+  }
+
+  Future<List<Map<String, dynamic>>> messages(ErpSession session, int userId) async {
+    return _sendList(url: '${session.baseUrl}/internal-messages?user_id=$userId', token: session.token);
+  }
+
+  Future<void> sendMessage({required ErpSession session, required int userId, required String body}) async {
+    await _send(
+      method: 'POST',
+      url: '${session.baseUrl}/internal-messages',
+      token: session.token,
+      body: {'recipient_user_id': userId, 'body': body.trim()},
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> messageSearch(ErpSession session, String query) async {
+    final value = Uri.encodeQueryComponent(query.trim());
+    return _sendList(url: '${session.baseUrl}/internal-message-contact-search?query=$value', token: session.token);
+  }
+
+  Future<List<Map<String, dynamic>>> messageRequests(ErpSession session) async {
+    return _sendList(url: '${session.baseUrl}/internal-message-contact-requests', token: session.token);
+  }
+
+  Future<void> requestMessageContact({required ErpSession session, required String username}) async {
+    await _send(
+      method: 'POST',
+      url: '${session.baseUrl}/internal-message-contact-requests',
+      token: session.token,
+      body: {'recipient': username.trim()},
+    );
+  }
+
+  Future<void> reviewMessageContact({required ErpSession session, required int requestId, required String status}) async {
+    await _send(
+      method: 'PATCH',
+      url: '${session.baseUrl}/internal-message-contact-requests/$requestId',
+      token: session.token,
+      body: {'status': status},
+    );
+  }
+
+  Future<Map<String, dynamic>?> activeCall(ErpSession session) async {
+    final raw = await _request(method: 'GET', url: '${session.baseUrl}/internal-calls/active', token: session.token);
+    if (raw is Map && raw['id'] != null) return Map<String, dynamic>.from(raw);
+    return null;
+  }
+
+  Future<List<Map<String, dynamic>>> callIceServers(ErpSession session) async {
+    final body = await _send(method: 'GET', url: '${session.baseUrl}/internal-calls/config', token: session.token);
+    final raw = body['ice_servers'];
+    if (raw is! List) return const [];
+    return [for (final item in raw) if (item is Map) Map<String, dynamic>.from(item)];
+  }
+
+  Future<Map<String, dynamic>> startCall({required ErpSession session, required int userId}) async {
+    return _send(
+      method: 'POST',
+      url: '${session.baseUrl}/internal-calls',
+      token: session.token,
+      body: {'recipient_user_id': userId, 'call_type': 'audio'},
+    );
+  }
+
+  Future<Map<String, dynamic>> respondCall({required ErpSession session, required int callId, required String action}) async {
+    return _send(
+      method: 'POST',
+      url: '${session.baseUrl}/internal-calls/$callId/respond',
+      token: session.token,
+      body: {'action': action},
+    );
+  }
+
+  Future<void> endCall({required ErpSession session, required int callId}) async {
+    await _send(method: 'POST', url: '${session.baseUrl}/internal-calls/$callId/end', token: session.token);
+  }
+
+  Future<List<Map<String, dynamic>>> callSignals({required ErpSession session, required int callId, required int afterId}) async {
+    return _sendList(url: '${session.baseUrl}/internal-calls/$callId/signals?after_id=$afterId', token: session.token);
+  }
+
+  Future<void> sendCallSignal({
+    required ErpSession session,
+    required int callId,
+    required String type,
+    required Map<String, dynamic> payload,
+  }) async {
+    await _send(
+      method: 'POST',
+      url: '${session.baseUrl}/internal-calls/$callId/signals',
+      token: session.token,
+      body: {'signal_type': type, 'payload': payload},
+    );
+  }
+
   Future<void> sendWorkerExpense({
     required ErpSession session,
     required double amount,

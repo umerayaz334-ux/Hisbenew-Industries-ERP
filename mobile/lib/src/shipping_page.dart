@@ -236,13 +236,16 @@ class _PendingTile extends StatelessWidget {
       details: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final item in row.items) ProductLine(item: item),
-          DetailLine(phrase(context, 'Order', 'آرڈر'), row.orderNo),
-          DetailLine(phrase(context, 'Status', 'حالت'), row.status),
-          DetailLine(phrase(context, 'Platform', 'پلیٹ فارم'), row.platform),
-          DetailLine(phrase(context, 'Phone', 'فون'), row.phone),
-          DetailLine(phrase(context, 'Address', 'پتہ'), row.address),
-          const SizedBox(height: 6),
+          for (final item in row.items) _PackLine(item: item),
+          const SizedBox(height: 4),
+          _FactBoard(
+            facts: [
+              _Fact(phrase(context, 'Order', 'آرڈر'), row.orderNo),
+              _Fact(phrase(context, 'Phone', 'فون'), row.phone),
+              _Fact(phrase(context, 'Address', 'پتہ'), row.address),
+            ],
+          ),
+          const SizedBox(height: 14),
           FilledButton(
             onPressed: () => _ship(context),
             child: Text(phrase(context, 'Mark shipped', 'بھیج دیا')),
@@ -313,40 +316,39 @@ class _ShippedTile extends StatelessWidget {
       details: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final item in row.items) ProductLine(item: item),
-          DetailLine(phrase(context, 'Order', 'آرڈر'), row.orderNo),
-          DetailLine(phrase(context, 'Status', 'حالت'), row.status),
-          DetailLine(phrase(context, 'Courier', 'کوریئر'), row.courier),
-          DetailLine(phrase(context, 'Tracking', 'ٹریکنگ'), row.tracking),
-          DetailLine(phrase(context, 'Weight', 'وزن'), row.weightKg.isEmpty ? '' : '${row.weightKg} kg'),
-          DetailLine(phrase(context, 'Note', 'نوٹ'), row.note),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final stage in const ['waiting', 'in_transit', 'delivered', 'exception'])
-                ActionChip(
-                  label: Text(_stageLabel(context, stage)),
-                  onPressed: () => _status(stage),
-                ),
+          for (final item in row.items) _PackLine(item: item),
+          const SizedBox(height: 4),
+          _FactBoard(
+            facts: [
+              _Fact(phrase(context, 'Order', 'آرڈر'), row.orderNo),
+              _Fact(phrase(context, 'Weight', 'وزن'), row.weightKg.isEmpty ? '' : '${row.weightKg} kg'),
+              _Fact(phrase(context, 'Courier', 'کوریئر'), row.courier),
+              _Fact(phrase(context, 'Tracking', 'ٹریکنگ'), row.tracking),
+              if (row.note.trim().isNotEmpty) _Fact(phrase(context, 'Note', 'نوٹ'), row.note),
             ],
           ),
+          const SizedBox(height: 16),
+          Text(phrase(context, 'Move this shipment', 'اسے آگے کریں'), style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
           const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(onPressed: () => _edit(context), child: Text(phrase(context, 'Edit', 'ترمیم'))),
+          _StageBoard(
+            current: _stageKey(row.status),
+            onSelect: _status,
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => _edit(context),
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            label: Text(phrase(context, 'Edit courier and tracking', 'کوریئر اور ٹریکنگ')),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              foregroundColor: hisbenewInk,
+              side: const BorderSide(color: hisbenewLine),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
           ),
         ],
       ),
     );
-  }
-
-  String _stageLabel(BuildContext context, String stage) {
-    return switch (stage) {
-      'in_transit' => phrase(context, 'In transit', 'راستے میں'),
-      'delivered' => phrase(context, 'Delivered', 'پہنچ گیا'),
-      'exception' => phrase(context, 'Exception', 'مسئلہ'),
-      _ => phrase(context, 'Waiting', 'انتظار'),
-    };
   }
 
   Future<void> _status(String stage) async {
@@ -398,5 +400,203 @@ class _ShippedTile extends StatelessWidget {
     tracking.dispose();
     weight.dispose();
     note.dispose();
+  }
+}
+
+String _stageKey(String status) {
+  final value = status.trim().toLowerCase();
+  if (value.contains('transit')) return 'in_transit';
+  if (value.contains('deliver')) return 'delivered';
+  if (value.contains('exception') || value.contains('issue')) return 'exception';
+  if (value.contains('wait')) return 'waiting';
+  return '';
+}
+
+class _PackLine extends StatelessWidget {
+  const _PackLine({required this.item});
+
+  final ItemShot item;
+
+  @override
+  Widget build(BuildContext context) {
+    final sku = item.article.trim();
+    final canOpen = productImageUrl(item.image) != null;
+    final units = item.qty;
+    final unitLabel = units == 1 ? phrase(context, 'unit', 'یونٹ') : phrase(context, 'units', 'یونٹس');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F2EA),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: hisbenewLine),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: canOpen ? () => openProductPhoto(context, path: item.image) : null,
+            child: ProductThumb(path: item.image, size: 72),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('SKU', style: TextStyle(color: hisbenewMuted, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+                const SizedBox(height: 2),
+                Text(
+                  sku.isEmpty ? '—' : sku,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 26, height: 1.05, fontWeight: FontWeight.w800, letterSpacing: -0.6, color: hisbenewInk),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            constraints: const BoxConstraints(minWidth: 72),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: hisbenewForest,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  '$units',
+                  style: const TextStyle(color: Color(0xFFF3E6C8), fontSize: 28, height: 1, fontWeight: FontWeight.w800, letterSpacing: -0.8),
+                ),
+                const SizedBox(height: 2),
+                Text(unitLabel, style: const TextStyle(color: Color(0xFFD7E4DB), fontSize: 11, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Fact {
+  const _Fact(this.label, this.value);
+
+  final String label;
+  final String value;
+}
+
+class _FactBoard extends StatelessWidget {
+  const _FactBoard({required this.facts});
+
+  final List<_Fact> facts;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = [for (final fact in facts) if (fact.value.trim().isNotEmpty) fact];
+    if (shown.isEmpty) return const SizedBox.shrink();
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: hisbenewLine),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < shown.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: hisbenewLine),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 78,
+                    child: Text(shown[i].label, style: const TextStyle(color: hisbenewMuted, fontSize: 12, fontWeight: FontWeight.w700)),
+                  ),
+                  Expanded(
+                    child: Text(
+                      shown[i].value,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: hisbenewInk),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StageBoard extends StatelessWidget {
+  const _StageBoard({required this.current, required this.onSelect});
+
+  final String current;
+  final ValueChanged<String> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    const stages = ['waiting', 'in_transit', 'delivered', 'exception'];
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: 2.7,
+      children: [
+        for (final stage in stages)
+          _StageButton(
+            label: _stageTitle(context, stage),
+            selected: current == stage,
+            onTap: () => onSelect(stage),
+          ),
+      ],
+    );
+  }
+
+  String _stageTitle(BuildContext context, String stage) {
+    return switch (stage) {
+      'in_transit' => phrase(context, 'In transit', 'راستے میں'),
+      'delivered' => phrase(context, 'Delivered', 'پہنچ گیا'),
+      'exception' => phrase(context, 'Issue', 'مسئلہ'),
+      _ => phrase(context, 'Waiting', 'انتظار'),
+    };
+  }
+}
+
+class _StageButton extends StatelessWidget {
+  const _StageButton({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? hisbenewForest : const Color(0xFFF7F2EA),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: selected ? hisbenewForest : hisbenewLine),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: selected ? Colors.white : hisbenewInk,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'dashboard_data.dart';
 import 'erp_api.dart';
+import 'order_watch.dart';
 
 class AppModel extends ChangeNotifier {
   AppModel({ErpApi? api}) : _api = api ?? ErpApi();
@@ -40,7 +41,9 @@ class AppModel extends ChangeNotifier {
     }
     booting = false;
     notifyListeners();
-    if (session != null && !isWorker) {
+    if (session != null && isWorker) {
+      await startOrderWatch();
+    } else if (session != null) {
       await refreshDashboard();
     }
   }
@@ -80,7 +83,9 @@ class AppModel extends ChangeNotifier {
       await _storeSession(next);
       signingIn = false;
       notifyListeners();
-      if (next.role.trim().toLowerCase() != 'worker') {
+      if (next.role.trim().toLowerCase() == 'worker') {
+        await startOrderWatch();
+      } else {
         await refreshDashboard();
       }
       return true;
@@ -114,6 +119,7 @@ class AppModel extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    await stopOrderWatch();
     session = null;
     dashboard = null;
     dashboardError = null;
@@ -122,6 +128,7 @@ class AppModel extends ChangeNotifier {
     signingIn = false;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('erp.orderAlertAfter');
     await prefs.remove('erp.token');
     await prefs.remove('erp.baseUrl');
     await prefs.remove('erp.name');

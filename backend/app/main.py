@@ -19540,6 +19540,45 @@ def create_worker_expense(
     return worker_expense_response(expense)
 
 
+@app.get("/worker-order-alerts")
+def worker_order_alerts(
+    request: Request,
+    after_id: int = Query(0, ge=0),
+    seed: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """Orders added after the worker's phone last checked. Used for the phone alert."""
+    user = get_authenticated_user(request, db)
+    if (user.role or "").strip().lower() != "worker":
+        raise HTTPException(status_code=403, detail="Workers only")
+
+    latest = db.query(Order.id).order_by(Order.id.desc()).first()
+    latest_id = int(latest[0]) if latest else 0
+    if seed:
+        return {"latest_id": latest_id, "orders": []}
+
+    rows = (
+        db.query(Order)
+        .options(selectinload(Order.items))
+        .filter(Order.id > after_id)
+        .order_by(Order.id.asc())
+        .limit(20)
+        .all()
+    )
+    return {
+        "latest_id": rows[-1].id if rows else max(after_id, latest_id),
+        "orders": [
+            {
+                "id": order.id,
+                "order_no": order.order_no,
+                "units": sum(int(item.quantity or 0) for item in order.items),
+                "source": "Muse" if (order.import_batch_key or "") == "muse-api" else "Office",
+            }
+            for order in rows
+        ],
+    }
+
+
 @app.post("/worker-payments", response_model=WorkerPaymentOut)
 @app.post("/workers/{worker_id}/payments", response_model=WorkerPaymentOut)
 def create_worker_payment(
