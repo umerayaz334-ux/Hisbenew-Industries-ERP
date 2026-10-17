@@ -84,7 +84,7 @@ CORS_ALLOW_ORIGINS = (
 )
 CORS_ALLOW_ORIGIN_REGEX = os.getenv(
     "CORS_ALLOW_ORIGIN_REGEX",
-    r"^https?://(localhost|127\.0\.0\.1|[a-zA-Z0-9-]+(?:\.(?:local|lan))?|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?::\d+)?$",
+    r"^https://([a-z0-9-]+\.)*hisbenew\.com(?::\d+)?$|^https?://(localhost|127\.0\.0\.1|[a-zA-Z0-9-]+(?:\.(?:local|lan))?|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?::\d+)?$",
 )
 
 
