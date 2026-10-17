@@ -72,6 +72,7 @@ cors_origins = os.getenv("CORS_ALLOW_ORIGINS")
 default_origins = [
     "https://hisbenew.com",
     "https://www.hisbenew.com",
+    "https://app.hisbenew.com",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
     "http://localhost:5173",

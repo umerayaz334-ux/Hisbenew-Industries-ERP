@@ -13,7 +13,7 @@ String? productImageUrl(String path, {int width = 160}) {
     final uri = Uri.tryParse(value);
     if (uri == null) return value;
     final ownUpload = uri.path.startsWith('/static/uploads/') &&
-        const {'api.hisbenew.com', 'hisbenew.com', 'www.hisbenew.com'}.contains(uri.host);
+        const {'api.hisbenew.com', 'app.hisbenew.com', 'hisbenew.com', 'www.hisbenew.com'}.contains(uri.host);
     if (!ownUpload) return value;
     route = uri.path;
   } else {

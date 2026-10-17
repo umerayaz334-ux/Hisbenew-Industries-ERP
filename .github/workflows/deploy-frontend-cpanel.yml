@@ -69,5 +69,6 @@ jobs:
 
       - name: Verify live frontend
         run: |
-          curl --fail --silent --show-error --retry 5 --retry-delay 10 https://hisbenew.com/
-          curl --fail --silent --show-error --retry 5 --retry-delay 10 -I https://hisbenew.com/downloads/hisbenew-factory-erp.apk
+          curl --fail --silent --show-error --retry 5 --retry-delay 10 https://app.hisbenew.com/
+          curl --fail --silent --show-error --retry 5 --retry-delay 10 -I https://app.hisbenew.com/login
+          curl --fail --silent --show-error --retry 5 --retry-delay 10 -I https://app.hisbenew.com/downloads/hisbenew-factory-erp.apk

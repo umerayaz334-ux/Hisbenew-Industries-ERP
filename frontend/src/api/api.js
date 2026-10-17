@@ -179,7 +179,7 @@ export const getStaticUrl = (path, options = {}) => {
     const url = new URL(value);
     const apiHost = getUrlHostname(API_BASE_URL);
     const ownUpload = url.pathname.startsWith("/static/uploads/") &&
-      [apiHost, "api.hisbenew.com", "hisbenew.com", "www.hisbenew.com", "localhost", "127.0.0.1"].includes(url.hostname);
+      [apiHost, "api.hisbenew.com", "app.hisbenew.com", "hisbenew.com", "www.hisbenew.com", "localhost", "127.0.0.1"].includes(url.hostname);
     if (!ownUpload) return value;
     path = url.pathname + url.search;
   } else {

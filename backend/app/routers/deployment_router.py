@@ -24,7 +24,7 @@ FRONTEND_DIR = REPO_ROOT / "frontend"
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 FRONTEND_WORKFLOW = "deploy-frontend-cpanel.yml"
 BACKEND_WORKFLOW = "deploy-backend-vps.yml"
-PUBLIC_FRONTEND_URL = os.getenv("ERP_PUBLIC_FRONTEND_URL", "https://hisbenew.com/")
+PUBLIC_FRONTEND_URL = os.getenv("ERP_PUBLIC_FRONTEND_URL", "https://app.hisbenew.com/")
 PUBLIC_API_HEALTH_URL = os.getenv("ERP_PUBLIC_API_HEALTH_URL", "https://api.hisbenew.com/health")
 LOCAL_API_HEALTH_URL = os.getenv("ERP_BACKEND_HEALTH_URL", "http://127.0.0.1:8000/health")
 
