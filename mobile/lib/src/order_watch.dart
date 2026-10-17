@@ -18,7 +18,7 @@ const _alertChannelId = 'hisbenew_orders';
 
 final _notifications = FlutterLocalNotificationsPlugin();
 
-Future<void> startOrderWatch() async {
+Future<void> startOrderWatch({bool orders = false}) async {
   if (!Platform.isAndroid) return;
   await _prepareNotifications();
   final service = FlutterBackgroundService();
@@ -30,7 +30,7 @@ Future<void> startOrderWatch() async {
       isForegroundMode: true,
       notificationChannelId: _watchChannelId,
       initialNotificationTitle: 'Hisbenew',
-      initialNotificationContent: 'New orders will alert this phone',
+      initialNotificationContent: orders ? 'New orders will alert this phone' : 'Messages and calls stay available',
       foregroundServiceNotificationId: 701,
       foregroundServiceTypes: const [AndroidForegroundType.dataSync],
     ),
@@ -79,6 +79,22 @@ Future<void> _prepareNotifications() async {
       importance: Importance.max,
     ),
   );
+  await plugin?.createNotificationChannel(
+    const AndroidNotificationChannel(
+      messageChannel,
+      'Messages',
+      description: 'When someone sends a chat message',
+      importance: Importance.max,
+    ),
+  );
+  await plugin?.createNotificationChannel(
+    const AndroidNotificationChannel(
+      missedCallChannel,
+      'Missed calls',
+      description: 'When a call is not answered',
+      importance: Importance.high,
+    ),
+  );
   await plugin?.requestNotificationsPermission();
 }
 
@@ -100,48 +116,102 @@ Future<void> orderWatchStart(ServiceInstance service) async {
     await prefs.reload();
     final token = prefs.getString('erp.token') ?? '';
     final role = (prefs.getString('erp.role') ?? '').toLowerCase();
-    if (token.isEmpty || role != 'worker') {
+    if (token.isEmpty) {
       await service.stopSelf();
       return;
     }
 
-    final known = prefs.containsKey('erp.orderAlertAfter');
-    final afterId = prefs.getInt('erp.orderAlertAfter') ?? 0;
-    try {
-      final uri = Uri.parse(
-        known ? '$erpApiBase/worker-order-alerts?after_id=$afterId' : '$erpApiBase/worker-order-alerts?seed=true',
-      );
-      final response = await http
-          .get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          )
-          .timeout(const Duration(seconds: 20));
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        await service.stopSelf();
-        return;
-      }
-      if (response.statusCode == 200 && response.body.isNotEmpty) {
-        final body = jsonDecode(response.body);
-        if (body is Map) {
-          final latest = int.tryParse('${body['latest_id']}') ?? afterId;
-          final rawOrders = body['orders'];
-          final orders = rawOrders is List ? [for (final row in rawOrders) if (row is Map) row] : const <Map>[];
-          if (!known) {
-            await prefs.setInt('erp.orderAlertAfter', latest);
-          } else if (orders.isNotEmpty) {
-            await _notify(notes, orders);
-            await prefs.setInt('erp.orderAlertAfter', latest);
-          }
-        }
-      }
-    } catch (_) {}
+    if (role == 'worker') {
+      await _watchOrders(prefs, token, notes);
+    }
+    await _watchMessages(prefs, token, notes);
     await watchIncomingCall(token);
     await Future<void>.delayed(const Duration(seconds: 4));
   }
+}
+
+Future<void> _watchOrders(SharedPreferences prefs, String token, FlutterLocalNotificationsPlugin notes) async {
+  final known = prefs.containsKey('erp.orderAlertAfter');
+  final afterId = prefs.getInt('erp.orderAlertAfter') ?? 0;
+  try {
+    final uri = Uri.parse(
+      known ? '$erpApiBase/worker-order-alerts?after_id=$afterId' : '$erpApiBase/worker-order-alerts?seed=true',
+    );
+    final response = await http
+        .get(
+          uri,
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        )
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode == 401 || response.statusCode == 403) return;
+    if (response.statusCode == 200 && response.body.isNotEmpty) {
+      final body = jsonDecode(response.body);
+      if (body is Map) {
+        final latest = int.tryParse('${body['latest_id']}') ?? afterId;
+        final rawOrders = body['orders'];
+        final orders = rawOrders is List ? [for (final row in rawOrders) if (row is Map) row] : const <Map>[];
+        if (!known) {
+          await prefs.setInt('erp.orderAlertAfter', latest);
+        } else if (orders.isNotEmpty) {
+          await _notify(notes, orders);
+          await prefs.setInt('erp.orderAlertAfter', latest);
+        }
+      }
+    }
+  } catch (_) {}
+}
+
+Future<void> _watchMessages(SharedPreferences prefs, String token, FlutterLocalNotificationsPlugin notes) async {
+  try {
+    final response = await http
+        .get(
+          Uri.parse('$erpApiBase/internal-message-users'),
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        )
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200 || response.body.isEmpty) return;
+    final body = jsonDecode(response.body);
+    if (body is! List) return;
+    var unread = 0;
+    var latest = '';
+    var name = '';
+    for (final row in body) {
+      if (row is! Map) continue;
+      final count = int.tryParse('${row['unread_count']}') ?? 0;
+      unread += count;
+      final at = '${row['last_message_at'] ?? ''}';
+      if (count > 0 && at.compareTo(latest) > 0) {
+        latest = at;
+        name = '${row['name'] ?? ''}'.trim();
+      }
+    }
+    await prefs.setInt('erp.chatUnread', unread);
+    final seen = prefs.getInt('erp.chatUnreadSeen');
+    await prefs.setInt('erp.chatUnreadSeen', unread);
+    if (seen == null || unread <= seen) return;
+    final who = name.isEmpty ? 'Someone' : name;
+    await notes.show(
+      id: 92001,
+      title: 'New message',
+      body: who,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          messageChannel,
+          'Messages',
+          channelDescription: 'When someone sends a chat message',
+          importance: Importance.max,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+    );
+  } catch (_) {}
 }
 
 Future<void> _notify(FlutterLocalNotificationsPlugin notes, List<Map> orders) async {

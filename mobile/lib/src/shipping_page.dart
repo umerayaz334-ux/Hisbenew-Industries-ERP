@@ -220,6 +220,34 @@ class _CollapsedTitle extends StatelessWidget {
   }
 }
 
+Future<void> openPendingShip(
+  BuildContext context, {
+  required AppModel model,
+  required PendingShip row,
+  required Future<void> Function() onChanged,
+}) {
+  final title = row.customer.isEmpty ? row.orderNo : row.customer;
+  return showWorkSheet(
+    context: context,
+    title: title.isEmpty ? phrase(context, 'Shipment', 'شپمنٹ') : title,
+    child: _PendingBody(row: row, model: model, onChanged: onChanged),
+  );
+}
+
+Future<void> openShippedShip(
+  BuildContext context, {
+  required AppModel model,
+  required ShipmentRecord row,
+  required Future<void> Function() onChanged,
+}) {
+  final title = row.customer.isEmpty ? row.orderNo : row.customer;
+  return showWorkSheet(
+    context: context,
+    title: title.isEmpty ? phrase(context, 'Shipment', 'شپمنٹ') : title,
+    child: _ShippedBody(row: row, model: model, onChanged: onChanged),
+  );
+}
+
 class _PendingTile extends StatelessWidget {
   const _PendingTile({required this.row, required this.onChanged, required this.model});
 
@@ -233,25 +261,38 @@ class _PendingTile extends StatelessWidget {
     return SummaryCard(
       sheetTitle: title.isEmpty ? phrase(context, 'Shipment', 'شپمنٹ') : title,
       summary: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units),
-      details: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final item in row.items) _PackLine(item: item),
-          const SizedBox(height: 4),
-          _FactBoard(
-            facts: [
-              _Fact(phrase(context, 'Order', 'آرڈر'), row.orderNo),
-              _Fact(phrase(context, 'Phone', 'فون'), row.phone),
-              _Fact(phrase(context, 'Address', 'پتہ'), row.address),
-            ],
-          ),
-          const SizedBox(height: 14),
-          FilledButton(
-            onPressed: () => _ship(context),
-            child: Text(phrase(context, 'Mark shipped', 'بھیج دیا')),
-          ),
-        ],
-      ),
+      details: _PendingBody(row: row, model: model, onChanged: onChanged),
+    );
+  }
+}
+
+class _PendingBody extends StatelessWidget {
+  const _PendingBody({required this.row, required this.onChanged, required this.model});
+
+  final PendingShip row;
+  final Future<void> Function() onChanged;
+  final AppModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final item in row.items) _PackLine(item: item),
+        const SizedBox(height: 4),
+        _FactBoard(
+          facts: [
+            _Fact(phrase(context, 'Order', 'آرڈر'), row.orderNo),
+            _Fact(phrase(context, 'Phone', 'فون'), row.phone),
+            _Fact(phrase(context, 'Address', 'پتہ'), row.address),
+          ],
+        ),
+        const SizedBox(height: 14),
+        FilledButton(
+          onPressed: () => _ship(context),
+          child: Text(phrase(context, 'Mark shipped', 'بھیج دیا')),
+        ),
+      ],
     );
   }
 
@@ -313,41 +354,54 @@ class _ShippedTile extends StatelessWidget {
     return SummaryCard(
       sheetTitle: title.isEmpty ? phrase(context, 'Shipment', 'شپمنٹ') : title,
       summary: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units),
-      details: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final item in row.items) _PackLine(item: item),
-          const SizedBox(height: 4),
-          _FactBoard(
-            facts: [
-              _Fact(phrase(context, 'Order', 'آرڈر'), row.orderNo),
-              _Fact(phrase(context, 'Weight', 'وزن'), row.weightKg.isEmpty ? '' : '${row.weightKg} kg'),
-              _Fact(phrase(context, 'Courier', 'کوریئر'), row.courier),
-              _Fact(phrase(context, 'Tracking', 'ٹریکنگ'), row.tracking),
-              if (row.note.trim().isNotEmpty) _Fact(phrase(context, 'Note', 'نوٹ'), row.note),
-            ],
+      details: _ShippedBody(row: row, model: model, onChanged: onChanged),
+    );
+  }
+}
+
+class _ShippedBody extends StatelessWidget {
+  const _ShippedBody({required this.row, required this.onChanged, required this.model});
+
+  final ShipmentRecord row;
+  final Future<void> Function() onChanged;
+  final AppModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final item in row.items) _PackLine(item: item),
+        const SizedBox(height: 4),
+        _FactBoard(
+          facts: [
+            _Fact(phrase(context, 'Order', 'آرڈر'), row.orderNo),
+            _Fact(phrase(context, 'Weight', 'وزن'), row.weightKg.isEmpty ? '' : '${row.weightKg} kg'),
+            _Fact(phrase(context, 'Courier', 'کوریئر'), row.courier),
+            _Fact(phrase(context, 'Tracking', 'ٹریکنگ'), row.tracking),
+            if (row.note.trim().isNotEmpty) _Fact(phrase(context, 'Note', 'نوٹ'), row.note),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(phrase(context, 'Move this shipment', 'اسے آگے کریں'), style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
+        const SizedBox(height: 8),
+        _StageBoard(
+          current: _stageKey(row.status),
+          onSelect: _status,
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => _edit(context),
+          icon: const Icon(Icons.edit_outlined, size: 18),
+          label: Text(phrase(context, 'Edit courier and tracking', 'کوریئر اور ٹریکنگ')),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+            foregroundColor: hisbenewInk,
+            side: const BorderSide(color: hisbenewLine),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
-          const SizedBox(height: 16),
-          Text(phrase(context, 'Move this shipment', 'اسے آگے کریں'), style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
-          const SizedBox(height: 8),
-          _StageBoard(
-            current: _stageKey(row.status),
-            onSelect: _status,
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: () => _edit(context),
-            icon: const Icon(Icons.edit_outlined, size: 18),
-            label: Text(phrase(context, 'Edit courier and tracking', 'کوریئر اور ٹریکنگ')),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-              foregroundColor: hisbenewInk,
-              side: const BorderSide(color: hisbenewLine),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

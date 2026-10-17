@@ -92,6 +92,21 @@ def load_internal_call_ice_servers() -> list[dict]:
     fallback = [
         {"urls": "stun:stun.cloudflare.com:3478"},
         {"urls": "stun:stun.l.google.com:19302"},
+        {
+            "urls": "turn:global.relay.metered.ca:80",
+            "username": "openrelayproject",
+            "credential": "openrelayproject",
+        },
+        {
+            "urls": "turn:global.relay.metered.ca:443",
+            "username": "openrelayproject",
+            "credential": "openrelayproject",
+        },
+        {
+            "urls": "turns:global.relay.metered.ca:443?transport=tcp",
+            "username": "openrelayproject",
+            "credential": "openrelayproject",
+        },
     ]
     configured = os.getenv("INTERNAL_CALL_ICE_SERVERS", "").strip()
     if not configured:

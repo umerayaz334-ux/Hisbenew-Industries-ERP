@@ -41,10 +41,9 @@ class AppModel extends ChangeNotifier {
     }
     booting = false;
     notifyListeners();
-    if (session != null && isWorker) {
-      await startOrderWatch();
-    } else if (session != null) {
-      await refreshDashboard();
+    if (session != null) {
+      await startOrderWatch(orders: isWorker);
+      if (!isWorker) await refreshDashboard();
     }
   }
 
@@ -83,11 +82,9 @@ class AppModel extends ChangeNotifier {
       await _storeSession(next);
       signingIn = false;
       notifyListeners();
-      if (next.role.trim().toLowerCase() == 'worker') {
-        await startOrderWatch();
-      } else {
-        await refreshDashboard();
-      }
+      final worker = next.role.trim().toLowerCase() == 'worker';
+      await startOrderWatch(orders: worker);
+      if (!worker) await refreshDashboard();
       return true;
     } on ErpException catch (error) {
       loginError = error.code;

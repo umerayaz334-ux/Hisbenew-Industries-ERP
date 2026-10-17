@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../l10n/app_localizations.dart';
 import 'app_model.dart';
@@ -31,21 +34,39 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
   List<Map<String, dynamic>> _tasks = const [];
   List<Map<String, dynamic>> _payments = const [];
   List<Map<String, dynamic>> _expenses = const [];
+  var _unread = 0;
+  Timer? _unreadTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
+    _refreshUnread();
+    _unreadTimer = Timer.periodic(const Duration(seconds: 8), (_) => _refreshUnread());
     _calls.startWatch();
     PhonePermissions.askOnce();
   }
 
   @override
   void dispose() {
+    _unreadTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _calls.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshUnread() async {
+    final session = widget.model.session;
+    if (session == null) return;
+    try {
+      final people = await widget.model.api.messageUsers(session);
+      if (!mounted) return;
+      final count = people.fold<int>(0, (sum, row) => sum + asInt(row['unread_count']));
+      setState(() => _unread = count);
+    } on ErpException {
+      return;
+    }
   }
 
   @override
@@ -114,6 +135,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
         onOpenPayouts: () => _open(3),
         onOpenShipping: () => _open(1),
         onOpenChat: () => _open(2),
+        unread: _unread,
       ),
       ShippingPage(model: widget.model),
       WorkerChat(model: widget.model, calls: _calls),
@@ -160,8 +182,8 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
             label: phrase(context, 'Queue', 'قطار'),
           ),
           NavigationDestination(
-            icon: const Icon(Icons.forum_outlined),
-            selectedIcon: const Icon(Icons.forum_rounded),
+            icon: _ChatIcon(unread: _unread, selected: false),
+            selectedIcon: _ChatIcon(unread: _unread, selected: true),
             label: phrase(context, 'Chat', 'چیٹ'),
           ),
           NavigationDestination(
@@ -220,6 +242,7 @@ class _WorkerHome extends StatelessWidget {
     required this.onOpenPayouts,
     required this.onOpenShipping,
     required this.onOpenChat,
+    required this.unread,
   });
 
   final AppModel model;
@@ -234,6 +257,7 @@ class _WorkerHome extends StatelessWidget {
   final VoidCallback onOpenPayouts;
   final VoidCallback onOpenShipping;
   final VoidCallback onOpenChat;
+  final int unread;
 
   @override
   Widget build(BuildContext context) {
@@ -260,7 +284,7 @@ class _WorkerHome extends StatelessWidget {
           else ...[
             _BalanceCard(money: money, onOpen: onOpenPayouts),
             const SizedBox(height: 12),
-            _ChatCallBar(onTap: onOpenChat),
+            _ChatCallBar(onTap: onOpenChat, unread: unread),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -295,7 +319,7 @@ class _WorkerHome extends StatelessWidget {
                     when: row.when,
                     title: row.customer.isEmpty ? row.orderNo : row.customer,
                     units: row.units,
-                    onTap: onOpenShipping,
+                    onTap: () => openPendingShip(context, model: model, row: row, onChanged: onRetry),
                   ),
               ],
             ),
@@ -312,7 +336,7 @@ class _WorkerHome extends StatelessWidget {
                     title: row.customer.isEmpty ? row.orderNo : row.customer,
                     units: row.units,
                     trail: _roadLabel(context, row.status),
-                    onTap: onOpenShipping,
+                    onTap: () => openShippedShip(context, model: model, row: row, onChanged: onRetry),
                   ),
               ],
             ),
@@ -679,10 +703,26 @@ class _QueueLine extends StatelessWidget {
   }
 }
 
+class _ChatIcon extends StatelessWidget {
+  const _ChatIcon({required this.unread, required this.selected});
+
+  final int unread;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = Icon(selected ? Icons.forum_rounded : Icons.forum_outlined);
+    if (unread <= 0) return icon;
+    final label = unread > 9 ? '9+' : '$unread';
+    return Badge(label: Text(label), child: icon);
+  }
+}
+
 class _ChatCallBar extends StatelessWidget {
-  const _ChatCallBar({required this.onTap});
+  const _ChatCallBar({required this.onTap, required this.unread});
 
   final VoidCallback onTap;
+  final int unread;
 
   @override
   Widget build(BuildContext context) {
@@ -703,7 +743,10 @@ class _ChatCallBar extends StatelessWidget {
               const Icon(Icons.forum_rounded, color: hisbenewForest),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(phrase(context, 'Chat and call', 'چیٹ اور کال'), style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
+                child: Text(
+                  unread > 0 ? phrase(context, 'Chat and call · $unread new', 'چیٹ اور کال · $unread نئے') : phrase(context, 'Chat and call', 'چیٹ اور کال'),
+                  style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk),
+                ),
               ),
               const Icon(Icons.call_rounded, color: hisbenewBrass, size: 20),
             ],
@@ -738,7 +781,13 @@ double _taskPay(Map<String, dynamic> task) {
 
 DateTime _stamp(String raw) => DateTime.tryParse(raw)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0);
 
-List<_StatementLine> _statementLines(List<Map<String, dynamic>> tasks, List<Map<String, dynamic>> payments, List<Map<String, dynamic>> expenses) {
+List<_StatementLine> _statementLines(
+  List<Map<String, dynamic>> tasks,
+  List<Map<String, dynamic>> payments,
+  List<Map<String, dynamic>> expenses, {
+  DateTime? from,
+  DateTime? to,
+}) {
   final lines = <_StatementLine>[
     for (final task in tasks)
       if (_taskPay(task) > 0)
@@ -772,7 +821,13 @@ List<_StatementLine> _statementLines(List<Map<String, dynamic>> tasks, List<Map<
         kind: 'payout',
         signed: -asDouble(row['amount']),
       ),
-  ]..sort((a, b) => a.when.compareTo(b.when));
+  ];
+  final start = from;
+  final end = to;
+  if (start != null) {
+    lines.retainWhere((line) => line.when.millisecondsSinceEpoch > 0 && !line.when.isBefore(start) && (end == null || line.when.isBefore(end)));
+  }
+  lines.sort((a, b) => a.when.compareTo(b.when));
   var running = 0.0;
   for (final line in lines) {
     running += line.signed;
@@ -781,7 +836,7 @@ List<_StatementLine> _statementLines(List<Map<String, dynamic>> tasks, List<Map<
   return lines.reversed.toList();
 }
 
-class _Statement extends StatelessWidget {
+class _Statement extends StatefulWidget {
   const _Statement({required this.tasks, required this.payments, required this.expenses});
 
   final List<Map<String, dynamic>> tasks;
@@ -789,15 +844,47 @@ class _Statement extends StatelessWidget {
   final List<Map<String, dynamic>> expenses;
 
   @override
+  State<_Statement> createState() => _StatementState();
+}
+
+class _StatementState extends State<_Statement> {
+  var _period = 'all';
+
+  @override
   Widget build(BuildContext context) {
-    final lines = _statementLines(tasks, payments, expenses);
+    final now = DateTime.now();
+    final DateTime? from;
+    final DateTime? to;
+    if (_period == 'month') {
+      from = DateTime(now.year, now.month);
+      to = DateTime(now.year, now.month + 1);
+    } else if (_period == 'last') {
+      from = DateTime(now.year, now.month - 1);
+      to = DateTime(now.year, now.month);
+    } else {
+      from = null;
+      to = null;
+    }
+    final lines = _statementLines(widget.tasks, widget.payments, widget.expenses, from: from, to: to);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
             Expanded(child: Text(phrase(context, 'Statement', 'بیان'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: hisbenewInk))),
-            Text('${lines.length}', style: const TextStyle(color: hisbenewMuted, fontWeight: FontWeight.w700)),
+            IconButton(
+              onPressed: () => _share(context, lines),
+              icon: const Icon(Icons.ios_share_rounded, color: hisbenewInk),
+              tooltip: phrase(context, 'Share', 'شیئر'),
+            ),
+          ],
+        ),
+        Wrap(
+          spacing: 8,
+          children: [
+            _PeriodChip(label: phrase(context, 'All', 'سب'), selected: _period == 'all', onTap: () => setState(() => _period = 'all')),
+            _PeriodChip(label: phrase(context, 'This month', 'اس مہینے'), selected: _period == 'month', onTap: () => setState(() => _period = 'month')),
+            _PeriodChip(label: phrase(context, 'Last month', 'پچھلا مہینہ'), selected: _period == 'last', onTap: () => setState(() => _period = 'last')),
           ],
         ),
         const SizedBox(height: 8),
@@ -820,6 +907,52 @@ class _Statement extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+
+  Future<void> _share(BuildContext context, List<_StatementLine> lines) async {
+    final heading = switch (_period) {
+      'month' => phrase(context, 'This month', 'اس مہینے'),
+      'last' => phrase(context, 'Last month', 'پچھلا مہینہ'),
+      _ => phrase(context, 'All', 'سب'),
+    };
+    final buffer = StringBuffer('Hisbenew statement · $heading\n');
+    if (lines.isEmpty) {
+      buffer.writeln(phrase(context, 'No transactions yet.', 'ابھی کوئی لین دین نہیں۔'));
+    }
+    for (final line in lines.reversed) {
+      final when = line.when.millisecondsSinceEpoch == 0 ? '' : DateFormat.yMMMd().format(line.when);
+      final sign = line.signed >= 0 ? '+' : '−';
+      buffer.writeln('${line.title.isEmpty ? line.kind : line.title} · $when · $sign${_pkr(line.signed.abs())}');
+    }
+    await Share.share(buffer.toString(), subject: 'Hisbenew statement');
+  }
+}
+
+class _PeriodChip extends StatelessWidget {
+  const _PeriodChip({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? hisbenewForest : hisbenewCard,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: selected ? hisbenewForest : hisbenewLine),
+          ),
+          child: Text(label, style: TextStyle(fontWeight: FontWeight.w800, color: selected ? Colors.white : hisbenewInk, fontSize: 13)),
+        ),
+      ),
     );
   }
 }

@@ -8,7 +8,31 @@ import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
 import 'erp_api.dart';
+
+const missedCallChannel = 'hisbenew_calls';
+const messageChannel = 'hisbenew_messages';
+
+List<Map<String, dynamic>> relayIceServers() => const [
+      {'urls': 'stun:stun.cloudflare.com:3478'},
+      {'urls': 'stun:stun.l.google.com:19302'},
+      {'urls': 'turn:global.relay.metered.ca:80', 'username': 'openrelayproject', 'credential': 'openrelayproject'},
+      {'urls': 'turn:global.relay.metered.ca:443', 'username': 'openrelayproject', 'credential': 'openrelayproject'},
+      {'urls': 'turns:global.relay.metered.ca:443?transport=tcp', 'username': 'openrelayproject', 'credential': 'openrelayproject'},
+    ];
+
+List<Map<String, dynamic>> withRelay(List<Map<String, dynamic>> servers) {
+  final seen = <String>{};
+  final merged = <Map<String, dynamic>>[];
+  for (final server in [...servers, ...relayIceServers()]) {
+    final urls = '${server['urls']}';
+    if (urls.isEmpty || !seen.add(urls)) continue;
+    merged.add(server);
+  }
+  return merged;
+}
 
 String callScreenId(int callId) {
   final tail = callId.toRadixString(16).padLeft(12, '0');
@@ -45,6 +69,7 @@ CallKitParams incomingCallParams({required int callId, required String name}) {
 }
 
 var _shownIncomingId = 0;
+final Set<int> _answeredCallIds = {};
 
 Future<void> watchIncomingCall(String token) async {
   try {
@@ -71,7 +96,10 @@ Future<void> watchIncomingCall(String token) async {
     final callId = int.tryParse('${decoded['id']}') ?? 0;
     final incoming = decoded['is_incoming'] == true;
     final status = '${decoded['status'] ?? ''}'.toLowerCase();
-    if (incoming && status == 'accepted') return;
+    if (incoming && status == 'accepted') {
+      _answeredCallIds.add(callId);
+      return;
+    }
     if (!incoming || status != 'ringing' || callId <= 0) {
       await _hideShownCall();
       return;
@@ -79,17 +107,57 @@ Future<void> watchIncomingCall(String token) async {
     if (_shownIncomingId == callId) return;
     _shownIncomingId = callId;
     final name = '${decoded['other_user_name'] ?? ''}'.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('erp.ringingName', name);
     await FlutterCallkitIncoming.showCallkitIncoming(incomingCallParams(callId: callId, name: name));
   } catch (_) {}
 }
 
 Future<void> _hideShownCall() async {
   if (_shownIncomingId <= 0) return;
-  final id = callScreenId(_shownIncomingId);
+  final callId = _shownIncomingId;
+  final screenId = callScreenId(callId);
   _shownIncomingId = 0;
   try {
-    await FlutterCallkitIncoming.endCall(id);
+    await FlutterCallkitIncoming.endCall(screenId);
   } catch (_) {}
+  final prefs = await SharedPreferences.getInstance();
+  final skipped = prefs.getInt('erp.skipMissedCall') ?? 0;
+  final accepted = prefs.getInt('erp.pendingAcceptCall') ?? 0;
+  if (_answeredCallIds.contains(callId) || skipped == callId || accepted == callId) return;
+  final name = prefs.getString('erp.ringingName') ?? '';
+  await noteMissedCall(name);
+}
+
+Future<void> noteMissedCall(String name) async {
+  final who = name.trim().isEmpty ? 'Hisbenew' : name.trim();
+  final notes = FlutterLocalNotificationsPlugin();
+  const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+  await notes.initialize(settings: const InitializationSettings(android: android));
+  final plugin = notes.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+  await plugin?.createNotificationChannel(
+    const AndroidNotificationChannel(
+      missedCallChannel,
+      'Missed calls',
+      description: 'When a call is not answered',
+      importance: Importance.high,
+    ),
+  );
+  await notes.show(
+    id: 91001,
+    title: 'Missed call',
+    body: who,
+    notificationDetails: const NotificationDetails(
+      android: AndroidNotificationDetails(
+        missedCallChannel,
+        'Missed calls',
+        channelDescription: 'When a call is not answered',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+      ),
+    ),
+  );
 }
 
 @pragma('vm:entry-point')
@@ -112,6 +180,8 @@ Future<void> onIncomingCallBackground(CallEvent event) async {
   if (action == 'accept') {
     await prefs.setInt('erp.pendingAcceptCall', callId);
     await prefs.setString('erp.pendingAcceptName', params.nameCaller ?? '');
+  } else {
+    await prefs.setInt('erp.skipMissedCall', callId);
   }
   final token = prefs.getString('erp.token') ?? '';
   if (token.isEmpty) return;

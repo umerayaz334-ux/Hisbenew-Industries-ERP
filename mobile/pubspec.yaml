@@ -40,6 +40,7 @@ dependencies:
   flutter_background_service: ^5.1.0
   flutter_webrtc: ^1.6.2+hotfix.4
   flutter_callkit_incoming: ^3.1.6
+  share_plus: ^10.1.4
 
 dev_dependencies:
   flutter_test:

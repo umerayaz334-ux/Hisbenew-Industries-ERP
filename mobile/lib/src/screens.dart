@@ -1,15 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import 'app_model.dart';
+import 'call_desk.dart';
 import 'customers_page.dart';
+import 'dashboard_data.dart';
 import 'dashboard_view.dart';
+import 'erp_api.dart';
 import 'labels_page.dart';
 import 'orders_page.dart';
 import 'page_kit.dart';
+import 'phone_permissions.dart';
 import 'products_page.dart';
 import 'shipping_page.dart';
 import 'theme.dart';
+import 'worker_chat.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({required this.model, super.key});
@@ -176,9 +183,42 @@ class WorkspaceScreen extends StatefulWidget {
 
 class _WorkspaceScreenState extends State<WorkspaceScreen> {
   int _index = 0;
+  var _unread = 0;
   final _scaffold = GlobalKey<ScaffoldState>();
+  late final CallDesk _calls = CallDesk(widget.model);
+  Timer? _unreadTimer;
 
   static const _bottom = [0, 1, 2, 4, 3];
+  static const _chat = 8;
+
+  @override
+  void initState() {
+    super.initState();
+    _calls.startWatch();
+    PhonePermissions.askOnce();
+    _refreshUnread();
+    _unreadTimer = Timer.periodic(const Duration(seconds: 8), (_) => _refreshUnread());
+  }
+
+  @override
+  void dispose() {
+    _unreadTimer?.cancel();
+    _calls.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refreshUnread() async {
+    final session = widget.model.session;
+    if (session == null) return;
+    try {
+      final people = await widget.model.api.messageUsers(session);
+      if (!mounted) return;
+      final count = people.fold<int>(0, (sum, row) => sum + asInt(row['unread_count']));
+      setState(() => _unread = count);
+    } on ErpException {
+      return;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,6 +231,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       AmazonPage(model: widget.model),
       LabelsPage(model: widget.model),
       AccountPage(model: widget.model),
+      WorkerChat(model: widget.model, calls: _calls),
     ];
     final labels = [
       phrase(context, 'Home', 'ہوم'),
@@ -201,6 +242,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       phrase(context, 'Amazon', 'ایمیزون'),
       phrase(context, 'Labels', 'لیبل'),
       phrase(context, 'Account', 'اکاؤنٹ'),
+      phrase(context, 'Chat', 'چیٹ'),
     ];
     final icons = [
       Icons.home_rounded,
@@ -211,8 +253,21 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       Icons.storefront_rounded,
       Icons.sell_rounded,
       Icons.person_rounded,
+      Icons.forum_rounded,
     ];
 
+    return ListenableBuilder(
+      listenable: _calls,
+      builder: (context, _) => Stack(
+        children: [
+          _officeScaffold(context, pages, labels, icons),
+          if (_calls.phase != 'idle') CallCover(desk: _calls),
+        ],
+      ),
+    );
+  }
+
+  Widget _officeScaffold(BuildContext context, List<Widget> pages, List<String> labels, List<IconData> icons) {
     return Scaffold(
       key: _scaffold,
       drawer: _index == 0
@@ -240,7 +295,15 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     )
                   else
                     const SizedBox(width: 12),
-                  Text(labels[_index], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
+                  Expanded(child: Text(labels[_index], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4))),
+                  IconButton(
+                    onPressed: () => setState(() => _index = _index == _chat ? 0 : _chat),
+                    icon: Badge(
+                      isLabelVisible: _unread > 0 && _index != _chat,
+                      label: Text(_unread > 9 ? '9+' : '$_unread'),
+                      child: Icon(_index == _chat ? Icons.close_rounded : Icons.forum_rounded, color: hisbenewInk),
+                    ),
+                  ),
                 ],
               ),
             ),

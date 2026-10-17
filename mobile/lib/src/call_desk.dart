@@ -33,10 +33,7 @@ class CallDesk extends ChangeNotifier {
   var _remoteReady = false;
   var _pulling = false;
   final List<RTCIceCandidate> _queuedIce = [];
-  List<Map<String, dynamic>> _ice = const [
-    {'urls': 'stun:stun.cloudflare.com:3478'},
-    {'urls': 'stun:stun.l.google.com:19302'},
-  ];
+  List<Map<String, dynamic>> _ice = relayIceServers();
 
   void startWatch() {
     _watch?.cancel();
@@ -80,7 +77,7 @@ class CallDesk extends ChangeNotifier {
     if (session == null) return;
     try {
       final servers = await model.api.callIceServers(session);
-      if (servers.isNotEmpty) _ice = servers;
+      _ice = withRelay(servers);
     } on ErpException {
       return;
     }
@@ -189,6 +186,8 @@ class CallDesk extends ChangeNotifier {
     final session = model.session;
     final callId = _callId;
     if (session != null && callId != null && phase == 'incoming') {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('erp.skipMissedCall', callId);
       try {
         await model.api.respondCall(session: session, callId: callId, action: 'decline');
       } on ErpException {
