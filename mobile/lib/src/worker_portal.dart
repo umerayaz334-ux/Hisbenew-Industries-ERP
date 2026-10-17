@@ -14,6 +14,7 @@ import 'phone_permissions.dart';
 import 'shipping_page.dart';
 import 'theme.dart';
 import 'worker_chat.dart';
+import 'notification_inbox.dart';
 
 class WorkerPortal extends StatefulWidget {
   const WorkerPortal({required this.model, super.key});
@@ -27,6 +28,7 @@ class WorkerPortal extends StatefulWidget {
 class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver {
   late final CallDesk _calls = CallDesk(widget.model);
   var _index = 0;
+  var _notifications = false;
   var _loading = true;
   var _error = false;
   List<PendingShip> _pending = const [];
@@ -117,7 +119,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     }
   }
 
-  void _open(int index) => setState(() => _index = index);
+  void _open(int index) => setState(() { _index = index; _notifications = false; });
 
   @override
   Widget build(BuildContext context) {
@@ -159,16 +161,23 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       backgroundColor: hisbenewCanvas,
       body: Stack(
         children: [
-          SafeArea(child: pages[_index]),
+          SafeArea(child: Column(children: [
+            Padding(padding: const EdgeInsets.fromLTRB(20, 4, 12, 0), child: Row(children: [
+              const Expanded(child: Text('HISBENEW', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 2, color: hisbenewForest))),
+              NotificationBell(count: _unread, onTap: () => setState(() => _notifications = !_notifications)),
+            ])),
+            Expanded(child: _notifications ? NotificationInbox(model: widget.model,
+              onClose: () => setState(() => _notifications = false), onChat: () => _open(2), onShipping: () => _open(1)) : pages[_index]),
+          ])),
           if (_calls.phase != 'idle') CallCover(desk: _calls),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: _calls.phase != 'idle' ? null : NavigationBar(
         selectedIndex: _index,
         height: 68,
         backgroundColor: Colors.white,
         indicatorColor: const Color(0xFFF3E6C8),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         onDestinationSelected: _open,
         destinations: [
           NavigationDestination(
@@ -1065,6 +1074,7 @@ class _WorkerSettings extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 18),
+        const CallPermissionTile(),
         Text(copy.switchLanguage, style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
         const SizedBox(height: 8),
         SegmentedButton<String>(

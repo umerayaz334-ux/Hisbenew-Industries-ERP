@@ -13,6 +13,7 @@ import 'labels_page.dart';
 import 'orders_page.dart';
 import 'page_kit.dart';
 import 'phone_permissions.dart';
+import 'notification_inbox.dart';
 import 'products_page.dart';
 import 'shipping_page.dart';
 import 'theme.dart';
@@ -183,6 +184,7 @@ class WorkspaceScreen extends StatefulWidget {
 
 class _WorkspaceScreenState extends State<WorkspaceScreen> {
   int _index = 0;
+  bool _notifications = false;
   var _unread = 0;
   final _scaffold = GlobalKey<ScaffoldState>();
   late final CallDesk _calls = CallDesk(widget.model);
@@ -296,6 +298,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   else
                     const SizedBox(width: 12),
                   Expanded(child: Text(labels[_index], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4))),
+                  NotificationBell(count: _unread, onTap: () => setState(() => _notifications = !_notifications)),
                   IconButton(
                     onPressed: () => setState(() => _index = _index == _chat ? 0 : _chat),
                     icon: Badge(
@@ -307,7 +310,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 ],
               ),
             ),
-            Expanded(child: pages[_index]),
+            Expanded(child: _notifications ? NotificationInbox(model: widget.model,
+              onClose: () => setState(() => _notifications = false),
+              onChat: () => setState(() { _notifications = false; _index = _chat; }),
+              onShipping: () => setState(() { _notifications = false; _index = 2; })) : pages[_index]),
           ],
         ),
       ),
@@ -405,6 +411,7 @@ class AccountPage extends StatelessWidget {
         _InfoRow(copy.role, session?.role ?? ''),
         _InfoRow(copy.company, company),
         const SizedBox(height: 18),
+        const CallPermissionTile(),
         Text(copy.switchLanguage, style: const TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         SegmentedButton<String>(

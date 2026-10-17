@@ -91,15 +91,10 @@ function Messages() {
   const [conversation, setConversation] = useState([]);
   const [draft, setDraft] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [contactQuery, setContactQuery] = useState("");
-  const [requestNote, setRequestNote] = useState("");
-  const [contactResults, setContactResults] = useState([]);
-  const [contactRequests, setContactRequests] = useState([]);
   const [attachment, setAttachment] = useState(null);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [sending, setSending] = useState(false);
-  const [requestBusy, setRequestBusy] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [error, setError] = useState("");
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
@@ -122,15 +117,7 @@ function Messages() {
     [people]
   );
 
-  const incomingRequests = useMemo(
-    () => contactRequests.filter((item) => item.direction === "incoming" && item.status === "pending"),
-    [contactRequests]
-  );
 
-  const pendingRequests = useMemo(
-    () => contactRequests.filter((item) => item.status === "pending"),
-    [contactRequests]
-  );
 
   const filteredPeople = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -152,14 +139,7 @@ function Messages() {
     };
   }, []);
 
-  const loadRequests = useCallback(async () => {
-    try {
-      const response = await api.get("/internal-message-contact-requests");
-      setContactRequests(Array.isArray(response.data) ? response.data : []);
-    } catch (loadError) {
-      console.warn("Messenger requests loading warning:", loadError);
-    }
-  }, []);
+
 
   const loadPeople = useCallback(async () => {
     try {
@@ -211,37 +191,17 @@ function Messages() {
   useEffect(() => {
     const initialLoadId = window.setTimeout(() => {
       loadPeople();
-      loadRequests();
     }, 0);
     const intervalId = window.setInterval(() => {
       loadPeople();
-      loadRequests();
     }, 60000);
     return () => {
       window.clearTimeout(initialLoadId);
       window.clearInterval(intervalId);
     };
-  }, [loadPeople, loadRequests]);
+  }, [loadPeople]);
 
-  useEffect(() => {
-    const query = contactQuery.trim();
-    if (query.length < 2) {
-      setContactResults([]);
-      return undefined;
-    }
-    const timeoutId = window.setTimeout(async () => {
-      try {
-        const response = await api.get("/internal-message-contact-search", {
-          params: { query },
-        });
-        setContactResults(Array.isArray(response.data) ? response.data : []);
-      } catch (searchError) {
-        console.warn("Messenger contact search warning:", searchError);
-        setContactResults([]);
-      }
-    }, 250);
-    return () => window.clearTimeout(timeoutId);
-  }, [contactQuery]);
+
 
   useEffect(() => {
     const initialLoadId = window.setTimeout(loadConversation, 0);
@@ -281,45 +241,6 @@ function Messages() {
     return () => window.cancelAnimationFrame(animationFrame);
   }, [conversation.length, loadingConversation, selectedUserId]);
 
-  const sendContactRequest = async (event, target = contactQuery) => {
-    if (event?.preventDefault) event.preventDefault();
-    const recipient = String(target || "").trim();
-    if (!recipient || requestBusy) return;
-    setRequestBusy(true);
-    setError("");
-    try {
-      await api.post("/internal-message-contact-requests", {
-        recipient,
-        message: requestNote.trim() || null,
-      });
-      setContactQuery("");
-      setRequestNote("");
-      setContactResults([]);
-      await loadRequests();
-      await loadPeople();
-    } catch (requestError) {
-      console.error("Contact request error:", requestError);
-      setError(requestError.response?.data?.detail || "Contact request could not be sent.");
-    } finally {
-      setRequestBusy(false);
-    }
-  };
-
-  const reviewContactRequest = async (requestId, status) => {
-    if (requestBusy) return;
-    setRequestBusy(true);
-    setError("");
-    try {
-      await api.patch(`/internal-message-contact-requests/${requestId}`, { status });
-      await loadRequests();
-      await loadPeople();
-    } catch (reviewError) {
-      console.error("Contact request review error:", reviewError);
-      setError(reviewError.response?.data?.detail || "Contact request could not be updated.");
-    } finally {
-      setRequestBusy(false);
-    }
-  };
 
   const handleAttachmentChange = async (event) => {
     const file = event.target.files?.[0];
@@ -421,9 +342,6 @@ function Messages() {
           <div className="erp-messages-stat-pill">
             Unread: <strong>{unreadTotal}</strong>
           </div>
-          <div className="erp-messages-stat-pill">
-            Requests: <strong>{incomingRequests.length}</strong>
-          </div>
         </div>
       </div>
       {error && <div className="erp-messages-alert">{error}</div>}
@@ -450,78 +368,11 @@ function Messages() {
             <span>{filteredPeople.length}</span>
           </div>
 
-          <form className="erp-messenger-request-box" onSubmit={sendContactRequest}>
-            <strong>Connect with a team member</strong>
-            <div className="erp-messenger-request-row">
-              <input
-                onChange={(event) => setContactQuery(event.target.value)}
-                placeholder="Username or email"
-                type="text"
-                value={contactQuery}
-              />
-              <button disabled={!contactQuery.trim() || requestBusy} type="submit">
-                Request
-              </button>
-            </div>
-            <textarea
-              onChange={(event) => setRequestNote(event.target.value)}
-              placeholder="Optional note"
-              rows={2}
-              value={requestNote}
-            />
-            {contactResults.length > 0 && (
-              <div className="erp-messenger-search-results">
-                {contactResults.map((result) => (
-                  <button
-                    disabled={requestBusy || ["approved", "requested", "incoming"].includes(result.status)}
-                    key={result.id}
-                    onClick={(event) => sendContactRequest(event, result.username || result.email)}
-                    type="button"
-                  >
-                    <span>{personInitials(result)}</span>
-                    <strong>{result.name}</strong>
-                    <small>{result.status || result.username || result.email}</small>
-                  </button>
-                ))}
-              </div>
-            )}
-          </form>
-
-          {pendingRequests.length > 0 && (
-            <div className="erp-messenger-request-list">
-              {pendingRequests.slice(0, 4).map((item) => (
-                <article key={item.id}>
-                  <div>
-                    <strong>{item.direction === "incoming" ? item.requester_name : item.recipient_name}</strong>
-                    <span>{item.direction === "incoming" ? "Wants to message you" : "Waiting for approval"}</span>
-                    {item.message && <p>{item.message}</p>}
-                  </div>
-                  <div>
-                    {item.direction === "incoming" ? (
-                      <>
-                        <button disabled={requestBusy} onClick={() => reviewContactRequest(item.id, "approved")} type="button">
-                          Approve
-                        </button>
-                        <button disabled={requestBusy} onClick={() => reviewContactRequest(item.id, "declined")} type="button">
-                          Decline
-                        </button>
-                      </>
-                    ) : (
-                      <button disabled={requestBusy} onClick={() => reviewContactRequest(item.id, "canceled")} type="button">
-                        Cancel request
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-
           <div className="erp-messages-search-wrap">
             <input
               className="erp-messages-search-input"
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search contacts..."
+              placeholder="Search coworkers..."
               type="text"
               value={searchQuery}
             />
@@ -531,7 +382,7 @@ function Messages() {
             <div className="erp-messages-empty">Loading contacts...</div>
           ) : filteredPeople.length === 0 ? (
             <div className="erp-messages-empty">
-              {searchQuery ? "No matching contacts found." : "Send a request to start messaging."}
+              {searchQuery ? "No matching contacts found." : "No coworkers are available yet."}
             </div>
           ) : (
             <div className="erp-messages-person-list">
@@ -609,7 +460,7 @@ function Messages() {
               <div>
                 <span>Conversation</span>
                 <h2>Select a contact</h2>
-                <p>Approve a request or choose a contact to start messaging.</p>
+                <p>Choose a coworker to send a message or start a call.</p>
               </div>
             )}
           </div>

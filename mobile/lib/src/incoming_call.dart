@@ -16,12 +16,24 @@ const missedCallChannel = 'hisbenew_calls';
 const messageChannel = 'hisbenew_messages';
 
 List<Map<String, dynamic>> relayIceServers() => const [
-      {'urls': 'stun:stun.cloudflare.com:3478'},
-      {'urls': 'stun:stun.l.google.com:19302'},
-      {'urls': 'turn:global.relay.metered.ca:80', 'username': 'openrelayproject', 'credential': 'openrelayproject'},
-      {'urls': 'turn:global.relay.metered.ca:443', 'username': 'openrelayproject', 'credential': 'openrelayproject'},
-      {'urls': 'turns:global.relay.metered.ca:443?transport=tcp', 'username': 'openrelayproject', 'credential': 'openrelayproject'},
-    ];
+  {'urls': 'stun:stun.cloudflare.com:3478'},
+  {'urls': 'stun:stun.l.google.com:19302'},
+  {
+    'urls': 'turn:global.relay.metered.ca:80',
+    'username': 'openrelayproject',
+    'credential': 'openrelayproject',
+  },
+  {
+    'urls': 'turn:global.relay.metered.ca:443',
+    'username': 'openrelayproject',
+    'credential': 'openrelayproject',
+  },
+  {
+    'urls': 'turns:global.relay.metered.ca:443?transport=tcp',
+    'username': 'openrelayproject',
+    'credential': 'openrelayproject',
+  },
+];
 
 List<Map<String, dynamic>> withRelay(List<Map<String, dynamic>> servers) {
   final seen = <String>{};
@@ -57,7 +69,7 @@ CallKitParams incomingCallParams({required int callId, required String name}) {
       isShowFullLockedScreen: true,
       isFullScreen: true,
       isImportant: true,
-      ringtonePath: 'system_ringtone_default',
+      ringtonePath: 'hisbenew_ring',
       backgroundColor: '#141210',
       actionColor: '#1F4D3A',
       textColor: '#F3E6C8',
@@ -82,22 +94,23 @@ Future<void> watchIncomingCall(String token) async {
           },
         )
         .timeout(const Duration(seconds: 12));
-    if (response.statusCode == 401) return;
+    // A network/server error is not a remote hang-up.
+    if (response.statusCode != 200) return;
     final body = response.body.trim();
-    if (response.statusCode != 200 || body.isEmpty || body == 'null') {
+    if (body == 'null') {
       await _hideShownCall();
       return;
     }
     final decoded = jsonDecode(body);
-    if (decoded is! Map) {
-      await _hideShownCall();
-      return;
-    }
+    if (decoded is! Map) return;
     final callId = int.tryParse('${decoded['id']}') ?? 0;
     final incoming = decoded['is_incoming'] == true;
     final status = '${decoded['status'] ?? ''}'.toLowerCase();
     if (incoming && status == 'accepted') {
       _answeredCallIds.add(callId);
+      await FlutterCallkitIncoming.hideCallkitIncoming(
+        incomingCallParams(callId: callId, name: ''),
+      );
       return;
     }
     if (!incoming || status != 'ringing' || callId <= 0) {
@@ -105,11 +118,15 @@ Future<void> watchIncomingCall(String token) async {
       return;
     }
     if (_shownIncomingId == callId) return;
-    _shownIncomingId = callId;
     final name = '${decoded['other_user_name'] ?? ''}'.trim();
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    if (prefs.getInt('erp.skipMissedCall') == callId || prefs.getInt('erp.pendingAcceptCall') == callId) return;
     await prefs.setString('erp.ringingName', name);
-    await FlutterCallkitIncoming.showCallkitIncoming(incomingCallParams(callId: callId, name: name));
+    await FlutterCallkitIncoming.showCallkitIncoming(
+      incomingCallParams(callId: callId, name: name),
+    );
+    _shownIncomingId = callId;
   } catch (_) {}
 }
 
@@ -122,9 +139,13 @@ Future<void> _hideShownCall() async {
     await FlutterCallkitIncoming.endCall(screenId);
   } catch (_) {}
   final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
   final skipped = prefs.getInt('erp.skipMissedCall') ?? 0;
   final accepted = prefs.getInt('erp.pendingAcceptCall') ?? 0;
-  if (_answeredCallIds.contains(callId) || skipped == callId || accepted == callId) return;
+  if (_answeredCallIds.contains(callId) ||
+      skipped == callId ||
+      accepted == callId)
+    return;
   final name = prefs.getString('erp.ringingName') ?? '';
   await noteMissedCall(name);
 }
@@ -132,9 +153,14 @@ Future<void> _hideShownCall() async {
 Future<void> noteMissedCall(String name) async {
   final who = name.trim().isEmpty ? 'Hisbenew' : name.trim();
   final notes = FlutterLocalNotificationsPlugin();
-  const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-  await notes.initialize(settings: const InitializationSettings(android: android));
-  final plugin = notes.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+  const android = AndroidInitializationSettings('@drawable/ic_stat_hisbenew');
+  await notes.initialize(
+    settings: const InitializationSettings(android: android),
+  );
+  final plugin = notes
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >();
   await plugin?.createNotificationChannel(
     const AndroidNotificationChannel(
       missedCallChannel,
@@ -154,7 +180,7 @@ Future<void> noteMissedCall(String name) async {
         channelDescription: 'When a call is not answered',
         importance: Importance.high,
         priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
+        icon: '@drawable/ic_stat_hisbenew',
       ),
     ),
   );
@@ -177,16 +203,20 @@ Future<void> onIncomingCallBackground(CallEvent event) async {
   final callId = callIdFromScreen(params);
   if (callId <= 0) return;
   final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
   if (action == 'accept') {
     await prefs.setInt('erp.pendingAcceptCall', callId);
     await prefs.setString('erp.pendingAcceptName', params.nameCaller ?? '');
+    // The visible app owns permission, audio and the server acceptance together.
+    return;
   } else {
     await prefs.setInt('erp.skipMissedCall', callId);
+    await prefs.setInt('erp.pendingDeclineCall', callId);
   }
   final token = prefs.getString('erp.token') ?? '';
   if (token.isEmpty) return;
   try {
-    await http
+    final response = await http
         .post(
           Uri.parse('$erpApiBase/internal-calls/$callId/respond'),
           headers: {
@@ -194,8 +224,36 @@ Future<void> onIncomingCallBackground(CallEvent event) async {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
           },
-          body: jsonEncode({'action': action == 'accept' ? 'accept' : 'decline'}),
+          body: jsonEncode({
+            'action': action == 'accept' ? 'accept' : 'decline',
+          }),
         )
         .timeout(const Duration(seconds: 12));
+    if (response.statusCode == 200 ||
+        response.statusCode == 409 ||
+        response.statusCode == 404) {
+      await prefs.remove('erp.pendingDeclineCall');
+    }
+  } catch (_) {}
+}
+
+Future<void> retryPendingDecline(String token) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final id = prefs.getInt('erp.pendingDeclineCall') ?? 0;
+  if (id <= 0) return;
+  try {
+    final response = await http
+        .post(
+          Uri.parse('$erpApiBase/internal-calls/$id/respond'),
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({'action': 'decline'}),
+        )
+        .timeout(const Duration(seconds: 8));
+    if ([200, 404, 409].contains(response.statusCode))
+      await prefs.remove('erp.pendingDeclineCall');
   } catch (_) {}
 }

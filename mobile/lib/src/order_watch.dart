@@ -26,15 +26,20 @@ Future<void> startOrderWatch({bool orders = false}) async {
     androidConfiguration: AndroidConfiguration(
       onStart: orderWatchStart,
       autoStart: false,
-      autoStartOnBoot: true,
+      autoStartOnBoot: false,
       isForegroundMode: true,
       notificationChannelId: _watchChannelId,
       initialNotificationTitle: 'Hisbenew',
-      initialNotificationContent: orders ? 'New orders will alert this phone' : 'Messages and calls stay available',
+      initialNotificationContent: orders
+          ? 'New orders will alert this phone'
+          : 'Messages and calls stay available',
       foregroundServiceNotificationId: 701,
       foregroundServiceTypes: const [AndroidForegroundType.dataSync],
     ),
-    iosConfiguration: IosConfiguration(autoStart: false, onForeground: orderWatchStart),
+    iosConfiguration: IosConfiguration(
+      autoStart: false,
+      onForeground: orderWatchStart,
+    ),
   );
   await FlutterCallkitIncoming.onBackgroundMessage(onIncomingCallBackground);
   if (!await FlutterCallkitIncoming.canUseFullScreenIntent()) {
@@ -58,9 +63,14 @@ Future<void> stopOrderWatch() async {
 }
 
 Future<void> _prepareNotifications() async {
-  const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-  await _notifications.initialize(settings: const InitializationSettings(android: android));
-  final plugin = _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+  const android = AndroidInitializationSettings('@drawable/ic_stat_hisbenew');
+  await _notifications.initialize(
+    settings: const InitializationSettings(android: android),
+  );
+  final plugin = _notifications
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >();
   await plugin?.createNotificationChannel(
     const AndroidNotificationChannel(
       _watchChannelId,
@@ -102,14 +112,41 @@ Future<void> _prepareNotifications() async {
 Future<void> orderWatchStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
   WidgetsFlutterBinding.ensureInitialized();
+  var watchingCalls = false;
+  Future<void> tickCalls() async {
+    if (watchingCalls) return;
+    watchingCalls = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final token = prefs.getString('erp.token') ?? '';
+      if (token.isNotEmpty) {
+        await retryPendingDecline(token);
+        await watchIncomingCall(token);
+      }
+    } finally {
+      watchingCalls = false;
+    }
+  }
+
+  final callWatch = Timer.periodic(
+    const Duration(seconds: 2),
+    (_) => tickCalls(),
+  );
+  tickCalls();
   if (service is AndroidServiceInstance) {
     service.on('stop').listen((_) {
+      callWatch.cancel();
       service.stopSelf();
     });
   }
 
   final notes = FlutterLocalNotificationsPlugin();
-  await notes.initialize(settings: const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')));
+  await notes.initialize(
+    settings: const InitializationSettings(
+      android: AndroidInitializationSettings('@drawable/ic_stat_hisbenew'),
+    ),
+  );
 
   while (true) {
     final prefs = await SharedPreferences.getInstance();
@@ -117,6 +154,7 @@ Future<void> orderWatchStart(ServiceInstance service) async {
     final token = prefs.getString('erp.token') ?? '';
     final role = (prefs.getString('erp.role') ?? '').toLowerCase();
     if (token.isEmpty) {
+      callWatch.cancel();
       await service.stopSelf();
       return;
     }
@@ -125,17 +163,22 @@ Future<void> orderWatchStart(ServiceInstance service) async {
       await _watchOrders(prefs, token, notes);
     }
     await _watchMessages(prefs, token, notes);
-    await watchIncomingCall(token);
     await Future<void>.delayed(const Duration(seconds: 4));
   }
 }
 
-Future<void> _watchOrders(SharedPreferences prefs, String token, FlutterLocalNotificationsPlugin notes) async {
+Future<void> _watchOrders(
+  SharedPreferences prefs,
+  String token,
+  FlutterLocalNotificationsPlugin notes,
+) async {
   final known = prefs.containsKey('erp.orderAlertAfter');
   final afterId = prefs.getInt('erp.orderAlertAfter') ?? 0;
   try {
     final uri = Uri.parse(
-      known ? '$erpApiBase/worker-order-alerts?after_id=$afterId' : '$erpApiBase/worker-order-alerts?seed=true',
+      known
+          ? '$erpApiBase/worker-order-alerts?after_id=$afterId'
+          : '$erpApiBase/worker-order-alerts?seed=true',
     );
     final response = await http
         .get(
@@ -152,7 +195,12 @@ Future<void> _watchOrders(SharedPreferences prefs, String token, FlutterLocalNot
       if (body is Map) {
         final latest = int.tryParse('${body['latest_id']}') ?? afterId;
         final rawOrders = body['orders'];
-        final orders = rawOrders is List ? [for (final row in rawOrders) if (row is Map) row] : const <Map>[];
+        final orders = rawOrders is List
+            ? [
+                for (final row in rawOrders)
+                  if (row is Map) row,
+              ]
+            : const <Map>[];
         if (!known) {
           await prefs.setInt('erp.orderAlertAfter', latest);
         } else if (orders.isNotEmpty) {
@@ -164,7 +212,11 @@ Future<void> _watchOrders(SharedPreferences prefs, String token, FlutterLocalNot
   } catch (_) {}
 }
 
-Future<void> _watchMessages(SharedPreferences prefs, String token, FlutterLocalNotificationsPlugin notes) async {
+Future<void> _watchMessages(
+  SharedPreferences prefs,
+  String token,
+  FlutterLocalNotificationsPlugin notes,
+) async {
   try {
     final response = await http
         .get(
@@ -207,22 +259,29 @@ Future<void> _watchMessages(SharedPreferences prefs, String token, FlutterLocalN
           channelDescription: 'When someone sends a chat message',
           importance: Importance.max,
           priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+          icon: '@drawable/ic_stat_hisbenew',
         ),
       ),
     );
   } catch (_) {}
 }
 
-Future<void> _notify(FlutterLocalNotificationsPlugin notes, List<Map> orders) async {
+Future<void> _notify(
+  FlutterLocalNotificationsPlugin notes,
+  List<Map> orders,
+) async {
   final last = orders.last;
   final count = orders.length;
   final orderNo = '${last['order_no'] ?? ''}'.trim();
   final source = '${last['source'] ?? 'Office'}'.trim();
   final units = int.tryParse('${last['units']}') ?? 0;
   final unitText = units == 1 ? '1 unit' : '$units units';
-  final title = count == 1 ? 'New order ${orderNo.isEmpty ? '' : '#$orderNo'}'.trim() : '$count new orders';
-  final body = count == 1 ? '$source · $unitText' : '$source · latest ${orderNo.isEmpty ? '' : '#$orderNo'}'.trim();
+  final title = count == 1
+      ? 'New order ${orderNo.isEmpty ? '' : '#$orderNo'}'.trim()
+      : '$count new orders';
+  final body = count == 1
+      ? '$source · $unitText'
+      : '$source · latest ${orderNo.isEmpty ? '' : '#$orderNo'}'.trim();
   final id = int.tryParse('${last['id']}') ?? 88001;
   await notes.show(
     id: id,
@@ -235,7 +294,7 @@ Future<void> _notify(FlutterLocalNotificationsPlugin notes, List<Map> orders) as
         channelDescription: 'When the office or Muse adds an order',
         importance: Importance.max,
         priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
+        icon: '@drawable/ic_stat_hisbenew',
         styleInformation: BigTextStyleInformation(body),
       ),
     ),

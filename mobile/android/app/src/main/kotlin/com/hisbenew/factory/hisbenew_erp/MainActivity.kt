@@ -1,6 +1,9 @@
 package com.hisbenew.factory.hisbenew_erp
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +27,53 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "hisbenew/phone").setMethodCallHandler { call, result ->
+            if (call.method == "soundSettings") {
+                startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))
+                result.success(true)
+                return@setMethodCallHandler
+            }
+            if (call.method == "notificationSettings") {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+                } else {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                }
+                result.success(true)
+                return@setMethodCallHandler
+            }
+            if (call.method == "soundSettings") {
+                startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))
+                result.success(true)
+                return@setMethodCallHandler
+            }
+            if (call.method == "notificationSettings") {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+                } else {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                }
+                result.success(true)
+                return@setMethodCallHandler
+            }
+            if (call.method == "openSettings") {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                result.success(true)
+                return@setMethodCallHandler
+            }
+            if (call.method == "startVoiceService") {
+                try {
+                    ContextCompat.startForegroundService(this, Intent(this, VoiceCallService::class.java))
+                    result.success(true)
+                } catch (error: Exception) {
+                    result.error("voice_service", "Open the app to start microphone audio", null)
+                }
+                return@setMethodCallHandler
+            }
+            if (call.method == "stopVoiceService") {
+                stopService(Intent(this, VoiceCallService::class.java))
+                result.success(true)
+                return@setMethodCallHandler
+            }
             if (call.method == "microphoneStatus") {
                 result.success(
                     ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
@@ -36,6 +86,10 @@ class MainActivity : FlutterActivity() {
             }
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                 result.success(true)
+                return@setMethodCallHandler
+            }
+            if (pendingMic != null) {
+                result.error("permission_pending", "Microphone permission is already open", null)
                 return@setMethodCallHandler
             }
             pendingMic = result

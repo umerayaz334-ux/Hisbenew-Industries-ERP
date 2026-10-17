@@ -5605,25 +5605,6 @@ def delete_public_access_request(
     db.commit()
     return {"status": "deleted", "deleted_request_id": request_id}
 
-def messenger_contact_request_response(contact_request: InternalMessageContactRequest, current_user_id: int) -> dict:
-    requester = contact_request.requester
-    recipient = contact_request.recipient
-    return {
-        "id": contact_request.id,
-        "requester_user_id": contact_request.requester_user_id,
-        "requester_name": requester.name if requester else "User",
-        "requester_username": requester.username if requester else None,
-        "recipient_user_id": contact_request.recipient_user_id,
-        "recipient_name": recipient.name if recipient else "User",
-        "recipient_username": recipient.username if recipient else None,
-        "message": contact_request.message,
-        "status": contact_request.status or "pending",
-        "direction": "incoming" if contact_request.recipient_user_id == current_user_id else "outgoing",
-        "reviewed_at": contact_request.reviewed_at,
-        "created_at": contact_request.created_at,
-    }
-
-
 def messenger_effective_tenant_id(current_user: User, tenant_scope_id: int | None) -> int | None:
     if tenant_scope_id is not None:
         return tenant_scope_id
@@ -5632,81 +5613,14 @@ def messenger_effective_tenant_id(current_user: User, tenant_scope_id: int | Non
     return None
 
 
-def messenger_contact_status_between(
-    db: Session,
-    current_user_id: int,
-    other_user_id: int,
-    tenant_id: int | None,
-) -> str | None:
-    query = (
-        db.query(InternalMessageContactRequest)
-        .execution_options(skip_tenant_scope=True)
-        .filter(
-            (
-                (InternalMessageContactRequest.requester_user_id == current_user_id)
-                & (InternalMessageContactRequest.recipient_user_id == other_user_id)
-            )
-            | (
-                (InternalMessageContactRequest.requester_user_id == other_user_id)
-                & (InternalMessageContactRequest.recipient_user_id == current_user_id)
-            )
-        )
-        .order_by(InternalMessageContactRequest.created_at.desc())
-    )
-    if tenant_id is not None:
-        query = query.filter(InternalMessageContactRequest.tenant_id == tenant_id)
-    contact_request = query.first()
-    if not contact_request:
-        return None
-    status = (contact_request.status or "pending").lower()
-    if status == "approved":
-        return "approved"
-    if status == "pending" and contact_request.recipient_user_id == current_user_id:
-        return "incoming"
-    if status == "pending":
-        return "requested"
-    return status
-
-
 def messenger_visible_contact_ids(db: Session, current_user_id: int, tenant_id: int | None) -> set[int]:
-    visible_ids: set[int] = set()
-    requests_query = (
-        db.query(InternalMessageContactRequest)
-        .execution_options(skip_tenant_scope=True)
-        .filter(
-            InternalMessageContactRequest.status == "approved",
-            (
-                (InternalMessageContactRequest.requester_user_id == current_user_id)
-                | (InternalMessageContactRequest.recipient_user_id == current_user_id)
-            ),
-        )
+    """Active coworkers are directly reachable; request history is not an ACL."""
+    query = db.query(User.id).execution_options(skip_tenant_scope=True).filter(
+        User.id != current_user_id, User.is_active.is_(True), User.role != "visitor"
     )
     if tenant_id is not None:
-        requests_query = requests_query.filter(InternalMessageContactRequest.tenant_id == tenant_id)
-    for contact_request in requests_query.all():
-        other_id = (
-            contact_request.recipient_user_id
-            if contact_request.requester_user_id == current_user_id
-            else contact_request.requester_user_id
-        )
-        visible_ids.add(other_id)
-
-    message_query = (
-        db.query(InternalMessage)
-        .execution_options(skip_tenant_scope=True)
-        .filter(
-            (InternalMessage.sender_user_id == current_user_id)
-            | (InternalMessage.recipient_user_id == current_user_id)
-        )
-    )
-    if tenant_id is not None:
-        message_query = message_query.filter(InternalMessage.tenant_id == tenant_id)
-    for message in message_query.all():
-        if message.sender_user_id != current_user_id:
-            visible_ids.add(message.sender_user_id)
-        if message.recipient_user_id != current_user_id:
-            visible_ids.add(message.recipient_user_id)
-    return visible_ids
+        query = query.filter(User.tenant_id == tenant_id)
+    return {row[0] for row in query.all()}
 
 
 def messenger_contact_allowed(
@@ -5718,36 +5632,6 @@ def messenger_contact_allowed(
     if current_user_id == recipient_user_id:
         return False
     return recipient_user_id in messenger_visible_contact_ids(db, current_user_id, tenant_id)
-
-
-def messenger_find_user_for_contact(
-    db: Session,
-    current_user: User,
-    tenant_id: int | None,
-    lookup: str,
-) -> User | None:
-    normalized_lookup = lookup.strip().lower()
-    if not normalized_lookup:
-        return None
-    query = (
-        db.query(User)
-        .execution_options(skip_tenant_scope=True)
-        .filter(User.is_active.is_(True), User.id != current_user.id, User.role != "visitor")
-    )
-    if tenant_id is not None:
-        query = query.filter(User.tenant_id == tenant_id)
-    elif current_user.role != "super_admin" and current_user.tenant_id is not None:
-        query = query.filter(User.tenant_id == current_user.tenant_id)
-    return (
-        query.filter(
-            or_(
-                func.lower(User.username) == normalized_lookup,
-                func.lower(User.email) == normalized_lookup,
-            )
-        )
-        .order_by(User.id.asc())
-        .first()
-    )
 
 
 @app.get("/internal-message-contact-search", response_model=list[InternalMessageContactSearchOut])
@@ -5787,7 +5671,7 @@ def search_internal_message_contacts(
             username=user.username,
             email=user.email,
             role=user.role,
-            status=messenger_contact_status_between(db, current_user.id, user.id, tenant_id),
+            status="approved",
         )
         for user in users
     ]
@@ -5795,20 +5679,8 @@ def search_internal_message_contacts(
 
 @app.get("/internal-message-contact-requests", response_model=list[InternalMessageContactRequestOut])
 def get_internal_message_contact_requests(request: Request, db: Session = Depends(get_db)):
-    current_user = get_authenticated_user(request, db)
-    tenant_id = messenger_effective_tenant_id(current_user, tenant_scope_id_for_request(request, current_user))
-    query = (
-        db.query(InternalMessageContactRequest)
-        .execution_options(skip_tenant_scope=True)
-        .filter(
-            (InternalMessageContactRequest.requester_user_id == current_user.id)
-            | (InternalMessageContactRequest.recipient_user_id == current_user.id)
-        )
-    )
-    if tenant_id is not None:
-        query = query.filter(InternalMessageContactRequest.tenant_id == tenant_id)
-    requests = query.order_by(InternalMessageContactRequest.created_at.desc()).limit(80).all()
-    return [messenger_contact_request_response(item, current_user.id) for item in requests]
+    get_authenticated_user(request, db)
+    return []
 
 
 @app.post("/internal-message-contact-requests", response_model=InternalMessageContactRequestOut)
@@ -5817,47 +5689,9 @@ def create_internal_message_contact_request(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    current_user = get_authenticated_user(request, db)
-    tenant_id = messenger_effective_tenant_id(current_user, tenant_scope_id_for_request(request, current_user))
-    recipient = messenger_find_user_for_contact(db, current_user, tenant_id, payload.recipient or "")
-    if not recipient:
-        raise HTTPException(status_code=404, detail="No active ERP user found for that username or email.")
-    existing_query = (
-        db.query(InternalMessageContactRequest)
-        .execution_options(skip_tenant_scope=True)
-        .filter(
-            (
-                (InternalMessageContactRequest.requester_user_id == current_user.id)
-                & (InternalMessageContactRequest.recipient_user_id == recipient.id)
-            )
-            | (
-                (InternalMessageContactRequest.requester_user_id == recipient.id)
-                & (InternalMessageContactRequest.recipient_user_id == current_user.id)
-            )
-        )
-        .order_by(InternalMessageContactRequest.created_at.desc())
-    )
-    if tenant_id is not None:
-        existing_query = existing_query.filter(InternalMessageContactRequest.tenant_id == tenant_id)
-    existing = existing_query.first()
-    if existing and (existing.status or "pending").lower() in {"pending", "approved"}:
-        return messenger_contact_request_response(existing, current_user.id)
+    get_authenticated_user(request, db)
+    raise HTTPException(status_code=410, detail="Contact requests have been removed. Open a coworker conversation directly.")
 
-    if tenant_id is not None:
-        db.info["tenant_id"] = tenant_id
-    contact_request = InternalMessageContactRequest(
-        tenant_id=tenant_id,
-        requester_user_id=current_user.id,
-        recipient_user_id=recipient.id,
-        message=(payload.message or "").strip()[:500] or None,
-        status="pending",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-    )
-    db.add(contact_request)
-    db.commit()
-    db.refresh(contact_request)
-    return messenger_contact_request_response(contact_request, current_user.id)
 
 
 @app.patch("/internal-message-contact-requests/{request_id}", response_model=InternalMessageContactRequestOut)
@@ -5867,38 +5701,8 @@ def review_internal_message_contact_request(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    current_user = get_authenticated_user(request, db)
-    tenant_id = messenger_effective_tenant_id(current_user, tenant_scope_id_for_request(request, current_user))
-    status = (payload.status or "").strip().lower()
-    if status not in {"approved", "declined", "canceled"}:
-        raise HTTPException(status_code=400, detail="Use approved, declined, or canceled.")
-
-    query = (
-        db.query(InternalMessageContactRequest)
-        .execution_options(skip_tenant_scope=True)
-        .filter(InternalMessageContactRequest.id == request_id)
-    )
-    if status == "canceled":
-        query = query.filter(
-            InternalMessageContactRequest.requester_user_id == current_user.id,
-            InternalMessageContactRequest.status == "pending",
-        )
-    else:
-        query = query.filter(
-            InternalMessageContactRequest.recipient_user_id == current_user.id,
-            InternalMessageContactRequest.status == "pending",
-        )
-    if tenant_id is not None:
-        query = query.filter(InternalMessageContactRequest.tenant_id == tenant_id)
-    contact_request = query.first()
-    if not contact_request:
-        raise HTTPException(status_code=404, detail="Pending contact request not found.")
-    contact_request.status = status
-    contact_request.reviewed_at = datetime.utcnow()
-    contact_request.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(contact_request)
-    return messenger_contact_request_response(contact_request, current_user.id)
+    get_authenticated_user(request, db)
+    raise HTTPException(status_code=410, detail="Contact requests have been removed. Open a coworker conversation directly.")
 
 
 @app.post("/internal-message-attachments")
@@ -6096,7 +5900,7 @@ def create_internal_message(
 
     message_tenant_id = tenant_scope_id or recipient.tenant_id or current_user.tenant_id
     if not messenger_contact_allowed(db, current_user.id, recipient.id, message_tenant_id):
-        raise HTTPException(status_code=403, detail="Send a contact request and wait for approval before messaging this user.")
+        raise HTTPException(status_code=403, detail="This user is not available for messaging.")
 
     if message_tenant_id is not None:
         db.info["tenant_id"] = message_tenant_id
@@ -6243,6 +6047,9 @@ def respond_to_internal_call(
     call = get_internal_call_for_user(db, call_id, current_user.id)
     if call.recipient_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the called user can respond")
+    action = payload.action.strip().lower()
+    if (action == "accept" and call.status == "accepted") or (action == "decline" and call.status == "declined"):
+        return internal_call_response(call, current_user.id)
     if call.status != "ringing":
         raise HTTPException(status_code=409, detail="This call is no longer ringing")
 

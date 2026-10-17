@@ -330,38 +330,14 @@ class ErpApi {
     );
   }
 
-  Future<List<Map<String, dynamic>>> messageSearch(ErpSession session, String query) async {
-    final value = Uri.encodeQueryComponent(query.trim());
-    return _sendList(url: '${session.baseUrl}/internal-message-contact-search?query=$value', token: session.token);
-  }
-
-  Future<List<Map<String, dynamic>>> messageRequests(ErpSession session) async {
-    return _sendList(url: '${session.baseUrl}/internal-message-contact-requests', token: session.token);
-  }
-
-  Future<void> requestMessageContact({required ErpSession session, required String username}) async {
-    await _send(
-      method: 'POST',
-      url: '${session.baseUrl}/internal-message-contact-requests',
-      token: session.token,
-      body: {'recipient': username.trim()},
-    );
-  }
-
-  Future<void> reviewMessageContact({required ErpSession session, required int requestId, required String status}) async {
-    await _send(
-      method: 'PATCH',
-      url: '${session.baseUrl}/internal-message-contact-requests/$requestId',
-      token: session.token,
-      body: {'status': status},
-    );
-  }
-
   Future<Map<String, dynamic>?> activeCall(ErpSession session) async {
     final raw = await _request(method: 'GET', url: '${session.baseUrl}/internal-calls/active', token: session.token);
     if (raw is Map && raw['id'] != null) return Map<String, dynamic>.from(raw);
     return null;
   }
+
+  Future<Map<String, dynamic>> callDetails(ErpSession session, int callId) =>
+      _send(method: 'GET', url: '${session.baseUrl}/internal-calls/$callId', token: session.token);
 
   Future<List<Map<String, dynamic>>> callIceServers(ErpSession session) async {
     final body = await _send(method: 'GET', url: '${session.baseUrl}/internal-calls/config', token: session.token);
