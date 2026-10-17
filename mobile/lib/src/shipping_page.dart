@@ -284,11 +284,11 @@ class _PendingBody extends StatelessWidget {
           facts: [
             _Fact(phrase(context, 'Order', 'آرڈر'), row.orderNo),
             _Fact(phrase(context, 'Phone', 'فون'), row.phone),
-            _Fact(phrase(context, 'Address', 'پتہ'), row.address),
+            if (!model.isWorker) _Fact(phrase(context, 'Address', 'پتہ'), row.address),
           ],
         ),
         const SizedBox(height: 14),
-        FilledButton(
+        if (!model.isWorker) FilledButton(
           onPressed: () => _ship(context),
           child: Text(phrase(context, 'Mark shipped', 'بھیج دیا')),
         ),
@@ -382,6 +382,8 @@ class _ShippedBody extends StatelessWidget {
             if (row.note.trim().isNotEmpty) _Fact(phrase(context, 'Note', 'نوٹ'), row.note),
           ],
         ),
+        if (model.isWorker) _FactBoard(facts: [_Fact('Status', row.status)]),
+        if (!model.isWorker) ...[
         const SizedBox(height: 16),
         Text(phrase(context, 'Move this shipment', 'اسے آگے کریں'), style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
         const SizedBox(height: 8),
@@ -401,6 +403,7 @@ class _ShippedBody extends StatelessWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
+        ],
       ],
     );
   }

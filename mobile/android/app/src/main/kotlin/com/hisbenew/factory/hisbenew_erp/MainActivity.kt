@@ -4,6 +4,12 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.media.AudioManager
+import android.media.AudioAttributes
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.os.Handler
+import android.os.Looper
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -15,6 +21,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var pendingMic: MethodChannel.Result? = null
+    private var previewRingtone: Ringtone? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -27,6 +34,22 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "hisbenew/phone").setMethodCallHandler { call, result ->
+            if (call.method == "testRingtone") {
+                val audio = getSystemService(AUDIO_SERVICE) as AudioManager
+                if (audio.ringerMode != AudioManager.RINGER_MODE_NORMAL || audio.getStreamVolume(AudioManager.STREAM_RING) == 0) {
+                    result.success(false)
+                    return@setMethodCallHandler
+                }
+                previewRingtone?.stop()
+                val ringtone = RingtoneManager.getRingtone(this, Uri.parse("android.resource://$packageName/${R.raw.hisbenew_ring}"))
+                ringtone.audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) ringtone.volume = 1f
+                previewRingtone = ringtone
+                ringtone.play()
+                Handler(Looper.getMainLooper()).postDelayed({ ringtone.stop() }, 4000)
+                result.success(true)
+                return@setMethodCallHandler
+            }
             if (call.method == "soundSettings") {
                 startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))
                 result.success(true)
@@ -107,5 +130,10 @@ class MainActivity : FlutterActivity() {
         val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
         pendingMic?.success(granted)
         pendingMic = null
+    }
+
+    override fun onPause() {
+        previewRingtone?.stop()
+        super.onPause()
     }
 }

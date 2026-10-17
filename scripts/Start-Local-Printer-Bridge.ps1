@@ -102,11 +102,11 @@ $env:FRONTEND_DIST_DIR = Join-Path $frontendDir "dist"
 $env:DATABASE_URL = "sqlite:///$dbPath"
 
 if ([string]::IsNullOrWhiteSpace($env:CORS_ALLOW_ORIGINS)) {
-    $env:CORS_ALLOW_ORIGINS = "https://hisbenew.com,https://www.hisbenew.com,http://127.0.0.1:5173,http://localhost:5173"
+    $env:CORS_ALLOW_ORIGINS = "https://app.hisbenew.com,https://hisbenew.com,https://www.hisbenew.com,http://127.0.0.1:5173,http://localhost:5173"
 }
 
 Write-Host "Starting Hisbenew local printer bridge at http://127.0.0.1:$Port"
-Write-Host "Keep this window open while printing from hisbenew.com."
+Write-Host "Keep this window open while printing from app.hisbenew.com."
 Write-Host "Press Ctrl+C to stop the bridge."
 
 Push-Location $backendDir

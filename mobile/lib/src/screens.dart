@@ -14,6 +14,7 @@ import 'orders_page.dart';
 import 'page_kit.dart';
 import 'phone_permissions.dart';
 import 'notification_inbox.dart';
+import 'notification_navigation.dart';
 import 'products_page.dart';
 import 'shipping_page.dart';
 import 'theme.dart';
@@ -196,6 +197,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   @override
   void initState() {
     super.initState();
+    notificationChat.addListener(_openNotificationChat);
+    if (notificationChat.value != null) _index = _chat;
     _calls.startWatch();
     PhonePermissions.askOnce();
     _refreshUnread();
@@ -204,9 +207,16 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   @override
   void dispose() {
+    notificationChat.removeListener(_openNotificationChat);
     _unreadTimer?.cancel();
     _calls.dispose();
     super.dispose();
+  }
+
+  void _openNotificationChat() {
+    if (mounted && notificationChat.value != null) {
+      setState(() { _notifications = false; _index = _chat; });
+    }
   }
 
   Future<void> _refreshUnread() async {
@@ -243,7 +253,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       phrase(context, 'Products', 'پروڈکٹس'),
       phrase(context, 'Amazon', 'ایمیزون'),
       phrase(context, 'Labels', 'لیبل'),
-      phrase(context, 'Account', 'اکاؤنٹ'),
+      phrase(context, 'Menu', 'مینو'),
       phrase(context, 'Chat', 'چیٹ'),
     ];
     final icons = [
@@ -254,7 +264,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       Icons.inventory_2_rounded,
       Icons.storefront_rounded,
       Icons.sell_rounded,
-      Icons.person_rounded,
+      Icons.menu_rounded,
       Icons.forum_rounded,
     ];
 
@@ -298,7 +308,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                   else
                     const SizedBox(width: 12),
                   Expanded(child: Text(labels[_index], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4))),
-                  NotificationBell(count: _unread, onTap: () => setState(() => _notifications = !_notifications)),
+                  if (_index == 0) NotificationBell(count: _unread, onTap: () => setState(() => _notifications = !_notifications)),
                   IconButton(
                     onPressed: () => setState(() => _index = _index == _chat ? 0 : _chat),
                     icon: Badge(
@@ -404,7 +414,7 @@ class AccountPage extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
       children: [
-        Text(copy.account, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+        Text(phrase(context, 'Menu', 'مینو'), style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 16),
         _InfoRow(copy.signedIn, session?.name ?? ''),
         _InfoRow(copy.username, session?.username ?? ''),

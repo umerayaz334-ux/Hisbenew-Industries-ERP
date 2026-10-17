@@ -365,6 +365,7 @@ class PublicAccessRequestOut(BaseModel):
 class InternalMessageCreate(BaseModel):
     recipient_user_id: int
     body: str = ""
+    client_request_id: str | None = Field(default=None, min_length=1, max_length=128)
     attachment_url: str | None = None
     attachment_name: str | None = None
     attachment_type: str | None = None
@@ -378,6 +379,7 @@ class InternalMessageOut(BaseModel):
     sender_name: str
     recipient_name: str
     body: str
+    client_request_id: str | None = None
     attachment_url: str | None = None
     attachment_name: str | None = None
     attachment_type: str | None = None
@@ -394,6 +396,9 @@ class InternalMessageUserOut(BaseModel):
     role: str
     unread_count: int = 0
     last_message_at: datetime | None = None
+    unread_message_id: int | None = None
+    unread_message_preview: str | None = None
+    unread_message_at: datetime | None = None
 
 
 
@@ -941,6 +946,7 @@ class WorkerExpenseCreate(BaseModel):
     note: str
     spent_at: datetime | None = None
     worker_id: int | None = None
+    client_request_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class WorkerExpenseOut(BaseModel):
@@ -951,6 +957,7 @@ class WorkerExpenseOut(BaseModel):
     note: str
     spent_at: datetime
     created_at: datetime
+    client_request_id: str | None = None
 
     model_config = {
         "from_attributes": True

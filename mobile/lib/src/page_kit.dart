@@ -329,20 +329,26 @@ Future<void> showWorkSheet({
     isScrollControlled: true,
     backgroundColor: Colors.white,
     showDragHandle: true,
+      useSafeArea: true,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
     builder: (context) {
-      return Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.82),
-          child: SingleChildScrollView(
-            child: Column(
+            constraints: BoxConstraints(maxHeight: (MediaQuery.sizeOf(context).height * 0.85 - MediaQuery.viewInsetsOf(context).bottom).clamp(120.0, double.infinity)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
-                const SizedBox(height: 14),
-                child,
+                  Row(children: [
+                    Expanded(child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4))),
+                    IconButton(tooltip: 'Close', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+                  ]),
+                  const Divider(height: 20),
+                  Flexible(child: SingleChildScrollView(child: child)),
               ],
             ),
           ),

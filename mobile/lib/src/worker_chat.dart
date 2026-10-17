@@ -8,6 +8,7 @@ import 'dashboard_data.dart';
 import 'erp_api.dart';
 import 'page_kit.dart';
 import 'theme.dart';
+import 'notification_navigation.dart';
 
 class WorkerChat extends StatefulWidget {
   const WorkerChat({required this.model, required this.calls, super.key});
@@ -25,6 +26,7 @@ class _WorkerChatState extends State<WorkerChat> {
   Timer? _poll;
   var _loading = true;
   var _sending = false;
+  var _choosingPerson = false;
   int? _personId;
   String _personName = '';
   List<Map<String, dynamic>> _people = const [];
@@ -34,8 +36,12 @@ class _WorkerChatState extends State<WorkerChat> {
   @override
   void initState() {
     super.initState();
+    notificationChat.addListener(_openNotification);
     _loadPeople();
-    _poll = Timer.periodic(const Duration(seconds: 5), (_) {
+    _poll = Timer.periodic(const Duration(seconds: 5), (_) async {
+      final session = widget.model.session;
+      if (session != null) await widget.model.api.syncMessages(session);
+      if (!mounted) return;
       if (_personId == null) {
         _loadPeople(quiet: true);
       } else {
@@ -46,6 +52,7 @@ class _WorkerChatState extends State<WorkerChat> {
 
   @override
   void dispose() {
+    notificationChat.removeListener(_openNotification);
     _poll?.cancel();
     _search.dispose();
     _draft.dispose();
@@ -64,11 +71,12 @@ class _WorkerChatState extends State<WorkerChat> {
         _error = '';
         _loading = false;
       });
+      _openNotification();
     } on ErpException {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Could not load messages. Check your connection and refresh.';
+        if (_people.isEmpty) _error = 'Could not load messages. Check your connection and refresh.';
       });
     }
   }
@@ -90,19 +98,31 @@ class _WorkerChatState extends State<WorkerChat> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Could not load messages. Retrying shortly…';
+        if (_thread.isEmpty) _error = 'Could not load messages. Retrying shortly…';
       });
     }
   }
 
   Future<void> _openPerson(Map<String, dynamic> person) async {
     setState(() {
+      _choosingPerson = false;
+      _search.clear();
+      _draft.clear();
       _personId = asInt(person['id']);
       _personName = asText(person['name']);
       _thread = const [];
       _loading = true;
     });
     await _loadThread();
+  }
+
+  void _openNotification() {
+    final id = notificationChat.value;
+    if (!mounted || id == null) return;
+    final matches = _people.where((person) => asInt(person['id']) == id);
+    if (matches.isEmpty) return;
+    notificationChat.value = null;
+    _openPerson(matches.first);
   }
 
   Future<void> _send() async {
@@ -120,12 +140,13 @@ class _WorkerChatState extends State<WorkerChat> {
       if (!mounted) return;
       if (_personId == personId && _draft.text.trim() == body) _draft.clear();
       await _loadThread(quiet: true);
+      await _loadPeople(quiet: true);
     } on ErpException {
-      if (mounted)
-        setState(
-          () =>
-              _error = 'Message not sent. Check your connection and try again.',
-        );
+      if (mounted) {
+        setState(() => _error = 'Message not sent. Check your connection and try again.');
+      }
+    } on StateError {
+      if (mounted) setState(() => _error = 'This phone could not save the message.');
     }
     if (mounted) setState(() => _sending = false);
   }
@@ -135,6 +156,7 @@ class _WorkerChatState extends State<WorkerChat> {
     if (_personId != null) return _threadView(context);
     final query = _search.text.trim().toLowerCase();
     final people = _people
+        .where((person) => _choosingPerson || asText(person['last_message_at']).isNotEmpty || asInt(person['unread_count']) > 0)
         .where(
           (person) =>
               '${person['name']} ${person['username']} ${person['role']}'
@@ -148,15 +170,24 @@ class _WorkerChatState extends State<WorkerChat> {
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
           child: Row(
             children: [
-              const Expanded(
+              if (_choosingPerson) IconButton(
+                tooltip: 'Back to chats',
+                onPressed: () => setState(() { _choosingPerson = false; _search.clear(); }),
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              Expanded(
                 child: Text(
-                  'Messages',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+                  _choosingPerson ? 'New chat' : 'Chats',
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
                 ),
               ),
-              Text(
-                '${_people.length} coworkers',
-                style: const TextStyle(color: hisbenewMuted),
+              if (!_choosingPerson) IconButton.filled(
+                tooltip: 'New chat',
+                onPressed: () {
+                  setState(() { _choosingPerson = true; _search.clear(); });
+                  _loadPeople(quiet: true);
+                },
+                icon: const Icon(Icons.add_rounded),
               ),
             ],
           ),
@@ -174,9 +205,9 @@ class _WorkerChatState extends State<WorkerChat> {
                 child: TextField(
                   controller: _search,
                   onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    hintText: 'Search coworkers',
-                    prefixIcon: Icon(Icons.search),
+                  decoration: InputDecoration(
+                    hintText: _choosingPerson ? 'Search coworkers' : 'Search chats',
+                    prefixIcon: const Icon(Icons.search),
                   ),
                 ),
               ),
@@ -204,11 +235,7 @@ class _WorkerChatState extends State<WorkerChat> {
                       Padding(
                         padding: const EdgeInsets.only(top: 28),
                         child: Text(
-                          phrase(
-                            context,
-                            'No coworkers found.',
-                            'کوئی ساتھی نہیں ملا۔',
-                          ),
+                          query.isNotEmpty ? 'No matches found.' : _choosingPerson ? 'No coworkers available.' : 'No conversations yet. Tap + to start a chat.',
                           style: const TextStyle(color: hisbenewMuted),
                         ),
                       ),
@@ -265,7 +292,7 @@ class _WorkerChatState extends State<WorkerChat> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) setState(() => _personId = null);
+        if (!didPop) _backToChats();
       },
       child: Column(
         children: [
@@ -274,7 +301,7 @@ class _WorkerChatState extends State<WorkerChat> {
             child: Row(
               children: [
                 IconButton(
-                  onPressed: () => setState(() => _personId = null),
+                  onPressed: _backToChats,
                   icon: const Icon(Icons.arrow_back_rounded),
                 ),
                 Expanded(
@@ -353,7 +380,7 @@ class _WorkerChatState extends State<WorkerChat> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  _messageTime(message),
+                                  message['pending_sync'] == true ? phrase(context, 'Waiting to send', 'بھیجنے کا انتظار') : _messageTime(message),
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: message['is_mine'] == true
@@ -398,6 +425,11 @@ class _WorkerChatState extends State<WorkerChat> {
         ],
       ),
     );
+  }
+
+  void _backToChats() {
+    setState(() { _personId = null; _search.clear(); _draft.clear(); });
+    _loadPeople(quiet: true);
   }
 }
 

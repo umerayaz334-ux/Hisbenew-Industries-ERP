@@ -55,7 +55,7 @@ class _NotificationInboxState extends State<NotificationInbox> {
       final shipments = widget.model.isWorker
           ? await widget.model.api.pendingShipping(session)
           : <Map<String, dynamic>>[];
-      if (mounted)
+      if (mounted) {
         setState(() {
           _messages = messages
               .where((row) => asInt(row['unread_count']) > 0)
@@ -64,6 +64,7 @@ class _NotificationInboxState extends State<NotificationInbox> {
           _loading = false;
           _error = false;
         });
+      }
     } catch (_) {
       if (mounted) {
         setState(() {

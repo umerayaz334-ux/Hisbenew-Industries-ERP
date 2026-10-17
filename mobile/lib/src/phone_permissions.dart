@@ -23,6 +23,7 @@ class PhonePermissions {
       _channel.invokeMethod('openSettings');
   static Future<void> soundSettings() async =>
       _channel.invokeMethod('soundSettings');
+  static Future<bool> testRingtone() async => await _channel.invokeMethod<bool>('testRingtone') == true;
   static Future<void> notificationSettings() async =>
       _channel.invokeMethod('notificationSettings');
   static Future<void> startVoiceService() async =>
@@ -121,6 +122,17 @@ class _CallPermissionTileState extends State<CallPermissionTile>
         trailing: const Icon(Icons.chevron_right),
         onTap: PhonePermissions.soundSettings,
       ),
+    Align(alignment: Alignment.centerLeft, child: TextButton.icon(
+      icon: const Icon(Icons.play_circle_outline), label: const Text('Test ringtone'),
+      onPressed: () async {
+        final playing = await PhonePermissions.testRingtone();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+          playing ? 'Playing a 4-second preview. If silent, check Do Not Disturb and phone sound settings.' : 'Turn off silent/vibrate mode and increase ringtone volume in phone settings.',
+          )));
+        }
+      },
+    )),
     ],
   );
 }

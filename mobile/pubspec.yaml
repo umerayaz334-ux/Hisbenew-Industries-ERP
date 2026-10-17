@@ -41,6 +41,8 @@ dependencies:
   flutter_webrtc: ^1.6.2+hotfix.4
   flutter_callkit_incoming: ^3.1.6
   share_plus: ^10.1.4
+  firebase_core: ^5.0.0
+  firebase_messaging: ^17.0.0
 
 dev_dependencies:
   flutter_test:

@@ -4,6 +4,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// An unconfigured test APK remains usable; production push requires this file.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.hisbenew.factory.hisbenew_erp"
     compileSdk = flutter.compileSdkVersion

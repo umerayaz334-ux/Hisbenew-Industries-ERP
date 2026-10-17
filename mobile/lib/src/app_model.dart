@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dashboard_data.dart';
 import 'erp_api.dart';
 import 'order_watch.dart';
+import 'push_notifications.dart';
+import 'notification_navigation.dart';
 
 class AppModel extends ChangeNotifier {
   AppModel({ErpApi? api}) : _api = api ?? ErpApi();
@@ -15,6 +17,37 @@ class AppModel extends ChangeNotifier {
   Locale locale = const Locale('en');
   ErpSession? session;
   bool booting = true;
+  Set<String> allowedPages = {};
+  bool accessReady = false;
+  bool canAccess(String page) => !isWorker || !accessReady || allowedPages.contains(page);
+  String get _accessKey => 'erp.pageAccess.${session?.tenantSlug}.${session?.username}';
+
+  Future<bool> refreshAccess() async {
+    final current = session;
+    if (current == null) return false;
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final pages = await api.pageAccess(current).timeout(const Duration(seconds: 8));
+      if (session != current) return false;
+      final becameReady = !accessReady;
+      final changed = becameReady || pages.length != allowedPages.length || !allowedPages.containsAll(pages);
+      allowedPages = pages.toSet();
+      accessReady = true;
+      await prefs.setStringList(_accessKey, pages);
+      if (changed) notifyListeners();
+      return changed;
+    } catch (_) {
+      if (session == current && !accessReady) {
+        final cached = prefs.getStringList(_accessKey);
+        if (cached != null) {
+          allowedPages = cached.toSet();
+          accessReady = true;
+          notifyListeners();
+        }
+      }
+      return false;
+    }
+  }
   bool signingIn = false;
   bool loadingDashboard = false;
   String? loginError;
@@ -39,10 +72,12 @@ class AppModel extends ChangeNotifier {
         companyCode: '',
       );
     }
+    if (session != null) await refreshAccess();
     booting = false;
     notifyListeners();
     if (session != null) {
       await startOrderWatch(orders: isWorker);
+      await MobilePush.start();
       if (!isWorker) await refreshDashboard();
     }
   }
@@ -80,10 +115,14 @@ class AppModel extends ChangeNotifier {
       dashboard = null;
       dashboardError = null;
       await _storeSession(next);
+      allowedPages = {};
+      accessReady = false;
+      await refreshAccess();
       signingIn = false;
       notifyListeners();
       final worker = next.role.trim().toLowerCase() == 'worker';
       await startOrderWatch(orders: worker);
+      await MobilePush.start();
       if (!worker) await refreshDashboard();
       return true;
     } on ErpException catch (error) {
@@ -116,8 +155,12 @@ class AppModel extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    notificationChat.value = null;
+    await MobilePush.stop();
     await stopOrderWatch();
     session = null;
+    allowedPages = {};
+    accessReady = false;
     dashboard = null;
     dashboardError = null;
     loadingDashboard = false;

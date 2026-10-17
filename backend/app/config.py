@@ -93,6 +93,7 @@ def load_internal_call_ice_servers() -> list[dict]:
     fallback = [
         {"urls": "stun:stun.cloudflare.com:3478"},
         {"urls": "stun:stun.l.google.com:19302"},
+        {"urls": "stun:stun.relay.metered.ca:80"},
         {
             "urls": "turn:global.relay.metered.ca:80",
             "username": "openrelayproject",

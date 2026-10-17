@@ -3072,6 +3072,34 @@ function Shipping({ userRole }) {
 
   }, [historySearch]);
 
+  if (userRole === "worker") {
+    return (
+      <div className="shipping-page">
+        <h1>Shipping</h1>
+        <p>View orders, shipment progress, courier and tracking details.</p>
+        {loadError && <div role="alert">{loadError}</div>}
+        {refreshing && <p role="status">Loading shipping...</p>}
+        <h2>Waiting to ship</h2>
+        <input aria-label="Search pending orders" placeholder="Search orders" value={pendingSearch} onChange={(event) => setPendingSearch(event.target.value)} />
+        {pendingOrders.filter((order) => `${order.order_no} ${order.customer_name}`.toLowerCase().includes(pendingSearch.toLowerCase())).map((order) => (
+          <details key={order.order_id} className="worker-shipment-card">
+            <summary>#{order.order_no} · {order.customer_name} · {order.shipping_status || "Pending"}</summary>
+            <ul>{(order.items || []).map((item, index) => <li key={index}>{item.article_no} {item.product_name} × {item.quantity}</li>)}</ul>
+          </details>
+        ))}
+        <h2>Shipments</h2>
+        <input aria-label="Search shipments" placeholder="Search shipments" value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} />
+        {filteredShippingRecords.map((record) => (
+          <article key={record.id} className="worker-shipment-card">
+            <strong>#{record.order_no} · {record.customer_name}</strong>
+            <p>{record.shipping_status || "Shipped"}</p>
+            <p>{record.courier_name || record.courier} {record.tracking_number}</p>
+          </article>
+        ))}
+      </div>
+    );
+  }
+
 
 
   return (

@@ -39,6 +39,7 @@ from urllib import request as urllib_request
 
 from .config import APP_DATA_DIR, BACKEND_DIR, CORS_ALLOW_ORIGINS, CORS_ALLOW_ORIGIN_REGEX, FRONTEND_DIST_DIR, INTERNAL_CALL_ICE_SERVERS, PROJECT_DIR, STATIC_DIR, UPLOAD_DIR
 from .database import Base, DEFAULT_TENANT_NAME, DEFAULT_TENANT_SLUG, engine, SessionLocal, ensure_scaling_indexes, migrate_database
+from .mobile_push import install_routes as install_mobile_push_routes, wake_phone
 from .models import Tenant, Module, TenantModule, CustomPage, Product, Customer, User, ActivityLog, UserRoleRequest, PublicAccessRequest, InternalMessage, InternalMessageContactRequest, WebsiteVisitorSession, WebsiteVisitorActivity, WebsiteVisitorMessage, InternalCall, InternalCallSignal, InspirationItem, OrderImportBatch, Order, OrderItem, StockMovement, Supplier, SupplierOrderItem, SupplierSupplyItem, SupplierTransaction, SupplierPayment, WorkflowStep, Worker, WorkerPayment, WorkerExpense, Shipping, FulfillmentShipment, FulfillmentBox, FulfillmentBoxItem, FulfillmentInventoryDiscrepancy, FulfillmentOrder, FulfillmentOrderItem, FulfillmentPick, CourierPayment, RegularBill, RegularBillPayment, AccountingSettings, AccountingFiscalYear, AccountingPeriodLock, AccountingCurrencyRate, AccountingJournalEntry, AccountingJournalLine, AccountingAccount, AccountingTransaction, AccountingDocument, AccountingDocumentLine, AccountingDocumentPayment, AccountingBankTransaction, AccountingBankRule, AccountingRecurringTemplate, ProductionBatch, ProductionTask, SharedData, WorkspaceData, OrderWorkflowTask, OrderFollowUp
 from .integrations.amazon import router as amazon_router
 from .integrations.amazon.autosync import amazon_auto_sync_service
@@ -647,7 +648,7 @@ ROLE_PAGE_DEFAULTS = {
         "Messages",
         "Settings",
     ],
-    "worker": ["Dashboard", "My Tasks", "Worker Payouts", "Manufacturing", "Production", "Messages", "Settings"],
+    "worker": ["Dashboard", "Orders", "Products", "Shipping", "My Tasks", "Worker Payouts", "Manufacturing", "Production", "Messages", "Settings"],
     "unassigned": ["Dashboard"],
     "school": ["Dashboard"],
     "service_taker": SERVICE_TAKER_PORTAL_PAGES.copy(),
@@ -1182,6 +1183,7 @@ def internal_message_response(message: InternalMessage, current_user_id: int) ->
         "sender_name": message.sender.name if message.sender else "User",
         "recipient_name": message.recipient.name if message.recipient else "User",
         "body": message.body or "",
+        "client_request_id": message.client_request_id,
         "attachment_url": message.attachment_url,
         "attachment_name": message.attachment_name,
         "attachment_type": message.attachment_type,
@@ -1235,6 +1237,7 @@ def internal_call_signal_response(signal: InternalCallSignal) -> dict:
 
 
 def publish_internal_message(message: InternalMessage) -> None:
+    wake_phone(message.recipient_user_id, 'message')
     for user_id in {message.sender_user_id, message.recipient_user_id}:
         if user_id is None:
             continue
@@ -1248,6 +1251,9 @@ def publish_internal_message(message: InternalMessage) -> None:
 
 
 def publish_internal_call(call: InternalCall) -> None:
+    wake_phone(call.recipient_user_id, 'call')
+    if call.status != 'ringing':
+        wake_phone(call.caller_user_id, 'call')
     for user_id in {call.caller_user_id, call.recipient_user_id}:
         realtime_hub.publish_from_thread(
             [user_id],
@@ -1363,6 +1369,9 @@ def get_authenticated_user(request: Request, db: Session) -> User:
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required.")
     return user
+
+
+install_mobile_push_routes(app, get_authenticated_user)
 
 
 def require_page_access(request: Request, db: Session, page: str) -> User:
@@ -2207,6 +2216,27 @@ async def auth_middleware(request: Request, call_next):
             content={"detail": tenant_error[1]},
         )
 
+    if user.role == "worker":
+        path = request.url.path
+        required_page = next((page for prefix, page in [
+            ('/shipping', 'Shipping'), ('/products', 'Products'),
+            ('/orders', 'Orders'), ('/worker-order-alerts', 'Orders'),
+            ('/worker-expenses', 'Worker Payouts'), ('/worker-payments', 'Worker Payouts'),
+            ('/production/tasks', 'My Tasks'), ('/order-workflow/tasks', 'My Tasks'),
+            ('/internal-message', 'Messages'), ('/internal-call', 'Messages'),
+        ] if path == prefix or path.startswith(prefix + '/') or prefix in {'/internal-message', '/internal-call'} and path.startswith(prefix)), None)
+        if required_page:
+            with SessionLocal() as access_db:
+                try:
+                    request.state.user_id = user.id
+                    request.state.authenticated_user = user
+                    require_page_access(request, access_db, required_page)
+                except HTTPException as exc:
+                    return JSONResponse(status_code=exc.status_code, content={'detail': exc.detail})
+
+    if user.role == "worker" and request.url.path.startswith("/shipping") and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        return JSONResponse(status_code=403, content={"detail": "Shipping is read-only for workers."})
+
     if user.role == "school":
         school_allowed = (
             request.url.path.startswith("/school")
@@ -2249,6 +2279,16 @@ async def auth_middleware(request: Request, call_next):
     request.state.tenant_slug = request_tenant_slug
     request.state.authenticated_user = user
     return await call_next(request)
+
+
+@app.get('/mobile-access')
+def mobile_page_access(request: Request, db: Session = Depends(get_db)):
+    user = get_authenticated_user(request, db)
+    try:
+        pages = json.loads(user.allowed_pages) if user.allowed_pages else None
+    except (ValueError, TypeError):
+        pages = None
+    return {'allowed_pages': tenant_filtered_allowed_pages(db, user.tenant_id, normalize_allowed_pages(user.role, pages))}
 
 
 @app.get("/user-access-options")
@@ -5765,6 +5805,14 @@ def get_internal_message_users(request: Request, db: Session = Depends(get_db)):
 
     rows = []
     for user in users:
+        unread_message_query = db.query(InternalMessage).execution_options(skip_tenant_scope=True).filter(
+            InternalMessage.sender_user_id == user.id,
+            InternalMessage.recipient_user_id == current_user.id,
+            InternalMessage.read_at.is_(None),
+        )
+        if tenant_scope_id is not None:
+            unread_message_query = unread_message_query.filter(InternalMessage.tenant_id == tenant_scope_id)
+        unread_message = unread_message_query.order_by(InternalMessage.id.desc()).first()
         last_message_query = (
             db.query(func.max(InternalMessage.created_at))
             .execution_options(skip_tenant_scope=True)
@@ -5789,6 +5837,9 @@ def get_internal_message_users(request: Request, db: Session = Depends(get_db)):
                 role=user.role,
                 unread_count=unread_by_sender.get(user.id, 0),
                 last_message_at=last_message_query.scalar(),
+                unread_message_id=unread_message.id if unread_message else None,
+                unread_message_preview=((unread_message.body or '').strip() or unread_message.attachment_name or 'Attachment')[:500] if unread_message else None,
+                unread_message_at=unread_message.created_at if unread_message else None,
             )
         )
     return sorted(
@@ -5898,6 +5949,19 @@ def create_internal_message(
     if not body and not attachment_url:
         raise HTTPException(status_code=400, detail="Message body or attachment is required")
 
+    request_id = (payload.client_request_id or "").strip() or None
+    if request_id:
+        existing = (
+            db.query(InternalMessage)
+            .execution_options(skip_tenant_scope=True)
+            .filter(InternalMessage.client_request_id == request_id)
+            .first()
+        )
+        if existing:
+            if existing.sender_user_id != current_user.id or existing.body != body:
+                raise HTTPException(status_code=409, detail="This message was already sent with different content.")
+            return internal_message_response(existing, current_user.id)
+
     message_tenant_id = tenant_scope_id or recipient.tenant_id or current_user.tenant_id
     if not messenger_contact_allowed(db, current_user.id, recipient.id, message_tenant_id):
         raise HTTPException(status_code=403, detail="This user is not available for messaging.")
@@ -5909,6 +5973,7 @@ def create_internal_message(
         sender_user_id=current_user.id,
         recipient_user_id=recipient.id,
         body=body,
+        client_request_id=request_id,
         attachment_url=attachment_url,
         attachment_name=attachment_name,
         attachment_type=attachment_type,
@@ -11239,6 +11304,7 @@ def worker_expense_response(expense: WorkerExpense) -> dict:
         "note": expense.note,
         "spent_at": expense.spent_at,
         "created_at": expense.created_at,
+        "client_request_id": expense.client_request_id,
     }
 
 
@@ -18280,6 +18346,7 @@ def get_pending_shipping_count(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/shipping/pending")
 def get_pending_shipping_orders(request: Request, db: Session = Depends(get_db)):
+    is_worker = get_authenticated_user(request, db).role == 'worker'
     privacy = access_privacy_context(request, db)
     orders = (
         db.query(Order)
@@ -18320,8 +18387,8 @@ def get_pending_shipping_orders(request: Request, db: Session = Depends(get_db))
             "order_contact_phone": order_contact_phone,
             "shipping_phone": order_contact_phone or customer_phone,
             "shipping_phone_source": "Order sheet" if order_contact_phone else ("Customer" if customer_phone else ""),
-            "customer_address": order.import_shipping_address
-            or ((order.customer.shipping_address or order.customer.address) if order.customer else ""),
+            "customer_address": "" if is_worker else (order.import_shipping_address
+            or ((order.customer.shipping_address or order.customer.address) if order.customer else "")),
             "platform": order.platform,
             "order_date": order.order_date,
             "expected_ship_date": order.import_ship_date,
@@ -19307,6 +19374,12 @@ def get_worker_expenses(
     return [worker_expense_response(expense) for expense in expenses]
 
 
+@app.get("/worker-expenses/sync-capabilities")
+def worker_expense_sync_capabilities(request: Request, db: Session = Depends(get_db)):
+    get_authenticated_user(request, db)
+    return {"idempotent_expenses": True}
+
+
 @app.post("/worker-expenses", response_model=WorkerExpenseOut)
 def create_worker_expense(
     payload: WorkerExpenseCreate,
@@ -19326,11 +19399,24 @@ def create_worker_expense(
         raise HTTPException(status_code=404, detail="Worker not found")
 
     amount = float(payload.amount or 0)
-    if amount <= 0:
+    if not math.isfinite(amount) or amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
     note = (payload.note or "").strip()
     if not note:
         raise HTTPException(status_code=400, detail="A note is required")
+
+    request_id = payload.client_request_id
+    def existing_result():
+        existing = db.query(WorkerExpense).filter(WorkerExpense.client_request_id == request_id).first()
+        if existing is None:
+            return None
+        if existing.worker_id != worker.id or existing.created_by_user_id != user.id or existing.amount != amount or existing.note != note:
+            raise HTTPException(status_code=409, detail="This spending sync ID has already been used for another entry")
+        return worker_expense_response(existing)
+    if request_id:
+        existing = existing_result()
+        if existing is not None:
+            return existing
 
     expense = WorkerExpense(
         tenant_id=worker.tenant_id or user.tenant_id,
@@ -19340,9 +19426,18 @@ def create_worker_expense(
         spent_at=payload.spent_at or datetime.utcnow(),
         created_at=datetime.utcnow(),
         created_by_user_id=user.id,
+        client_request_id=request_id,
     )
     db.add(expense)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if request_id:
+            existing = existing_result()
+            if existing is not None:
+                return existing
+        raise
     db.refresh(expense)
     return worker_expense_response(expense)
 

@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'erp_api.dart';
 import 'incoming_call.dart';
+import 'notification_navigation.dart';
 
 const _watchChannelId = 'hisbenew_watch';
 const _alertChannelId = 'hisbenew_orders';
@@ -60,13 +61,30 @@ Future<void> stopOrderWatch() async {
   if (await service.isRunning()) {
     service.invoke('stop');
   }
+  await _notifications.cancelAll();
+}
+
+Future<void> refreshMessageNotifications() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final token = prefs.getString('erp.token') ?? '';
+  if (token.isEmpty) return;
+  await _notifications.initialize(settings: const InitializationSettings(
+    android: AndroidInitializationSettings('@drawable/ic_stat_hisbenew')),
+    onDidReceiveNotificationResponse: (response) => openNotificationPayload(response.payload));
+  await _watchMessages(prefs, token, _notifications);
 }
 
 Future<void> _prepareNotifications() async {
   const android = AndroidInitializationSettings('@drawable/ic_stat_hisbenew');
   await _notifications.initialize(
     settings: const InitializationSettings(android: android),
+    onDidReceiveNotificationResponse: (response) => openNotificationPayload(response.payload),
   );
+  final launch = await _notifications.getNotificationAppLaunchDetails();
+  if (launch?.didNotificationLaunchApp == true) {
+    openNotificationPayload(launch?.notificationResponse?.payload);
+  }
   final plugin = _notifications
       .resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin
@@ -228,41 +246,60 @@ Future<void> _watchMessages(
         )
         .timeout(const Duration(seconds: 20));
     if (response.statusCode != 200 || response.body.isEmpty) return;
+    await prefs.reload();
+    if (prefs.getString('erp.token') != token) return;
     final body = jsonDecode(response.body);
     if (body is! List) return;
     var unread = 0;
-    var latest = '';
-    var name = '';
+    final account = '${prefs.getString('erp.tenantSlug')}|${prefs.getString('erp.username')}';
     for (final row in body) {
       if (row is! Map) continue;
       final count = int.tryParse('${row['unread_count']}') ?? 0;
       unread += count;
-      final at = '${row['last_message_at'] ?? ''}';
-      if (count > 0 && at.compareTo(latest) > 0) {
-        latest = at;
-        name = '${row['name'] ?? ''}'.trim();
+      final senderId = int.tryParse('${row['id']}') ?? 0;
+      if (senderId <= 0) continue;
+      final notificationId = 100000 + senderId;
+      if (count == 0) {
+        await notes.cancel(id: notificationId);
+        continue;
       }
+      final messageId = int.tryParse('${row['unread_message_id']}') ?? 0;
+      // Per-conversation message cursors also detect arrivals when another
+      // conversation is read and the total unread count stays unchanged.
+      final cursor = 'erp.messageAlert.$account.$senderId';
+      final marker = messageId > 0 ? '$messageId' : '${row['last_message_at']}';
+      if (prefs.getString(cursor) == marker) continue;
+      final name = '${row['name'] ?? ''}'.trim();
+      final who = name.isEmpty ? 'New message' : name;
+      final preview = '${row['unread_message_preview'] ?? ''}'.trim();
+      final text = preview.isEmpty ? 'Sent you a message' : preview;
+      final timestamp = DateTime.tryParse('${row['unread_message_at']}') ?? DateTime.now();
+      await notes.show(
+        id: notificationId,
+        title: who,
+        body: text,
+        payload: 'chat:$senderId',
+        notificationDetails: NotificationDetails(
+          android: AndroidNotificationDetails(
+            messageChannel, 'Messages',
+            channelDescription: 'Chat messages and lock-screen previews',
+            importance: Importance.max,
+            priority: Priority.high,
+            category: AndroidNotificationCategory.message,
+            visibility: NotificationVisibility.public,
+            number: count,
+            icon: '@drawable/ic_stat_hisbenew',
+            styleInformation: MessagingStyleInformation(
+              const Person(name: 'You'),
+              groupConversation: false,
+              messages: [Message(text, timestamp, Person(name: who, key: '$senderId'))],
+            ),
+          ),
+        ),
+      );
+      await prefs.setString(cursor, marker);
     }
     await prefs.setInt('erp.chatUnread', unread);
-    final seen = prefs.getInt('erp.chatUnreadSeen');
-    await prefs.setInt('erp.chatUnreadSeen', unread);
-    if (seen == null || unread <= seen) return;
-    final who = name.isEmpty ? 'Someone' : name;
-    await notes.show(
-      id: 92001,
-      title: 'New message',
-      body: who,
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          messageChannel,
-          'Messages',
-          channelDescription: 'When someone sends a chat message',
-          importance: Importance.max,
-          priority: Priority.high,
-          icon: '@drawable/ic_stat_hisbenew',
-        ),
-      ),
-    );
   } catch (_) {}
 }
 

@@ -28,6 +28,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _dismiss;
   RTCPeerConnection? _pc;
   MediaStream? _local;
+  MediaStream? _remote;
   int? _callId;
   var _afterSignal = 0;
   var _remoteReady = false;
@@ -60,6 +61,9 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   final List<RTCIceCandidate> _queuedIce = [];
+  final List<Map<String, dynamic>> _localIce = [];
+  var _localPosted = false;
+  var _iceRestarted = false;
   List<Map<String, dynamic>> _ice = relayIceServers();
 
   void startWatch() {
@@ -83,13 +87,15 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     } else if (event is CallEventActionCallEnded) {
       if (callIdFromScreen(event.callKitParams) == _callId &&
           phase != 'ended' &&
-          phase != 'idle')
+          phase != 'idle') {
         await hangUp();
+      }
     } else if (event is CallEventActionCallTimeout) {
       if (_callId != null &&
           event.id == callScreenId(_callId!) &&
-          phase == 'incoming')
+          phase == 'incoming') {
         await hangUp();
+      }
     }
   }
 
@@ -150,6 +156,11 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
           phase = 'incoming';
           notice = '';
           notifyListeners();
+          try {
+            await showIncomingIfNeeded(_callId!, otherName);
+          } catch (error) {
+            debugPrint('Incoming call notification failed: ${error.runtimeType}');
+          }
           return;
         }
         if (phase == 'incoming') {
@@ -204,19 +215,20 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         type: 'offer',
         payload: {'type': offer.type, 'sdp': offer.sdp},
       );
+      _localPosted = true;
+      await _flushLocalIce();
       _armSignals();
-      _connectionTimeout?.cancel();
-      _connectionTimeout = Timer(const Duration(seconds: 65), () {
-        if (phase != 'connected') hangUp();
-      });
+      _armConnectionTimeout();
     } on ErpException {
-      if (!_disposed && generation == _generation)
+      if (!_disposed && generation == _generation) {
         _fail('The call could not start. Check your connection.');
+      }
     } catch (_) {
-      if (!_disposed && generation == _generation)
+      if (!_disposed && generation == _generation) {
         _fail(
           'Audio could not start. Check microphone access in phone settings.',
         );
+      }
     }
   }
 
@@ -237,8 +249,9 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         _accepting ||
         phase == 'connected' ||
         phase == 'connecting' ||
-        phase == 'outgoing')
+        phase == 'outgoing') {
       return;
+    }
     _accepting = true;
     final generation = _generation;
     try {
@@ -291,10 +304,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
           incomingCallParams(callId: id, name: otherName),
         );
       } catch (_) {}
-      _connectionTimeout?.cancel();
-      _connectionTimeout = Timer(const Duration(seconds: 30), () {
-        if (phase != 'connected') hangUp();
-      });
+      _armConnectionTimeout();
     } catch (error) {
       debugPrint('Call answer failed: ${error.runtimeType}');
       await hangUp();
@@ -349,6 +359,16 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _createMedia() async {
     await PhonePermissions.startVoiceService();
+    await Helper.setAndroidAudioConfiguration(
+      AndroidAudioConfiguration(
+        manageAudioFocus: true,
+        androidAudioMode: AndroidAudioMode.inCommunication,
+        androidAudioFocusMode: AndroidAudioFocusMode.gain,
+        androidAudioStreamType: AndroidAudioStreamType.voiceCall,
+        androidAudioAttributesUsageType: AndroidAudioAttributesUsageType.voiceCommunication,
+        androidAudioAttributesContentType: AndroidAudioAttributesContentType.speech,
+      ),
+    );
     await WebRTC.initialize(
       options: {'androidUseHardwareAudioProcessing': false},
     );
@@ -369,49 +389,103 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
       await _pc!.addTrack(track, _local!);
     }
     _pc!.onIceCandidate = (candidate) {
-      final callId = _callId;
-      final session = model.session;
-      if (callId == null ||
-          session == null ||
-          candidate.candidate == null ||
-          candidate.candidate!.isEmpty)
+      if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
+      final payload = {
+        'candidate': candidate.candidate,
+        'sdpMid': candidate.sdpMid,
+        'sdpMLineIndex': candidate.sdpMLineIndex,
+      };
+      if (!_localPosted || _callId == null) {
+        _localIce.add(payload);
         return;
-      model.api
-          .sendCallSignal(
-            session: session,
-            callId: callId,
-            type: 'ice',
-            payload: {
-              'candidate': candidate.candidate,
-              'sdpMid': candidate.sdpMid,
-              'sdpMLineIndex': candidate.sdpMLineIndex,
-            },
-          )
-          .catchError((Object error) {
-            debugPrint('Call ICE send failed: ${error.runtimeType}');
-          });
+      }
+      _sendIce(payload);
+    };
+    _pc!.onTrack = (event) {
+      if (event.streams.isNotEmpty) _remote = event.streams.first;
+      event.track.enabled = true;
     };
     _pc!.onConnectionState = (state) {
-      if (_disposed || _pc != peer || phase == 'ended' || phase == 'idle')
-        return;
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-        _connectionTimeout?.cancel();
-        _connectedAt ??= DateTime.now();
-        _clock ??= Timer.periodic(
-          const Duration(seconds: 1),
-          (_) => notifyListeners(),
-        );
-        phase = 'connected';
-        notice = '';
-        notifyListeners();
-        final id = _callId;
-        if (id != null)
-          FlutterCallkitIncoming.setCallConnected(callScreenId(id))
-              .catchError((Object _) {});
+        _markConnected(peer);
       } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
-        hangUp();
+        _recoverOrEnd(peer);
       }
     };
+    _pc!.onIceConnectionState = (state) {
+      if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+          state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+        _markConnected(peer);
+      } else if (state == RTCIceConnectionState.RTCIceConnectionStateFailed) {
+        _recoverOrEnd(peer);
+      }
+    };
+  }
+
+  void _markConnected(RTCPeerConnection peer) {
+    if (_disposed || _pc != peer || phase == 'ended' || phase == 'idle' || phase == 'connected') return;
+    _connectionTimeout?.cancel();
+    _connectedAt ??= DateTime.now();
+    for (final track in _remote?.getAudioTracks() ?? const <MediaStreamTrack>[]) {
+      track.enabled = true;
+    }
+    _clock ??= Timer.periodic(const Duration(seconds: 1), (_) => notifyListeners());
+    phase = 'connected';
+    notice = '';
+    notifyListeners();
+    final id = _callId;
+    if (id != null) {
+      FlutterCallkitIncoming.setCallConnected(callScreenId(id)).catchError((Object _) {});
+    }
+  }
+
+  void _recoverOrEnd(RTCPeerConnection peer) {
+    if (_disposed || _pc != peer || phase == 'ended' || phase == 'idle' || phase == 'connected') return;
+    if (!_iceRestarted && _remoteReady) {
+      _iceRestarted = true;
+      peer.restartIce().catchError((Object error) {
+        debugPrint('Call ICE restart failed: ${error.runtimeType}');
+      });
+      return;
+    }
+    hangUp();
+  }
+
+  void _sendIce(Map<String, dynamic> payload) {
+    final callId = _callId;
+    final session = model.session;
+    if (callId == null || session == null) {
+      _localIce.add(payload);
+      return;
+    }
+    model.api.sendCallSignal(session: session, callId: callId, type: 'ice', payload: payload).catchError((Object error) {
+      debugPrint('Call ICE send failed: ${error.runtimeType}');
+    });
+  }
+
+  Future<void> _flushLocalIce() async {
+    final queued = List<Map<String, dynamic>>.from(_localIce);
+    _localIce.clear();
+    for (final payload in queued) {
+      _sendIce(payload);
+    }
+  }
+
+  void _armConnectionTimeout() {
+    _connectionTimeout?.cancel();
+    _connectionTimeout = Timer(const Duration(seconds: 50), () async {
+      if (phase == 'connected' || _disposed) return;
+      try {
+        final ice = await _pc?.getIceConnectionState();
+        if (ice == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+            ice == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+          final peer = _pc;
+          if (peer != null) _markConnected(peer);
+          return;
+        }
+      } catch (_) {}
+      if (phase != 'connected') hangUp();
+    });
   }
 
   void _armSignals() {
@@ -461,13 +535,14 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
       if (_pc != peer || _callId != callId || generation != _generation) return;
       for (final row in rows) {
         if (generation != _generation) return;
-        _afterSignal = asInt(row['id']) > _afterSignal
-            ? asInt(row['id'])
-            : _afterSignal;
+        final id = asInt(row['id']);
         final type = asText(row['signal_type']);
         final payload = row['payload'] is Map
             ? Map<String, dynamic>.from(row['payload'] as Map)
             : const <String, dynamic>{};
+        if (type == 'answer' && !_remoteReady && peer.signalingState != RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
+          break;
+        }
         if (type == 'offer' && !_remoteReady) {
           await peer.setRemoteDescription(
             RTCSessionDescription(
@@ -485,9 +560,9 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
             type: 'answer',
             payload: {'type': answer.type, 'sdp': answer.sdp},
           );
-        } else if (type == 'answer' &&
-            peer.signalingState ==
-                RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
+          _localPosted = true;
+          await _flushLocalIce();
+        } else if (type == 'answer' && !_remoteReady) {
           await peer.setRemoteDescription(
             RTCSessionDescription(
               asText(payload['sdp']),
@@ -508,6 +583,12 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
             _queuedIce.add(ice);
           }
         }
+        if (id > _afterSignal) _afterSignal = id;
+      }
+      final iceState = await peer.getIceConnectionState();
+      if (iceState == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+          iceState == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+        _markConnected(peer);
       }
     } on ErpException {
       return;
@@ -532,9 +613,10 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     notice = message;
     phase = 'ended';
     final id = _callId;
-    if (id != null)
+    if (id != null) {
       FlutterCallkitIncoming.endCall(callScreenId(id))
           .catchError((Object _) {});
+    }
     _releaseMedia();
     notifyListeners();
     _dismiss?.cancel();
@@ -573,7 +655,11 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
           debugPrint('Call cleanup failed: ${error.runtimeType}');
         });
     _remoteReady = false;
+    _localPosted = false;
+    _iceRestarted = false;
     _queuedIce.clear();
+    _localIce.clear();
+    _remote = null;
     _afterSignal = 0;
   }
 
@@ -651,14 +737,14 @@ class CallCover extends StatelessWidget {
                 children: [
                   Icon(Icons.graphic_eq, color: Color(0xFF8BD6B8), size: 18),
                   SizedBox(width: 8),
-                  Text(
+                  Flexible(child: Text(
                     'HISBENEW VOICE',
                     style: TextStyle(
                       color: Color(0xFF8BD6B8),
                       letterSpacing: 2,
                       fontSize: 12,
                     ),
-                  ),
+                  )),
                 ],
               ),
               const Spacer(),

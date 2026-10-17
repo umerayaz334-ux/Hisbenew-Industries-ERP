@@ -1183,6 +1183,7 @@ class InternalMessage(Base):
     sender_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     recipient_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     body = Column(Text, nullable=False)
+    client_request_id = Column(String(128), nullable=True, unique=True, index=True)
     attachment_url = Column(Text, nullable=True)
     attachment_name = Column(String, nullable=True)
     attachment_type = Column(String, nullable=True)
@@ -1600,6 +1601,7 @@ class WorkerExpense(Base):
     spent_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    client_request_id = Column(String(128), nullable=True, unique=True, index=True)
 
     worker = relationship("Worker", back_populates="expenses")
 

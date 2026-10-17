@@ -1285,6 +1285,8 @@ def migrate_database():
             connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR"))
             connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR"))
             connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_size INTEGER"))
+            connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS client_request_id VARCHAR(128)"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_internal_messages_client_request_id ON internal_messages(client_request_id)"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS image_url TEXT"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES service_taker_products(id)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_service_taker_manufacturing_product_id ON service_taker_manufacturing_orders(product_id)"))
@@ -1352,6 +1354,8 @@ def migrate_database():
             """))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_worker_expenses_tenant_id ON worker_expenses(tenant_id)"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_worker_expenses_worker_id ON worker_expenses(worker_id)"))
+            connection.execute(text("ALTER TABLE worker_expenses ADD COLUMN IF NOT EXISTS client_request_id VARCHAR(128)"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_worker_expenses_client_request_id ON worker_expenses(client_request_id)"))
             ensure_website_visitor_chat_schema(connection)
         return
     with engine.connect() as connection:
@@ -1639,9 +1643,11 @@ def migrate_database():
                 ("attachment_name", "VARCHAR"),
                 ("attachment_type", "VARCHAR"),
                 ("attachment_size", "INTEGER"),
+                ("client_request_id", "VARCHAR(128)"),
             ):
                 if column_name not in internal_message_columns:
                     connection.execute(text(f"ALTER TABLE internal_messages ADD COLUMN {column_name} {column_def}"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_internal_messages_client_request_id ON internal_messages(client_request_id)"))
             connection.execute(text("""
                 CREATE TABLE IF NOT EXISTS internal_message_contact_requests (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1808,6 +1814,11 @@ def migrate_database():
                     FOREIGN KEY(created_by_user_id) REFERENCES users(id)
                 )
             """))
+            connection.commit()
+            columns = [row[1] for row in connection.execute(text("PRAGMA table_info(worker_expenses)"))]
+            if "client_request_id" not in columns:
+                connection.execute(text("ALTER TABLE worker_expenses ADD COLUMN client_request_id VARCHAR(128)"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_worker_expenses_client_request_id ON worker_expenses(client_request_id)"))
             connection.commit()
             print("Created worker_expenses table (or already exists)")
         except Exception as e:

@@ -91,6 +91,7 @@ function Messages() {
   const [conversation, setConversation] = useState([]);
   const [draft, setDraft] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [choosingPerson, setChoosingPerson] = useState(false);
   const [attachment, setAttachment] = useState(null);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [loadingConversation, setLoadingConversation] = useState(false);
@@ -121,14 +122,15 @@ function Messages() {
 
   const filteredPeople = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return people;
-    return people.filter(
+    const candidates = choosingPerson ? people : people.filter((person) => person.last_message_at || Number(person.unread_count) > 0);
+    if (!query) return candidates;
+    return candidates.filter(
       (person) =>
         (person.name || "").toLowerCase().includes(query) ||
         (person.role || "").toLowerCase().includes(query) ||
         (person.username || "").toLowerCase().includes(query)
     );
-  }, [people, searchQuery]);
+  }, [people, searchQuery, choosingPerson]);
 
   const mobileVoiceSetup = useMemo(() => {
     if (typeof window === "undefined" || window.isSecureContext) return null;
@@ -148,7 +150,7 @@ function Messages() {
       setPeople(nextPeople);
       setSelectedUserId((currentId) => {
         if (currentId && nextPeople.some((person) => person.id === currentId)) return currentId;
-        return nextPeople[0]?.id || null;
+        return null;
       });
       setError("");
     } catch (loadError) {
@@ -364,15 +366,21 @@ function Messages() {
       >
         <aside className="erp-messages-people">
           <div className="erp-messages-people-head">
-            <h2>Messenger</h2>
-            <span>{filteredPeople.length}</span>
+            <h2>{choosingPerson ? "New chat" : "Chats"}</h2>
+            <button
+              type="button"
+              className="erp-messages-new-chat"
+              aria-label={choosingPerson ? "Back to chats" : "New chat"}
+              title={choosingPerson ? "Back to chats" : "New chat"}
+              onClick={() => { setChoosingPerson(!choosingPerson); setSearchQuery(""); if (!choosingPerson) loadPeople(); }}
+            >{choosingPerson ? <BackIcon /> : "+"}</button>
           </div>
 
           <div className="erp-messages-search-wrap">
             <input
               className="erp-messages-search-input"
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search coworkers..."
+              placeholder={choosingPerson ? "Search coworkers..." : "Search chats..."}
               type="text"
               value={searchQuery}
             />
@@ -382,7 +390,7 @@ function Messages() {
             <div className="erp-messages-empty">Loading contacts...</div>
           ) : filteredPeople.length === 0 ? (
             <div className="erp-messages-empty">
-              {searchQuery ? "No matching contacts found." : "No coworkers are available yet."}
+              {searchQuery ? "No matches found." : choosingPerson ? "No coworkers are available yet." : "No conversations yet. Tap + to start a chat."}
             </div>
           ) : (
             <div className="erp-messages-person-list">
@@ -394,6 +402,8 @@ function Messages() {
                   key={person.id}
                   onClick={() => {
                     setSelectedUserId(person.id);
+                    setChoosingPerson(false);
+                    setSearchQuery("");
                     setMobileChatOpen(true);
                   }}
                   type="button"

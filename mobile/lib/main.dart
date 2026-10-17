@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'l10n/app_localizations.dart';
 import 'src/app_model.dart';
+import 'src/app_loader.dart';
 import 'src/screens.dart';
 import 'src/theme.dart';
 import 'src/worker_portal.dart';
@@ -37,7 +38,7 @@ class HisbenewApp extends StatelessWidget {
             GlobalCupertinoLocalizations.delegate,
           ],
           home: model.booting
-              ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+              ? const AppLoader(fullScreen: true)
               : model.session == null
                   ? LoginScreen(model: model)
                   : model.isWorker

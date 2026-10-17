@@ -18,6 +18,7 @@ const messageChannel = 'hisbenew_messages';
 List<Map<String, dynamic>> relayIceServers() => const [
   {'urls': 'stun:stun.cloudflare.com:3478'},
   {'urls': 'stun:stun.l.google.com:19302'},
+  {'urls': 'stun:stun.relay.metered.ca:80'},
   {
     'urls': 'turn:global.relay.metered.ca:80',
     'username': 'openrelayproject',
@@ -83,6 +84,20 @@ CallKitParams incomingCallParams({required int callId, required String name}) {
 var _shownIncomingId = 0;
 final Set<int> _answeredCallIds = {};
 
+Future<void> showIncomingIfNeeded(int callId, String name) async {
+  if (callId <= 0) return;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  if (prefs.getInt('erp.skipMissedCall') == callId ||
+      prefs.getInt('erp.pendingAcceptCall') == callId) {
+    return;
+  }
+  final active = await FlutterCallkitIncoming.activeCalls();
+  if (active.any((call) => call.id == callScreenId(callId))) return;
+  await prefs.setString('erp.ringingName', name);
+  await FlutterCallkitIncoming.showCallkitIncoming(incomingCallParams(callId: callId, name: name));
+}
+
 Future<void> watchIncomingCall(String token) async {
   try {
     final response = await http
@@ -122,10 +137,7 @@ Future<void> watchIncomingCall(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
     if (prefs.getInt('erp.skipMissedCall') == callId || prefs.getInt('erp.pendingAcceptCall') == callId) return;
-    await prefs.setString('erp.ringingName', name);
-    await FlutterCallkitIncoming.showCallkitIncoming(
-      incomingCallParams(callId: callId, name: name),
-    );
+    await showIncomingIfNeeded(callId, name);
     _shownIncomingId = callId;
   } catch (_) {}
 }
@@ -144,8 +156,9 @@ Future<void> _hideShownCall() async {
   final accepted = prefs.getInt('erp.pendingAcceptCall') ?? 0;
   if (_answeredCallIds.contains(callId) ||
       skipped == callId ||
-      accepted == callId)
+      accepted == callId) {
     return;
+  }
   final name = prefs.getString('erp.ringingName') ?? '';
   await noteMissedCall(name);
 }
@@ -253,7 +266,8 @@ Future<void> retryPendingDecline(String token) async {
           body: jsonEncode({'action': 'decline'}),
         )
         .timeout(const Duration(seconds: 8));
-    if ([200, 404, 409].contains(response.statusCode))
+    if ([200, 404, 409].contains(response.statusCode)) {
       await prefs.remove('erp.pendingDeclineCall');
+    }
   } catch (_) {}
 }

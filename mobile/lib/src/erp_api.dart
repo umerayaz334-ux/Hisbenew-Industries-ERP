@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'dashboard_data.dart';
+import 'offline_store.dart';
 
 const erpApiBase = 'https://api.hisbenew.com';
 
@@ -69,6 +70,66 @@ class ErpApi {
   ErpApi({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
+  final offline = OfflineStore();
+  Future<List<String>> pageAccess(ErpSession session) async {
+    final result = await _send(method: 'GET', url: '${session.baseUrl}/mobile-access', token: session.token);
+    return (result['allowed_pages'] as List).cast<String>();
+  }
+  Future<void>? _syncing;
+  String _account(ErpSession session) => '${session.baseUrl}|${session.tenantSlug}|${session.username}|${session.workerId}';
+
+  Future<List<Map<String, dynamic>>> _cachedList(ErpSession session, String path) async {
+    try {
+      final rows = await _sendList(url: '${session.baseUrl}$path', token: session.token).timeout(const Duration(seconds: 8));
+      await offline.saveCache(_account(session), path, rows);
+      return rows;
+    } on TimeoutException {
+      offline.markOffline();
+      return await offline.cache(_account(session), path) ?? [];
+    } on ErpException catch (error) {
+      if (error.code == 'invalidLogin') rethrow;
+      if (error.code != 'denied') offline.markOffline();
+      return await offline.cache(_account(session), path) ?? [];
+    }
+  }
+
+  Future<void> syncExpenses(ErpSession session) => _syncing ??= _syncExpenses(session).whenComplete(() => _syncing = null);
+  Future<void> _syncExpenses(ErpSession session) async {
+    final account = _account(session);
+    await offline.refresh(account);
+    final rows = await offline.expenses(account);
+    if (rows.isEmpty) return;
+    try {
+      final capabilities = await _send(method: 'GET', url: '${session.baseUrl}/worker-expenses/sync-capabilities', token: session.token).timeout(const Duration(seconds: 8));
+      if (capabilities['idempotent_expenses'] != true) {
+        offline.notice('Saved on this phone. Server update required before syncing.');
+        return;
+      }
+      for (final row in rows) {
+        final saved = await _send(method: 'POST', url: '${session.baseUrl}/worker-expenses', token: session.token, body: row).timeout(const Duration(seconds: 12));
+        if (saved['client_request_id'] != row['client_request_id']) {
+          offline.notice('Saved locally. Server sync confirmation is missing.');
+          return;
+        }
+        // Cache the confirmed row before removing it from the outbox.
+        final path = '/worker-expenses?worker_id=${session.workerId}';
+        final cached = await offline.cache(account, path) ?? [];
+        cached.removeWhere((item) => item['id'] == saved['id'] || item['client_request_id'] == row['client_request_id']);
+        cached.add(saved);
+        await offline.saveCache(account, path, cached);
+        await offline.acknowledge(account, '${row['client_request_id']}');
+      }
+      offline.notice('All spending synced');
+    } on TimeoutException {
+      offline.markOffline();
+      offline.notice('Saved on this phone. Sync will retry automatically.');
+    } on ErpException catch (error) {
+      if (error.code == 'unreachable') offline.markOffline();
+      offline.notice(error.code == 'invalidLogin' ? 'Sign in again to sync saved spending.' : 'Saved on this phone. Waiting for the server to accept sync.');
+    } on StateError {
+      offline.notice('Phone storage is unavailable. Your pending spending has not been removed.');
+    }
+  }
 
   Future<ErpSession> login({
     required String username,
@@ -98,8 +159,8 @@ class ErpApi {
   }
 
   Future<List<ShipmentRecord>> shipments(ErpSession session) async {
-    final records = await _sendList(url: '${session.baseUrl}/shipping', token: session.token);
-    final orders = await _sendList(url: '${session.baseUrl}/orders', token: session.token);
+    final records = await _cachedList(session, '/shipping');
+    final orders = await _cachedList(session, '/orders');
     final unitsByOrder = <int, int>{};
     final itemsByOrder = <int, List<ItemShot>>{};
     for (final order in orders) {
@@ -138,7 +199,7 @@ class ErpApi {
   }
 
   Future<List<Map<String, dynamic>>> products(ErpSession session) async {
-    return _sendList(url: '${session.baseUrl}/products', token: session.token);
+    return _cachedList(session, '/products');
   }
 
   Future<List<String>> labelPrinters(ErpSession session) async {
@@ -202,11 +263,11 @@ class ErpApi {
   }
 
   Future<List<Map<String, dynamic>>> orders(ErpSession session) async {
-    return _sendList(url: '${session.baseUrl}/orders', token: session.token);
+    return _cachedList(session, '/orders');
   }
 
   Future<List<Map<String, dynamic>>> pendingShipping(ErpSession session) async {
-    return _sendList(url: '${session.baseUrl}/shipping/pending', token: session.token);
+    return _cachedList(session, '/shipping/pending');
   }
 
   Future<void> markShipped({
@@ -295,39 +356,113 @@ class ErpApi {
 
   Future<List<Map<String, dynamic>>> workerTasks(ErpSession session) async {
     if (session.workerId <= 0) return const [];
-    return _sendList(url: '${session.baseUrl}/production/tasks?worker_id=${session.workerId}', token: session.token);
+    return _cachedList(session, '/production/tasks?worker_id=${session.workerId}');
   }
 
   Future<List<Map<String, dynamic>>> workerOrderTasks(ErpSession session) async {
     if (session.workerId <= 0) return const [];
-    return _sendList(url: '${session.baseUrl}/order-workflow/tasks?worker_id=${session.workerId}', token: session.token);
+    return _cachedList(session, '/order-workflow/tasks?worker_id=${session.workerId}');
   }
 
   Future<List<Map<String, dynamic>>> workerPayments(ErpSession session) async {
     if (session.workerId <= 0) return const [];
-    return _sendList(url: '${session.baseUrl}/worker-payments?worker_id=${session.workerId}', token: session.token);
+    return _cachedList(session, '/worker-payments?worker_id=${session.workerId}');
   }
 
   Future<List<Map<String, dynamic>>> workerExpenses(ErpSession session) async {
     if (session.workerId <= 0) return const [];
-    return _sendList(url: '${session.baseUrl}/worker-expenses?worker_id=${session.workerId}', token: session.token);
+    final rows = await _cachedList(session, '/worker-expenses?worker_id=${session.workerId}');
+    final pending = await offline.expenses(_account(session));
+    final confirmed = rows.map((row) => row['client_request_id']).whereType<String>().toSet();
+    return [...rows, for (final row in pending) if (!confirmed.contains(row['client_request_id'])) {...row, 'pending_sync': true}];
+  }
+
+  Future<void>? _syncingMessages;
+  Future<void> syncMessages(ErpSession session) => _syncingMessages ??= _syncMessages(session).whenComplete(() => _syncingMessages = null);
+  Future<void> _syncMessages(ErpSession session) async {
+    final account = _account(session);
+    await offline.refresh(account);
+    final rows = await offline.messages(account);
+    if (rows.isEmpty) return;
+    try {
+      for (final row in List<Map<String, dynamic>>.from(rows)) {
+        final saved = await _send(
+          method: 'POST',
+          url: '${session.baseUrl}/internal-messages',
+          token: session.token,
+          body: row,
+        ).timeout(const Duration(seconds: 12));
+        final savedId = saved['client_request_id'];
+        final confirmed = savedId == row['client_request_id'] || (saved['id'] != null && savedId == null && saved['body'] == row['body']);
+        if (!confirmed) {
+          offline.notice('Message saved on this phone. Waiting for the server to confirm it.');
+          return;
+        }
+        final path = '/internal-messages?user_id=${row['recipient_user_id']}';
+        final cached = await offline.cache(account, path) ?? [];
+        cached.removeWhere((item) => item['id'] == saved['id'] || item['client_request_id'] == row['client_request_id']);
+        cached.add(saved);
+        await offline.saveCache(account, path, cached);
+        await offline.acknowledgeMessage(account, '${row['client_request_id']}');
+      }
+      offline.notice(offline.pendingExpenses > 0 ? 'Messages synced' : 'All saved items synced');
+    } on TimeoutException {
+      offline.markOffline();
+      offline.notice('Messages saved on this phone. They will send when the connection returns.');
+    } on ErpException catch (error) {
+      if (error.code == 'unreachable') offline.markOffline();
+      offline.notice('Messages saved on this phone. They will send when the connection returns.');
+    } on StateError {
+      offline.notice('Phone storage is unavailable. Pending messages have not been removed.');
+    }
   }
 
   Future<List<Map<String, dynamic>>> messageUsers(ErpSession session) async {
-    return _sendList(url: '${session.baseUrl}/internal-message-users', token: session.token);
+    final people = await _cachedList(session, '/internal-message-users');
+    final pending = await offline.messages(_account(session));
+    final byId = <int, Map<String, dynamic>>{};
+    for (final person in people) {
+      final id = int.tryParse('${person['id']}') ?? 0;
+      if (id > 0) byId[id] = person;
+    }
+    for (final row in pending) {
+      final person = byId[int.tryParse('${row['recipient_user_id']}') ?? 0];
+      if (person == null) continue;
+      person['last_message_at'] = row['created_at'];
+    }
+    return people;
   }
 
   Future<List<Map<String, dynamic>>> messages(ErpSession session, int userId) async {
-    return _sendList(url: '${session.baseUrl}/internal-messages?user_id=$userId', token: session.token);
+    final rows = await _cachedList(session, '/internal-messages?user_id=$userId');
+    final pending = await offline.messages(_account(session));
+    final confirmed = rows.map((row) => row['client_request_id']).whereType<String>().toSet();
+    return [
+      ...rows,
+      for (final row in pending)
+        if ((int.tryParse('${row['recipient_user_id']}') ?? 0) == userId && !confirmed.contains(row['client_request_id']))
+          {
+            'id': 0,
+            'client_request_id': row['client_request_id'],
+            'recipient_user_id': userId,
+            'body': row['body'],
+            'is_mine': true,
+            'pending_sync': true,
+            'created_at': row['created_at'],
+          },
+    ];
   }
 
   Future<void> sendMessage({required ErpSession session, required int userId, required String body}) async {
-    await _send(
-      method: 'POST',
-      url: '${session.baseUrl}/internal-messages',
-      token: session.token,
-      body: {'recipient_user_id': userId, 'body': body.trim()},
-    );
+    final text = body.trim();
+    if (userId <= 0 || text.isEmpty) throw const ErpException('server');
+    await offline.enqueueMessage(_account(session), {
+      'client_request_id': OfflineStore.newId(),
+      'recipient_user_id': userId,
+      'body': text,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    unawaited(syncMessages(session));
   }
 
   Future<Map<String, dynamic>?> activeCall(ErpSession session) async {
@@ -392,16 +527,14 @@ class ErpApi {
     required String note,
     required DateTime spentAt,
   }) async {
-    await _send(
-      method: 'POST',
-      url: '${session.baseUrl}/worker-expenses',
-      token: session.token,
-      body: {
+    if (!amount.isFinite || amount <= 0 || note.trim().isEmpty || session.workerId <= 0) throw const ErpException('invalidExpense');
+    await offline.enqueue(_account(session), {
+        'client_request_id': OfflineStore.newId(),
         'amount': amount,
         'note': note.trim(),
         'spent_at': spentAt.toUtc().toIso8601String(),
-      },
-    );
+    });
+    unawaited(syncExpenses(session));
   }
 
   Future<DashboardData> dashboard(ErpSession session) async {
@@ -479,7 +612,12 @@ class ErpApi {
       }
     }
 
-    if (response.statusCode == 401 || response.statusCode == 403) {
+    if (response.statusCode == 401) {
+      throw const ErpException('invalidLogin');
+    }
+    if (response.statusCode == 403) {
+      final detail = decoded is Map ? '${decoded['detail']}' : '';
+      if (detail.contains('access is required')) throw const ErpException('denied');
       throw const ErpException('invalidLogin');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {

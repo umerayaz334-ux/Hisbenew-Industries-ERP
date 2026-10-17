@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../l10n/app_localizations.dart';
 import 'app_model.dart';
+import 'app_loader.dart';
 import 'call_desk.dart';
 import 'dashboard_data.dart';
 import 'erp_api.dart';
@@ -15,6 +16,9 @@ import 'shipping_page.dart';
 import 'theme.dart';
 import 'worker_chat.dart';
 import 'notification_inbox.dart';
+import 'notification_navigation.dart';
+import 'orders_page.dart';
+import 'products_page.dart';
 
 class WorkerPortal extends StatefulWidget {
   const WorkerPortal({required this.model, super.key});
@@ -38,21 +42,34 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
   List<Map<String, dynamic>> _expenses = const [];
   var _unread = 0;
   Timer? _unreadTimer;
+  Timer? _syncTimer;
 
   @override
   void initState() {
     super.initState();
+    widget.model.addListener(_onAccess);
+    notificationChat.addListener(_openNotificationChat);
+    if (notificationChat.value != null) _index = 2;
     WidgetsBinding.instance.addObserver(this);
     _load();
     _refreshUnread();
     _unreadTimer = Timer.periodic(const Duration(seconds: 8), (_) => _refreshUnread());
     _calls.startWatch();
     PhonePermissions.askOnce();
+    _syncTimer = Timer.periodic(const Duration(seconds: 20), (_) => _syncOffline());
+    _syncOffline();
+    final session = widget.model.session;
+    if (session != null && widget.model.canAccess('Products')) {
+      widget.model.api.products(session).catchError((_) => <Map<String, dynamic>>[]);
+    }
   }
 
   @override
   void dispose() {
+    widget.model.removeListener(_onAccess);
+    notificationChat.removeListener(_openNotificationChat);
     _unreadTimer?.cancel();
+    _syncTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _calls.dispose();
     super.dispose();
@@ -60,7 +77,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
 
   Future<void> _refreshUnread() async {
     final session = widget.model.session;
-    if (session == null) return;
+    if (session == null || !_allow('Messages')) return;
     try {
       final people = await widget.model.api.messageUsers(session);
       if (!mounted) return;
@@ -71,11 +88,26 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     }
   }
 
+  void _openNotificationChat() {
+    if (mounted && notificationChat.value != null) _open(2);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _calls.answerIfWaiting();
+      widget.model.refreshAccess();
+      _syncOffline();
     }
+  }
+
+  Future<void> _syncOffline() async {
+    final session = widget.model.session;
+    if (session == null) return;
+    final before = widget.model.api.offline.pending;
+    await widget.model.api.syncExpenses(session);
+    await widget.model.api.syncMessages(session);
+    if (mounted && before > 0 && widget.model.api.offline.pending == 0) _load();
   }
 
   Future<void> _load() async {
@@ -86,12 +118,12 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       _error = false;
     });
     try {
-      final pendingFuture = widget.model.api.pendingShipping(session);
-      final tasksFuture = widget.model.api.workerTasks(session);
-      final orderTasksFuture = widget.model.api.workerOrderTasks(session);
-      final paymentsFuture = widget.model.api.workerPayments(session);
-      final expensesFuture = widget.model.api.workerExpenses(session);
-      final shippedFuture = widget.model.api.shipments(session);
+      final pendingFuture = _allow('Shipping') ? widget.model.api.pendingShipping(session) : Future.value(const <Map<String, dynamic>>[]);
+      final tasksFuture = _allow('My Tasks') ? widget.model.api.workerTasks(session) : Future.value(const <Map<String, dynamic>>[]);
+      final orderTasksFuture = _allow('My Tasks') ? widget.model.api.workerOrderTasks(session) : Future.value(const <Map<String, dynamic>>[]);
+      final paymentsFuture = _allow('Worker Payouts') ? widget.model.api.workerPayments(session) : Future.value(const <Map<String, dynamic>>[]);
+      final expensesFuture = _allow('Worker Payouts') ? widget.model.api.workerExpenses(session) : Future.value(const <Map<String, dynamic>>[]);
+      final shippedFuture = _allow('Shipping') ? widget.model.api.shipments(session) : Future.value(const <ShipmentRecord>[]);
       final pending = await pendingFuture;
       final tasks = await tasksFuture;
       final orderTasks = await orderTasksFuture;
@@ -119,7 +151,27 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     }
   }
 
-  void _open(int index) => setState(() { _index = index; _notifications = false; });
+  void _onAccess() {
+    if (!mounted) return;
+    var index = _index;
+    if (index == 1 && !_allow('Shipping')) index = 0;
+    if (index == 2 && !_allow('Messages')) index = 0;
+    if (index == 3 && !_allow('Worker Payouts')) index = 0;
+    if (index == 5 && !_allow('Orders')) index = 0;
+    if (index == 6 && !_allow('Products')) index = 0;
+    if (index != _index) setState(() => _index = index);
+  }
+
+  bool _allow(String page) => widget.model.canAccess(page);
+
+  void _open(int index) {
+    if (index == 1 && !_allow('Shipping')) index = 0;
+    if (index == 2 && !_allow('Messages')) index = 0;
+    if (index == 3 && !_allow('Worker Payouts')) index = 0;
+    if (index == 5 && !_allow('Orders')) index = 0;
+    if (index == 6 && !_allow('Products')) index = 0;
+    setState(() { _index = index; _notifications = false; });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -137,6 +189,8 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
         onOpenPayouts: () => _open(3),
         onOpenShipping: () => _open(1),
         onOpenChat: () => _open(2),
+        onOpenOrders: () => _open(5),
+        onOpenProducts: () => _open(6),
         unread: _unread,
       ),
       ShippingPage(model: widget.model),
@@ -151,7 +205,9 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
         onRetry: _load,
         onChanged: _load,
       ),
-      _WorkerSettings(model: widget.model),
+      _WorkerSettings(model: widget.model, onProducts: () => _open(6), onOrders: () => _open(5)),
+      OrdersPage(model: widget.model),
+      ProductsPage(model: widget.model),
     ];
 
     return ListenableBuilder(
@@ -162,51 +218,78 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       body: Stack(
         children: [
           SafeArea(child: Column(children: [
-            Padding(padding: const EdgeInsets.fromLTRB(20, 4, 12, 0), child: Row(children: [
-              const Expanded(child: Text('HISBENEW', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 2, color: hisbenewForest))),
+            if (_index == 0 && !_notifications) Padding(padding: const EdgeInsets.fromLTRB(20, 4, 12, 0), child: Row(children: [
+              const Spacer(),
               NotificationBell(count: _unread, onTap: () => setState(() => _notifications = !_notifications)),
             ])),
+            if (_index > 4 && !_notifications) Row(children: [IconButton(onPressed: () => _open(0), icon: const Icon(Icons.arrow_back)), Text(_index == 5 ? 'Orders' : 'Products', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700))]),
+            ListenableBuilder(listenable: widget.model.api.offline, builder: (context, _) {
+              final store = widget.model.api.offline;
+              if (!store.offline && store.pending == 0) return const SizedBox.shrink();
+              return Material(color: const Color(0xFFFFF3D5), child: ListTile(dense: true,
+                leading: Icon(store.offline ? Icons.cloud_off : Icons.cloud_upload_outlined, size: 20),
+                title: Text(store.offline
+                    ? 'Offline · showing saved data'
+                    : '${store.pending} saved item${store.pending == 1 ? '' : 's'} waiting to sync'),
+                subtitle: Text(store.pending > 0
+                    ? (store.syncNotice.isNotEmpty
+                        ? store.syncNotice
+                        : 'Orders, products, spendings, and messages stay on this phone until the connection returns.')
+                    : 'Only previously downloaded information is available.'),
+                trailing: IconButton(tooltip: 'Sync now', icon: const Icon(Icons.sync), onPressed: () async { await _syncOffline(); await _load(); }),
+              ));
+            }),
             Expanded(child: _notifications ? NotificationInbox(model: widget.model,
               onClose: () => setState(() => _notifications = false), onChat: () => _open(2), onShipping: () => _open(1)) : pages[_index]),
           ])),
           if (_calls.phase != 'idle') CallCover(desk: _calls),
         ],
       ),
-      bottomNavigationBar: _calls.phase != 'idle' ? null : NavigationBar(
-        selectedIndex: _index,
+      bottomNavigationBar: _calls.phase != 'idle' ? null : Builder(builder: (context) {
+        final nav = <int>[
+          0,
+          if (_allow('Shipping')) 1,
+          if (_allow('Messages')) 2,
+          if (_allow('Worker Payouts')) 3,
+          4,
+        ];
+        final selected = nav.indexOf(_index > 4 ? 0 : _index);
+        return NavigationBar(
+        selectedIndex: selected < 0 ? 0 : selected,
         height: 68,
         backgroundColor: Colors.white,
         indicatorColor: const Color(0xFFF3E6C8),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        onDestinationSelected: _open,
+        onDestinationSelected: (slot) => _open(nav[slot]),
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.space_dashboard_outlined),
             selectedIcon: const Icon(Icons.space_dashboard_rounded),
             label: phrase(context, 'Today', 'آج'),
           ),
-          NavigationDestination(
+          if (_allow('Shipping')) NavigationDestination(
             icon: const Icon(Icons.local_shipping_outlined),
             selectedIcon: const Icon(Icons.local_shipping_rounded),
             label: phrase(context, 'Queue', 'قطار'),
           ),
-          NavigationDestination(
+          if (_allow('Messages')) NavigationDestination(
             icon: _ChatIcon(unread: _unread, selected: false),
             selectedIcon: _ChatIcon(unread: _unread, selected: true),
             label: phrase(context, 'Chat', 'چیٹ'),
           ),
-          NavigationDestination(
+          if (_allow('Worker Payouts')) NavigationDestination(
             icon: const Icon(Icons.account_balance_wallet_outlined),
             selectedIcon: const Icon(Icons.account_balance_wallet_rounded),
             label: phrase(context, 'Pay', 'رقم'),
           ),
           NavigationDestination(
-            icon: const Icon(Icons.person_outline_rounded),
-            selectedIcon: const Icon(Icons.person_rounded),
-            label: phrase(context, 'Account', 'اکاؤنٹ'),
+            icon: const Icon(Icons.menu_rounded),
+            selectedIcon: const Icon(Icons.menu_rounded),
+            label: phrase(context, 'Menu', 'مینو'),
           ),
         ],
-      ),
+      );
+      }),
         );
       },
     );
@@ -251,6 +334,8 @@ class _WorkerHome extends StatelessWidget {
     required this.onOpenPayouts,
     required this.onOpenShipping,
     required this.onOpenChat,
+    required this.onOpenOrders,
+    required this.onOpenProducts,
     required this.unread,
   });
 
@@ -266,6 +351,8 @@ class _WorkerHome extends StatelessWidget {
   final VoidCallback onOpenPayouts;
   final VoidCallback onOpenShipping;
   final VoidCallback onOpenChat;
+  final VoidCallback onOpenOrders;
+  final VoidCallback onOpenProducts;
   final int unread;
 
   @override
@@ -287,36 +374,49 @@ class _WorkerHome extends StatelessWidget {
           Text(DateFormat.yMMMEd().format(DateTime.now()), style: const TextStyle(color: hisbenewMuted, fontSize: 13)),
           const SizedBox(height: 18),
           if (loading)
-            const Padding(padding: EdgeInsets.only(top: 64), child: Center(child: CircularProgressIndicator(color: hisbenewForest, strokeWidth: 2)))
+            const AppLoader()
           else if (error)
             FilledButton(onPressed: onRetry, child: Text(phrase(context, 'Try again', 'دوبارہ کوشش')))
           else ...[
-            _BalanceCard(money: money, onOpen: onOpenPayouts),
+            _TodaySummary(waiting: pending.length, moving: moving.length,
+              tasks: tasks.where((row) => !['completed', 'verified'].contains(asText(row['status']).toLowerCase())).length,
+              onTap: onOpenShipping),
+            const SizedBox(height: 20),
+            const Text('YOUR WORKSPACE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.6, color: hisbenewMuted)),
+            const SizedBox(height: 12),
+            Row(children: [
+              if (model.canAccess('Orders')) ...[
+                Expanded(child: _HomeAction(icon: Icons.receipt_long_outlined, title: 'Orders', subtitle: 'View orders', onTap: onOpenOrders)),
+                const SizedBox(width: 10),
+              ],
+              if (model.canAccess('Products')) ...[
+                Expanded(child: _HomeAction(icon: Icons.inventory_2_outlined, title: 'Products', subtitle: 'Browse stock', onTap: onOpenProducts)),
+                const SizedBox(width: 10),
+              ],
+              if (model.canAccess('Worker Payouts'))
+                Expanded(child: _HomeAction(icon: Icons.add_card_outlined, title: 'Spending', subtitle: 'Record costs', onTap: onOpenPayouts)),
+            ]),
+            if (model.canAccess('Worker Payouts')) ...[
+            const SizedBox(height: 16),
+            Material(color: Colors.white, borderRadius: BorderRadius.circular(20), child: InkWell(
+              borderRadius: BorderRadius.circular(20), onTap: onOpenPayouts,
+              child: Padding(padding: const EdgeInsets.all(18), child: Row(children: [
+                const CircleAvatar(backgroundColor: Color(0xFFEDF5EF), child: Icon(Icons.account_balance_wallet_outlined, color: hisbenewForest)),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Your balance', style: TextStyle(color: hisbenewMuted, fontSize: 12)),
+                  const SizedBox(height: 4), Text(_pkr(money.balance), style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.6)),
+                ])),
+                const Icon(Icons.arrow_forward_rounded, color: hisbenewForest),
+              ])),
+            )),
+            ],
+            if (model.canAccess('Messages')) ...[
             const SizedBox(height: 12),
             _ChatCallBar(onTap: onOpenChat, unread: unread),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _CountTile(
-                    count: pending.length,
-                    label: phrase(context, 'Waiting', 'باقی'),
-                    tint: const Color(0xFFF3E6C8),
-                    onTap: onOpenShipping,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _CountTile(
-                    count: moving.length,
-                    label: phrase(context, 'On the road', 'راستے میں'),
-                    tint: const Color(0xFFE7F2EB),
-                    onTap: onOpenShipping,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
+            ],
+            if (model.canAccess('Shipping')) ...[
+            const SizedBox(height: 24),
             _QueueBlock(
               title: phrase(context, 'Still in the factory', 'فیکٹری میں'),
               count: pending.length,
@@ -349,6 +449,7 @@ class _WorkerHome extends StatelessWidget {
                   ),
               ],
             ),
+            ],
           ],
         ],
       ),
@@ -406,7 +507,7 @@ class _PayoutPage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
         children: [
           if (loading)
-            const Padding(padding: EdgeInsets.only(top: 48), child: Center(child: CircularProgressIndicator(color: hisbenewInk, strokeWidth: 2)))
+            const AppLoader()
           else if (error)
             FilledButton(onPressed: onRetry, child: Text(phrase(context, 'Try again', 'دوبارہ کوشش')))
           else if (!linked)
@@ -431,6 +532,8 @@ class _PayoutPage extends StatelessWidget {
     final amount = TextEditingController();
     final note = TextEditingController();
     var spent = DateTime.now();
+    var saving = false;
+    String? saveError;
     await showWorkSheet(
       context: context,
       title: phrase(context, 'Factory spending', 'فیکٹری خرچ'),
@@ -465,12 +568,14 @@ class _PayoutPage extends StatelessWidget {
                 decoration: InputDecoration(labelText: phrase(context, 'Note', 'نوٹ')),
               ),
               const SizedBox(height: 14),
+              if (saveError != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(saveError!, style: const TextStyle(color: Colors.red))),
               FilledButton(
-                onPressed: () async {
+                onPressed: saving ? null : () async {
                   final value = double.tryParse(amount.text.trim()) ?? 0;
-                  if (value <= 0 || note.text.trim().isEmpty) return;
+                  if (!value.isFinite || value <= 0 || note.text.trim().isEmpty) { setSheet(() => saveError = 'Enter a positive amount and a note.'); return; }
                   final session = model.session;
                   if (session == null) return;
+                  setSheet(() { saving = true; saveError = null; });
                   try {
                     await model.api.sendWorkerExpense(
                       session: session,
@@ -478,13 +583,14 @@ class _PayoutPage extends StatelessWidget {
                       note: note.text,
                       spentAt: DateTime(spent.year, spent.month, spent.day, 12),
                     );
-                  } on ErpException {
+                  } catch (_) {
+                    if (context.mounted) setSheet(() { saving = false; saveError = 'Could not save on this phone. Please try again.'; });
                     return;
                   }
                   if (context.mounted) Navigator.pop(context);
                   await onChanged();
                 },
-                child: Text(phrase(context, 'Send', 'بھیجیں')),
+                child: Text(saving ? 'Saving…' : 'Save spending'),
               ),
             ],
           );
@@ -497,10 +603,9 @@ class _PayoutPage extends StatelessWidget {
 }
 
 class _BalanceCard extends StatelessWidget {
-  const _BalanceCard({required this.money, this.onOpen});
+  const _BalanceCard({required this.money});
 
   final _Money money;
-  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -509,7 +614,6 @@ class _BalanceCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(24),
       child: InkWell(
         borderRadius: BorderRadius.circular(24),
-        onTap: onOpen,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
           child: Column(
@@ -562,47 +666,6 @@ class _Mini extends StatelessWidget {
   }
 }
 
-class _CountTile extends StatelessWidget {
-  const _CountTile({required this.count, required this.label, required this.tint, required this.onTap});
-
-  final int count;
-  final String label;
-  final Color tint;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: hisbenewCard,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: hisbenewLine),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 28,
-                height: 4,
-                decoration: BoxDecoration(color: tint, borderRadius: BorderRadius.circular(99)),
-              ),
-              const SizedBox(height: 10),
-              Text('$count', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.6, color: hisbenewInk, height: 1)),
-              const SizedBox(height: 4),
-              Text(label, style: const TextStyle(color: hisbenewMuted, fontWeight: FontWeight.w700, fontSize: 13)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _QueueBlock extends StatelessWidget {
   const _QueueBlock({
@@ -1027,9 +1090,11 @@ class _StatementRow extends StatelessWidget {
 }
 
 class _WorkerSettings extends StatelessWidget {
-  const _WorkerSettings({required this.model});
+  const _WorkerSettings({required this.model, required this.onProducts, required this.onOrders});
 
   final AppModel model;
+  final VoidCallback onProducts;
+  final VoidCallback onOrders;
 
   @override
   Widget build(BuildContext context) {
@@ -1074,6 +1139,14 @@ class _WorkerSettings extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 18),
+        WorkCard(child: Column(children: [
+          if (model.canAccess('Products')) ...[
+            ListTile(leading: const Icon(Icons.inventory_2_outlined), title: const Text('Products'), subtitle: const Text('Browse the product catalog'), trailing: const Icon(Icons.chevron_right), onTap: onProducts),
+            const Divider(height: 1),
+          ],
+          if (model.canAccess('Orders'))
+            ListTile(leading: const Icon(Icons.receipt_long_outlined), title: const Text('Orders'), trailing: const Icon(Icons.chevron_right), onTap: onOrders),
+        ])),
         const CallPermissionTile(),
         Text(copy.switchLanguage, style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
         const SizedBox(height: 8),
@@ -1104,4 +1177,41 @@ class _WorkerSettings extends StatelessWidget {
       ],
     );
   }
+}
+
+class _TodaySummary extends StatelessWidget {
+  const _TodaySummary({required this.waiting, required this.moving, required this.tasks, required this.onTap});
+  final int waiting, moving, tasks;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF123F35), Color(0xFF236451)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(26)),
+    child: Material(color: Colors.transparent, child: InkWell(borderRadius: BorderRadius.circular(26), onTap: onTap,
+      child: Padding(padding: const EdgeInsets.all(22), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [Expanded(child: Text('TODAY AT A GLANCE', style: TextStyle(color: Color(0xFFA9D3BF), fontSize: 11, letterSpacing: 1.5, fontWeight: FontWeight.w700))), Icon(Icons.north_east, color: Colors.white70, size: 20)]),
+        const SizedBox(height: 20),
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          Text('$waiting', style: const TextStyle(color: Colors.white, fontSize: 54, fontWeight: FontWeight.w700, height: 1, letterSpacing: -2)),
+          const SizedBox(width: 16), const Expanded(child: Text('Orders ready\nto dispatch', style: TextStyle(color: Colors.white, fontSize: 17, height: 1.4))),
+        ]),
+        const SizedBox(height: 22), const Divider(color: Color(0xFF4A7968), height: 1), const SizedBox(height: 16),
+        Row(children: [Expanded(child: Text('$moving  In transit', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))), Expanded(child: Text('$tasks  Active tasks', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)))]),
+      ])),
+    )),
+  );
+}
+
+class _HomeAction extends StatelessWidget {
+  const _HomeAction({required this.icon, required this.title, required this.subtitle, required this.onTap});
+  final IconData icon;
+  final String title, subtitle;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(color: Colors.white, borderRadius: BorderRadius.circular(18), child: InkWell(
+    borderRadius: BorderRadius.circular(18), onTap: onTap, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 18), child: Column(children: [
+      Icon(icon, color: hisbenewForest, size: 26), const SizedBox(height: 12),
+      Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)), const SizedBox(height: 4),
+      Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: hisbenewMuted, fontSize: 10)),
+    ])),
+  ));
 }
