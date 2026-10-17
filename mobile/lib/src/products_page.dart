@@ -128,16 +128,28 @@ class _ProductsPageState extends State<ProductsPage> {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                     children: [
                       for (final row in visible)
-                        WorkCard(
+                        SummaryCard(
                           tint: row.lowStock ? const Color(0xFFFFF1F2) : null,
-                          child: ExpansionTile(
-                            tilePadding: const EdgeInsets.symmetric(horizontal: 14),
-                            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                            shape: const Border(),
-                            leading: ProductThumb(path: row.image, size: 52),
-                            title: Text(row.name.isEmpty ? row.article : row.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            subtitle: Text(row.article, style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
-                            trailing: Text('${row.factory}', style: TextStyle(fontWeight: FontWeight.w800, color: row.lowStock ? hisbenewClay : hisbenewForest)),
+                          sheetTitle: row.name.isEmpty ? row.article : row.name,
+                          summary: Row(
+                            children: [
+                              ProductThumb(path: row.image, size: 42),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(row.name.isEmpty ? row.article : row.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    Text(row.article, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('${row.factory}', style: TextStyle(fontWeight: FontWeight.w800, color: row.lowStock ? hisbenewClay : hisbenewForest)),
+                            ],
+                          ),
+                          details: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               DetailLine(phrase(context, 'Category', 'قسم'), row.category),
                               DetailLine(phrase(context, 'Factory', 'فیکٹری'), '${row.factory}'),
@@ -145,6 +157,7 @@ class _ProductsPageState extends State<ProductsPage> {
                               DetailLine(phrase(context, 'Front room', 'سامنے'), '${row.front}'),
                               DetailLine(phrase(context, 'Price', 'قیمت'), row.price > 0 ? usd(row.price) : ''),
                               DetailLine(phrase(context, 'Cost', 'لاگت'), row.cost > 0 ? usd(row.cost) : ''),
+                              const SizedBox(height: 6),
                               Align(
                                 alignment: Alignment.centerLeft,
                                 child: TextButton(onPressed: () => _stock(context, row), child: Text(phrase(context, 'Update stock', 'اسٹاک'))),

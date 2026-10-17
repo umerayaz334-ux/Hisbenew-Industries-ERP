@@ -168,6 +168,44 @@ class WorkCard extends StatelessWidget {
   }
 }
 
+class SummaryCard extends StatelessWidget {
+  const SummaryCard({
+    required this.summary,
+    required this.sheetTitle,
+    required this.details,
+    this.tint,
+    super.key,
+  });
+
+  final Widget summary;
+  final String sheetTitle;
+  final Widget details;
+  final Color? tint;
+
+  @override
+  Widget build(BuildContext context) {
+    return WorkCard(
+      tint: tint,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => showWorkSheet(context: context, title: sheetTitle, child: details),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Row(
+              children: [
+                Expanded(child: summary),
+                const Icon(Icons.keyboard_arrow_up_rounded, color: hisbenewMuted),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class DetailLine extends StatelessWidget {
   const DetailLine(this.label, this.value, {super.key});
 
@@ -223,19 +261,23 @@ Future<void> showWorkSheet({
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.white,
+    showDragHandle: true,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
     builder: (context) {
       return Padding(
-        padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
-              const SizedBox(height: 14),
-              child,
-            ],
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.82),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
+                const SizedBox(height: 14),
+                child,
+              ],
+            ),
           ),
         ),
       );

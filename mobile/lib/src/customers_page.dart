@@ -135,13 +135,22 @@ class _CustomersPageState extends State<CustomersPage> {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 88),
                     children: [
                       for (final row in visible)
-                        WorkCard(
-                          child: ExpansionTile(
-                            tilePadding: const EdgeInsets.symmetric(horizontal: 14),
-                            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                            shape: const Border(),
-                            title: Text(row.name.isEmpty ? '—' : row.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            subtitle: Text([row.company, row.phone, row.country].where((part) => part.isNotEmpty).join('  ·  '), style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
+                        SummaryCard(
+                          sheetTitle: row.name.isEmpty ? phrase(context, 'Customer', 'گاہک') : row.name,
+                          summary: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(row.name.isEmpty ? '—' : row.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                              Text(
+                                [row.company, row.phone, row.country].where((part) => part.isNotEmpty).join('  ·  '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: hisbenewMuted, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          details: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               DetailLine(phrase(context, 'Email', 'ای میل'), row.email),
                               DetailLine(phrase(context, 'Platform', 'پلیٹ فارم'), row.platform),

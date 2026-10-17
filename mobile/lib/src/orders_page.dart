@@ -128,21 +128,29 @@ class _OrdersPageState extends State<OrdersPage> {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                     children: [
                       for (final order in visible)
-                        WorkCard(
-                          child: ExpansionTile(
-                            tilePadding: const EdgeInsets.symmetric(horizontal: 14),
-                            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                            shape: const Border(),
-                            leading: order.items.isEmpty ? null : ProductThumb(path: order.items.first.image, size: 48),
-                            title: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(order.customer.isEmpty ? order.orderNo : order.customer, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                                Text('${prettyWhen(order.when)}  ·  ${order.orderNo}  ·  ${order.status}', style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
-                                ThumbStrip(items: order.items.skip(1).toList()),
+                        SummaryCard(
+                          sheetTitle: order.customer.isEmpty ? order.orderNo : order.customer,
+                          summary: Row(
+                            children: [
+                              if (order.items.isNotEmpty) ...[
+                                ProductThumb(path: order.items.first.image, size: 40),
+                                const SizedBox(width: 10),
                               ],
-                            ),
-                            trailing: Text(order.total > 0 ? usd(order.total) : '${order.units}', style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewForest)),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(order.customer.isEmpty ? order.orderNo : order.customer, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    Text('${prettyWhen(order.when)}  ·  ${order.orderNo}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(order.total > 0 ? usd(order.total) : '${order.units}', style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewForest)),
+                            ],
+                          ),
+                          details: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               DetailLine(phrase(context, 'Date', 'تاریخ'), prettyWhen(order.when)),
                               DetailLine(phrase(context, 'Platform', 'پلیٹ فارم'), order.platform),

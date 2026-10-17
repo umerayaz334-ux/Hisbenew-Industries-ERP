@@ -166,41 +166,55 @@ class _ShippingPageState extends State<ShippingPage> {
 }
 
 class _CollapsedTitle extends StatelessWidget {
-  const _CollapsedTitle({required this.when, required this.customer, required this.units, required this.items});
+  const _CollapsedTitle({required this.when, required this.customer, required this.units});
 
   final String when;
   final String customer;
   final int units;
-  final List<ItemShot> items;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final name = customer.trim().isEmpty ? '—' : customer.trim();
+    final date = prettyWhen(when);
+    final unitLabel = units == 1 ? phrase(context, '1 unit', '1 یونٹ') : phrase(context, '$units units', '$units یونٹس');
+    return Row(
       children: [
-        Row(
-          children: [
-            if (items.isNotEmpty) ...[
-              ProductThumb(path: items.first.image, size: 42),
-              const SizedBox(width: 8),
-            ],
-            SizedBox(
-              width: 58,
-              child: Text(prettyWhen(when), style: const TextStyle(color: hisbenewForest, fontWeight: FontWeight.w700, fontSize: 13)),
+        if (date.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: Text(
+              date,
+              maxLines: 1,
+              softWrap: false,
+              style: const TextStyle(color: hisbenewMuted, fontWeight: FontWeight.w700, fontSize: 12.5),
             ),
-            Expanded(
-              child: Text(
-                customer.isEmpty ? '—' : customer,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-              ),
-            ),
-            if (units > 0)
-              Text('$units', style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
-          ],
+          ),
+        Expanded(
+          child: Text(
+            name,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: hisbenewInk),
+          ),
         ),
-        ThumbStrip(items: items.skip(1).toList()),
+        if (units > 0) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEF2FF),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: const Color(0xFFC7D2FE)),
+            ),
+            child: Text(
+              unitLabel,
+              maxLines: 1,
+              softWrap: false,
+              style: const TextStyle(color: Color(0xFF3730A3), fontWeight: FontWeight.w800, fontSize: 12, height: 1.1),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -215,12 +229,12 @@ class _PendingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return WorkCard(
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 14),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-        shape: const Border(),
-        title: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units, items: row.items),
+    final title = row.customer.isEmpty ? row.orderNo : row.customer;
+    return SummaryCard(
+      sheetTitle: title.isEmpty ? phrase(context, 'Shipment', 'شپمنٹ') : title,
+      summary: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units),
+      details: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final item in row.items) ProductLine(item: item),
           DetailLine(phrase(context, 'Order', 'آرڈر'), row.orderNo),
@@ -228,12 +242,10 @@ class _PendingTile extends StatelessWidget {
           DetailLine(phrase(context, 'Platform', 'پلیٹ فارم'), row.platform),
           DetailLine(phrase(context, 'Phone', 'فون'), row.phone),
           DetailLine(phrase(context, 'Address', 'پتہ'), row.address),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton(
-              onPressed: () => _ship(context),
-              child: Text(phrase(context, 'Mark shipped', 'بھیج دیا')),
-            ),
+          const SizedBox(height: 6),
+          FilledButton(
+            onPressed: () => _ship(context),
+            child: Text(phrase(context, 'Mark shipped', 'بھیج دیا')),
           ),
         ],
       ),
@@ -294,12 +306,12 @@ class _ShippedTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return WorkCard(
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 14),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-        shape: const Border(),
-        title: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units, items: row.items),
+    final title = row.customer.isEmpty ? row.orderNo : row.customer;
+    return SummaryCard(
+      sheetTitle: title.isEmpty ? phrase(context, 'Shipment', 'شپمنٹ') : title,
+      summary: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units),
+      details: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final item in row.items) ProductLine(item: item),
           DetailLine(phrase(context, 'Order', 'آرڈر'), row.orderNo),
