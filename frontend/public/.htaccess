@@ -2,6 +2,9 @@ RewriteEngine On
 RewriteBase /
 RewriteRule ^downloads/ - [L]
 RewriteRule ^index\.html$ - [L]
+RewriteRule ^assets/ - [L]
+RewriteCond %{REQUEST_URI} \.(?:js|mjs|css|map|json|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|wasm)$ [NC]
+RewriteRule ^ - [L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . /index.html [L]

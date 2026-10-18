@@ -18,6 +18,40 @@ import "./pages/DashboardDesktop.css";
 import "./pages/DashboardFocus.css";
 import { DEFAULT_SCHOOL_SETTINGS, normalizeSchoolSettings, schoolThemeStyle } from "./school/theme";
 
+const staleChunkReloadKey = "erp.staleChunkReload";
+
+function isStaleChunkError(error) {
+  const text = String(error?.message || error || "");
+  return text.includes("Failed to fetch dynamically imported module")
+    || text.includes("Importing a module script failed")
+    || text.includes("error loading dynamically imported module")
+    || text.includes("Loading CSS chunk")
+    || /Loading chunk [\w-]+ failed/.test(text);
+}
+
+function reloadForStaleChunk(error) {
+  if (!isStaleChunkError(error)) return false;
+  try {
+    if (window.sessionStorage.getItem(staleChunkReloadKey) === "1") return false;
+    window.sessionStorage.setItem(staleChunkReloadKey, "1");
+  } catch {
+    return false;
+  }
+  window.location.reload();
+  return true;
+}
+
+function loadPage(importer) {
+  return () => importer().catch((error) => {
+    if (reloadForStaleChunk(error)) return new Promise(() => {});
+    throw error;
+  });
+}
+
+window.addEventListener("unhandledrejection", (event) => {
+  if (reloadForStaleChunk(event.reason)) event.preventDefault();
+});
+
 const pageImporters = {
   Products: () => import("./pages/Products"),
   Inventory: () => import("./pages/Inventory"),
@@ -81,6 +115,10 @@ const pageImporters = {
   "School Finance": () => import("./school/pages/SchoolFinance"),
 };
 
+for (const name of Object.keys(pageImporters)) {
+  pageImporters[name] = loadPage(pageImporters[name]);
+}
+
 const Products = lazy(pageImporters.Products);
 const Inventory = lazy(pageImporters.Inventory);
 const Inspiration = lazy(pageImporters.Inspiration);
@@ -120,7 +158,7 @@ const AmazonFinances = lazy(pageImporters["Amazon Finances"]);
 const AmazonPricing = lazy(pageImporters["Amazon Pricing"]);
 const Users = lazy(pageImporters.Users);
 const Companies = lazy(pageImporters.Companies);
-const SuperAdminDashboard = lazy(() => import("./pages/SuperAdminDashboard"));
+const SuperAdminDashboard = lazy(loadPage(() => import("./pages/SuperAdminDashboard")));
 const Quotes = lazy(pageImporters.Quotes);
 const TempData = lazy(pageImporters.TempData);
 const Messages = lazy(pageImporters.Messages);
@@ -455,6 +493,7 @@ class GlobalErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
+    if (reloadForStaleChunk(error)) return;
     console.error("Uncaught ERP Portal Error:", error, errorInfo);
   }
 
@@ -644,6 +683,13 @@ function App() {
   );
   const allowedPageKey = normalizedAllowedPages.join("|");
   const schoolWorkspaceActive = isSchoolWorkspacePage(activePage);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      try { window.sessionStorage.removeItem(staleChunkReloadKey); } catch { /* ignore */ }
+    }, 15000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!authenticatedUser) return;
