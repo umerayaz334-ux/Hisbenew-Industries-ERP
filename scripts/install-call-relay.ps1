@@ -10,8 +10,9 @@ $hostPath = Join-Path $BackendPath '.turn-host'
 $publicIP = (Resolve-DnsName api.hisbenew.com -Type A | Where-Object Type -eq 'A' | Select-Object -First 1 -ExpandProperty IPAddress)
 if (-not $publicIP) { throw 'Unable to resolve the verified API host' }
 New-Item -ItemType Directory -Force -Path $relayRoot | Out-Null
+$runnerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 # Only the service and administrators may access its executable/configuration.
-& icacls.exe $relayRoot /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-19:(OI)(CI)RX' | Out-Null
+& icacls.exe $relayRoot /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-19:(OI)(CI)RX' (('*{0}:(OI)(CI)F') -f $runnerSid) | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Relay directory permissions could not be applied' }
 if (-not (Test-Path -LiteralPath $secretPath)) {
     $bytes = New-Object byte[] 48
@@ -19,7 +20,7 @@ if (-not (Test-Path -LiteralPath $secretPath)) {
     try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
     [IO.File]::WriteAllText($secretPath, [Convert]::ToBase64String($bytes))
 }
-& icacls.exe $secretPath /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' '*S-1-5-19:R' | Out-Null
+& icacls.exe $secretPath /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' '*S-1-5-19:R' (('*{0}:F') -f $runnerSid) | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Relay secret permissions could not be applied' }
 $downloadRequired = -not (Test-Path -LiteralPath $binary)
 if (-not $downloadRequired) { $downloadRequired = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash -ne $expectedHash }
