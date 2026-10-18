@@ -85,6 +85,7 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
     if (session != null) {
       unawaited(_startPhoneServices());
+      api.warmLists(session!);
       if (!isWorker) unawaited(refreshDashboard());
     }
   }
@@ -129,6 +130,7 @@ class AppModel extends ChangeNotifier {
       notifyListeners();
       final worker = next.role.trim().toLowerCase() == 'worker';
       unawaited(_startPhoneServices());
+      api.warmLists(next);
       if (!worker) unawaited(refreshDashboard());
       return true;
     } on ErpException catch (error) {

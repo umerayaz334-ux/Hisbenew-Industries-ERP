@@ -58,9 +58,10 @@ class CustomerRow {
 }
 
 class CustomersPage extends StatefulWidget {
-  const CustomersPage({required this.model, super.key});
+  const CustomersPage({required this.model, this.refreshTick = 0, super.key});
 
   final AppModel model;
+  final int refreshTick;
 
   @override
   State<CustomersPage> createState() => _CustomersPageState();
@@ -85,13 +86,32 @@ class _CustomersPageState extends State<CustomersPage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(CustomersPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshTick != widget.refreshTick) _load();
+  }
+
   Future<void> _load() async {
     final session = widget.model.session;
     if (session == null) return;
-    setState(() {
-      _loading = true;
-      _error = false;
-    });
+    if (_customers.isEmpty) {
+      final saved = await widget.model.api.rememberedList(session, '/customers');
+      if (!mounted) return;
+      if (saved != null && saved.isNotEmpty) {
+        setState(() {
+          _customers = [for (final row in saved) CustomerRow.fromJson(row)];
+          _loading = false;
+          _error = false;
+        });
+      }
+    }
+    if (_customers.isEmpty && mounted) {
+      setState(() {
+        _loading = true;
+        _error = false;
+      });
+    }
     try {
       final rows = await widget.model.api.customers(session);
       if (!mounted) return;

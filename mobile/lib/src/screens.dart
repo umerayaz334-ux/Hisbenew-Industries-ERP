@@ -187,6 +187,9 @@ class WorkspaceScreen extends StatefulWidget {
 class _WorkspaceScreenState extends State<WorkspaceScreen> {
   int _index = 0;
   bool _notifications = false;
+  final _openPages = <int>{0};
+  final _pageKeys = <int, GlobalKey>{};
+  final _pageVisits = <int, int>{};
   var _unread = 0;
   final _scaffold = GlobalKey<ScaffoldState>();
   late final CallDesk _calls = CallDesk(widget.model);
@@ -215,9 +218,35 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   }
 
   void _openNotificationChat() {
-    if (mounted && notificationChat.value != null) {
-      setState(() { _notifications = false; _index = _chat; });
-    }
+    if (mounted && notificationChat.value != null) _go(_chat);
+  }
+
+  void _go(int index) {
+    setState(() {
+      _index = index;
+      _notifications = false;
+      _openPages.add(index);
+      if (index != 0) _pageVisits[index] = (_pageVisits[index] ?? 0) + 1;
+    });
+  }
+
+  Widget _officePage(int index) {
+    final key = _pageKeys.putIfAbsent(index, GlobalKey.new);
+    final tick = _pageVisits[index] ?? 0;
+    final page = switch (index) {
+      0 => DashboardView(key: key, model: widget.model),
+      1 => OrdersPage(key: key, model: widget.model, refreshTick: tick),
+      2 => ShippingPage(key: key, model: widget.model, refreshTick: tick),
+      3 => CustomersPage(key: key, model: widget.model, refreshTick: tick),
+      4 => ProductsPage(key: key, model: widget.model, refreshTick: tick),
+      5 => AmazonPage(key: key, model: widget.model),
+      6 => LabelsPage(key: key, model: widget.model),
+      7 => ProfilePage(key: key, model: widget.model),
+      8 => WorkerChat(key: key, model: widget.model, calls: _calls, refreshTick: tick),
+      _ => PreferencesPage(key: key, model: widget.model),
+    };
+    final visible = !_notifications && _index == index;
+    return Offstage(offstage: !visible, child: TickerMode(enabled: visible, child: page));
   }
 
   Future<void> _refreshUnread() async {
@@ -235,19 +264,6 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      DashboardView(model: widget.model),
-      OrdersPage(model: widget.model),
-      ShippingPage(model: widget.model),
-      CustomersPage(model: widget.model),
-      ProductsPage(model: widget.model),
-      AmazonPage(model: widget.model),
-      LabelsPage(model: widget.model),
-      ProfilePage(model: widget.model),
-      WorkerChat(model: widget.model, calls: _calls),
-      PreferencesPage(model: widget.model),
-      NotificationInbox(model: widget.model, onClose: () => setState(() => _index = 0), onChat: () => setState(() => _index = _chat), onShipping: () => setState(() => _index = 2)),
-    ];
     final labels = [
       phrase(context, 'Home', 'ہوم'),
       phrase(context, 'Orders', 'آرڈرز'),
@@ -279,14 +295,14 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       listenable: _calls,
       builder: (context, _) => Stack(
         children: [
-          _officeScaffold(context, pages, labels, icons),
+          _officeScaffold(context, labels, icons),
           if (_calls.phase != 'idle') CallCover(desk: _calls),
         ],
       ),
     );
   }
 
-  Widget _officeScaffold(BuildContext context, List<Widget> pages, List<String> labels, List<IconData> icons) {
+  Widget _officeScaffold(BuildContext context, List<String> labels, List<IconData> icons) {
     return Scaffold(
       key: _scaffold,
       drawer: _SideMenu(
@@ -294,24 +310,31 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
               icons: icons,
               index: _index,
               onSelect: (value) {
-                setState(() => _index = value);
                 Navigator.pop(context);
+                if (labels[value].startsWith('Notifications')) {
+                  setState(() => _notifications = true);
+                } else {
+                  _go(value);
+                }
               },
             ),
       body: SafeArea(
         child: Column(
           children: [
-            Expanded(child: _notifications ? NotificationInbox(model: widget.model,
-              onClose: () => setState(() => _notifications = false),
-              onChat: () => setState(() { _notifications = false; _index = _chat; }),
-              onShipping: () => setState(() { _notifications = false; _index = 2; })) : pages[_index]),
+            Expanded(child: Stack(children: [
+              for (final index in _openPages) _officePage(index),
+              if (_notifications) NotificationInbox(model: widget.model,
+                onClose: () => setState(() => _notifications = false),
+                onChat: () => _go(_chat),
+                onShipping: () => _go(2)),
+            ])),
           ],
         ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _bottom.contains(_index) ? _bottom.indexOf(_index) : 0,
         indicatorColor: const Color(0xFFF3E6C8),
-        onDestinationSelected: (value) { if (_bottom[value] == 7) { _scaffold.currentState?.openDrawer(); } else { setState(() { _index = _bottom[value]; _notifications = false; }); } },
+        onDestinationSelected: (value) { if (_bottom[value] == 7) { _scaffold.currentState?.openDrawer(); } else { _go(_bottom[value]); } },
         destinations: [
           for (final slot in _bottom)
             NavigationDestination(icon: Icon(icons[slot]), label: slot == 7 ? 'Menu' : labels[slot]),

@@ -53,9 +53,10 @@ class FactoryOrder {
 }
 
 class OrdersPage extends StatefulWidget {
-  const OrdersPage({required this.model, super.key});
+  const OrdersPage({required this.model, this.refreshTick = 0, super.key});
 
   final AppModel model;
+  final int refreshTick;
 
   @override
   State<OrdersPage> createState() => _OrdersPageState();
@@ -80,13 +81,32 @@ class _OrdersPageState extends State<OrdersPage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(OrdersPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshTick != widget.refreshTick) _load();
+  }
+
   Future<void> _load() async {
     final session = widget.model.session;
     if (session == null) return;
-    setState(() {
-      _loading = _orders.isEmpty;
-      _error = false;
-    });
+    if (_orders.isEmpty) {
+      final saved = await widget.model.api.rememberedList(session, '/orders');
+      if (!mounted) return;
+      if (saved != null && saved.isNotEmpty) {
+        setState(() {
+          _orders = [for (final row in saved) FactoryOrder.fromJson(row)];
+          _loading = false;
+          _error = false;
+        });
+      }
+    }
+    if (_orders.isEmpty && mounted) {
+      setState(() {
+        _loading = true;
+        _error = false;
+      });
+    }
     try {
       final rows = await widget.model.api.orders(session);
       if (!mounted) return;
@@ -168,7 +188,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               DetailLine(phrase(context, 'Payment', 'ادائیگی'), order.payment),
                               DetailLine(phrase(context, 'Shipping', 'شپنگ'), order.shipping),
                               DetailLine(phrase(context, 'Note', 'نوٹ'), order.notes),
-                              for (final line in order.items) ProductLine(item: line),
+                              for (final line in order.items) ProductLine(item: line, skuOnly: widget.model.isWorker),
                             ],
                           ),
                         );

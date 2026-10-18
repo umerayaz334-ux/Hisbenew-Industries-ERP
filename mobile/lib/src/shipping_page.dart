@@ -51,9 +51,10 @@ class PendingShip {
 }
 
 class ShippingPage extends StatefulWidget {
-  const ShippingPage({required this.model, super.key});
+  const ShippingPage({required this.model, this.refreshTick = 0, super.key});
 
   final AppModel model;
+  final int refreshTick;
 
   @override
   State<ShippingPage> createState() => _ShippingPageState();
@@ -80,22 +81,50 @@ class _ShippingPageState extends State<ShippingPage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(ShippingPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshTick != widget.refreshTick) _load();
+  }
+
   Future<void> _load() async {
     final session = widget.model.session;
     if (session == null) return;
     if (_pending.isEmpty && _shipped.isEmpty) {
+      final saved = await Future.wait([
+        widget.model.api.rememberedList(session, '/shipping/pending'),
+        widget.model.api.rememberedList(session, '/shipping'),
+        widget.model.api.rememberedList(session, '/orders'),
+      ]);
+      if (!mounted) return;
+      final pendingSaved = saved[0];
+      final shippedSaved = saved[1];
+      if (pendingSaved != null || shippedSaved != null) {
+        setState(() {
+          if (pendingSaved != null) {
+            _pending = [for (final row in pendingSaved) PendingShip.fromJson(row)];
+          }
+          if (shippedSaved != null) {
+            _shipped = widget.model.api.shipmentRecords(shippedSaved, saved[2] ?? const []);
+          }
+          _loading = false;
+          _error = false;
+        });
+      }
+    }
+    if (_pending.isEmpty && _shipped.isEmpty && mounted) {
       setState(() {
         _loading = true;
         _error = false;
       });
-    } else {
-      setState(() => _error = false);
     }
     try {
-      final pendingResult = await widget.model.api.pendingShipping(session);
+      final pendingFuture = widget.model.api.pendingShipping(session);
+      final shippedFuture = widget.model.api.shipments(session);
+      final pendingResult = await pendingFuture;
       List<ShipmentRecord> shippedResult = const [];
       try {
-        shippedResult = await widget.model.api.shipments(session);
+        shippedResult = await shippedFuture;
       } on ErpException catch (error) {
         if (error.code == 'invalidLogin') rethrow;
       }

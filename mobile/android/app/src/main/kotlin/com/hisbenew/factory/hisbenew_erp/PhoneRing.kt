@@ -24,6 +24,7 @@ object PhoneRing {
     private var previousMode = AudioManager.MODE_NORMAL
     private var previousSpeaker = false
     private var playingKind = ""
+    private var callOwnsAudio = false
     private var vibrator: Vibrator? = null
     private val stopLater = Runnable { stop() }
 
@@ -75,29 +76,69 @@ object PhoneRing {
         return true
     }
 
-    fun stop() {
-        handler.post {
+    /** Stop the tone and leave the voice-call audio route for WebRTC. */
+    fun releaseForCall() {
+        onMain {
             handler.removeCallbacks(stopLater)
             playingKind = ""
-            player?.run {
-                try { stop() } catch (_: Exception) {}
-                release()
-            }
-            player = null
+            releasePlayer()
             vibrator?.cancel()
             vibrator = null
-            val app = currentContext ?: return@post
-            val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                focusRequest?.let { audio.abandonAudioFocusRequest(it) }
-            } else {
-                @Suppress("DEPRECATION")
-                audio.abandonAudioFocus(null)
-            }
-            focusRequest = null
-            audio.mode = previousMode
-            audio.isSpeakerphoneOn = previousSpeaker
+            // A second release happens after WebRTC already owns the focus.
+            if (!callOwnsAudio) abandonFocus()
+            callOwnsAudio = true
         }
+    }
+
+    fun stop() {
+        onMain {
+            handler.removeCallbacks(stopLater)
+            playingKind = ""
+            releasePlayer()
+            vibrator?.cancel()
+            vibrator = null
+            // Accepting the call also asks the ringtone to stop. Restoring
+            // normal mode here cuts the voice the moment it connects.
+            if (callOwnsAudio) return@onMain
+            restoreRoute()
+        }
+    }
+
+    /** Call is over. Give the speaker and mode back to the phone. */
+    fun finishCall() {
+        onMain {
+            callOwnsAudio = false
+            handler.removeCallbacks(stopLater)
+            playingKind = ""
+            releasePlayer()
+            vibrator?.cancel()
+            vibrator = null
+            restoreRoute()
+        }
+    }
+
+    private fun onMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) block() else handler.post(block)
+    }
+
+    private fun restoreRoute() {
+        abandonFocus()
+        val app = currentContext ?: return
+        val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audio.mode = previousMode
+        audio.isSpeakerphoneOn = previousSpeaker
+    }
+
+    private fun abandonFocus() {
+        val app = currentContext ?: return
+        val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            focusRequest?.let { audio.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audio.abandonAudioFocus(null)
+        }
+        focusRequest = null
     }
 
     private var currentContext: Context? = null

@@ -142,7 +142,7 @@ Future<void> watchIncomingCall(String token) async {
     final incoming = decoded['is_incoming'] == true;
     final status = '${decoded['status'] ?? ''}'.toLowerCase();
     if (incoming && status == 'accepted') {
-      await PhonePermissions.stopIncomingRing();
+      await PhonePermissions.releaseCallTone();
       _answeredCallIds.add(callId);
       await FlutterCallkitIncoming.hideCallkitIncoming(
         incomingCallParams(callId: callId, name: ''),

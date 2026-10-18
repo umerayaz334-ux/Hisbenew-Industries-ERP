@@ -144,15 +144,16 @@ void openProductPhoto(BuildContext context, {required String path, String title 
 }
 
 class ProductLine extends StatelessWidget {
-  const ProductLine({required this.item, super.key});
+  const ProductLine({required this.item, this.skuOnly = false, super.key});
 
   final ItemShot item;
+  final bool skuOnly;
 
   @override
   Widget build(BuildContext context) {
-    final title = item.name.isEmpty ? item.article : item.name;
+    final title = skuOnly || item.name.isEmpty ? item.article : item.name;
     final detail = [
-      if (item.article.isNotEmpty && item.article != title) item.article,
+      if (!skuOnly && item.article.isNotEmpty && item.article != title) item.article,
       if (item.qty > 0) '× ${item.qty}',
     ].join('  ');
     final canOpen = productImageUrl(item.image) != null;

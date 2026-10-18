@@ -38,7 +38,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   var _disposed = false;
   var _generation = 0;
   bool muted = false;
-  bool speaker = false;
+  bool speaker = true;
   DateTime? _connectedAt;
   Timer? _clock;
   Timer? _connectionTimeout;
@@ -64,6 +64,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   final List<Map<String, dynamic>> _localIce = [];
   var _localPosted = false;
   bool _sendingIce = false;
+  var _iceRestarts = 0;
   List<Map<String, dynamic>> _ice = relayIceServers();
 
   void startWatch() {
@@ -201,6 +202,18 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
       await _loadIce();
       await _openMedia();
       if (_disposed || generation != _generation) return;
+      if (_pc == null) {
+        _fail(
+          'Audio could not start. Check microphone access in phone settings.',
+        );
+        return;
+      }
+      // The website always answers with a video section. A voice-only offer
+      // is rejected, so the phone stays on Connecting and no audio flows.
+      await _pc!.addTransceiver(
+        kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
+        init: RTCRtpTransceiverInit(direction: TransceiverDirection.SendRecv),
+      );
       final call = await model.api.startCall(session: session, userId: userId);
       if (_disposed || generation != _generation) {
         await model.api.endCall(session: session, callId: asInt(call['id']));
@@ -237,7 +250,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> accept({int? callId, String? name}) async {
-    await PhonePermissions.stopIncomingRing();
+    await PhonePermissions.releaseCallTone();
     // Native Answer can arrive before Android has resumed the Activity. Audio
     // must start from the visible Activity so microphone access is available.
     final lifecycle = WidgetsBinding.instance.lifecycleState;
@@ -305,6 +318,12 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
       await _loadIce();
       if (_pc == null) await _openMedia();
       if (_disposed || generation != _generation) return;
+      if (_pc == null) {
+        _fail(
+          'Audio could not start. Check microphone access in phone settings.',
+        );
+        return;
+      }
       _armSignals();
       try {
         await FlutterCallkitIncoming.hideCallkitIncoming(
@@ -378,9 +397,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     return work;
   }
 
-  Future<void> _createMedia() async {
-    await PhonePermissions.startVoiceService();
-    await WebRTC.initialize(options: {'androidUseHardwareAudioProcessing': false});
+  Future<void> _applyCallAudio() async {
     await Helper.setAndroidAudioConfiguration(
       AndroidAudioConfiguration(
         manageAudioFocus: true,
@@ -391,21 +408,38 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         androidAudioAttributesContentType: AndroidAudioAttributesContentType.speech,
       ),
     );
+    await Helper.setSpeakerphoneOn(speaker);
+    for (final track in _local?.getAudioTracks() ?? const <MediaStreamTrack>[]) {
+      track.enabled = !muted;
+    }
+    for (final track in _remote?.getAudioTracks() ?? const <MediaStreamTrack>[]) {
+      track.enabled = true;
+    }
+  }
+
+  Future<void> _createMedia() async {
+    await PhonePermissions.releaseCallTone();
+    await PhonePermissions.startVoiceService();
+    await WebRTC.initialize(options: {'androidUseHardwareAudioProcessing': false});
+    muted = false;
+    await _applyCallAudio();
     _local = await navigator.mediaDevices.getUserMedia({
-      'audio': true,
+      'audio': {
+        'echoCancellation': true,
+        'noiseSuppression': true,
+        'autoGainControl': true,
+      },
       'video': false,
     });
-    await Helper.setSpeakerphoneOn(false);
-    speaker = false;
-    muted = false;
     _pc = await createPeerConnection({
       'iceServers': _ice,
       'sdpSemantics': 'unified-plan',
-      'iceCandidatePoolSize': 4,
+      'iceCandidatePoolSize': 0,
     });
     // Keep a stable peer identity so callbacks from an old call cannot revive it.
     final peer = _pc!;
     for (final track in _local!.getAudioTracks()) {
+      track.enabled = true;
       await _pc!.addTrack(track, _local!);
     }
     _pc!.onIceCandidate = (candidate) {
@@ -425,7 +459,10 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     };
     _pc!.onTrack = (event) {
       if (event.streams.isNotEmpty) _remote = event.streams.first;
-      event.track.enabled = true;
+      if (event.track.kind == 'audio') {
+        event.track.enabled = true;
+        _applyCallAudio();
+      }
     };
     _pc!.onConnectionState = (state) {
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
@@ -455,7 +492,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     phase = 'connected';
     notice = '';
     notifyListeners();
-    PhonePermissions.stopOutgoingRing();
+    _applyCallAudio();
     final id = _callId;
     if (id != null) {
       FlutterCallkitIncoming.setCallConnected(callScreenId(id)).catchError((Object _) {});
@@ -464,12 +501,40 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
 
   void _recoverOrEnd(RTCPeerConnection peer) {
     if (_disposed || _pc != peer || phase == 'ended' || phase == 'idle') return;
+    if (_iceRestarts < 1 && phase != 'incoming') {
+      _iceRestarts++;
+      notice = phraseFromLocale('Reconnecting audio…', 'آواز دوبارہ جوڑ رہے ہیں');
+      notifyListeners();
+      _restartIce(peer);
+      return;
+    }
     if (phase == 'connected') {
       phase = 'connecting';
       _armConnectionTimeout();
     }
     notice = 'Audio connection failed. Check your network or contact your admin about the call relay.';
     notifyListeners();
+  }
+
+  Future<void> _restartIce(RTCPeerConnection peer) async {
+    final session = model.session;
+    final callId = _callId;
+    if (_disposed || _pc != peer || session == null || callId == null) return;
+    try {
+      _remoteReady = false;
+      final offer = await _described(peer, await peer.createOffer({'iceRestart': true}));
+      if (_disposed || _pc != peer) return;
+      await model.api.sendCallSignal(
+        session: session,
+        callId: callId,
+        type: 'offer',
+        payload: {'type': offer.type, 'sdp': offer.sdp},
+      );
+      _localPosted = true;
+      await _flushLocalIce();
+    } catch (error) {
+      debugPrint('Call audio restart failed: ${error.runtimeType}');
+    }
   }
 
   Future<void> _flushLocalIce() async {
@@ -561,52 +626,53 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         final payload = row['payload'] is Map
             ? Map<String, dynamic>.from(row['payload'] as Map)
             : const <String, dynamic>{};
-        if (type == 'answer' && !_remoteReady && peer.signalingState != RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
-          break;
-        }
-        if (type == 'offer') {
-          if (!_remoteReady) {
+        try {
+          if (type == 'offer') {
+            if (peer.signalingState == RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
+              try {
+                await peer.setLocalDescription(RTCSessionDescription('', 'rollback'));
+              } catch (_) {}
+            }
             await peer.setRemoteDescription(
-            RTCSessionDescription(
-              asText(payload['sdp']),
-              asText(payload['type']),
-            ),
-          );
-          _remoteReady = true;
-          await _flushIce(peer);
+              RTCSessionDescription(asText(payload['sdp']), asText(payload['type'])),
+            );
+            _remoteReady = true;
+            await _flushIce(peer);
+            final answer = await _described(peer, await peer.createAnswer());
+            await model.api.sendCallSignal(
+              session: session,
+              callId: callId,
+              type: 'answer',
+              payload: {'type': answer.type, 'sdp': answer.sdp},
+            );
+            _localPosted = true;
+            await _flushLocalIce();
+            await _applyCallAudio();
+          } else if (type == 'answer') {
+            if (peer.signalingState != RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
+              break;
+            }
+            await peer.setRemoteDescription(
+              RTCSessionDescription(asText(payload['sdp']), asText(payload['type'])),
+            );
+            _remoteReady = true;
+            await _flushIce(peer);
+            await _applyCallAudio();
+          } else if (type == 'ice') {
+            final ice = RTCIceCandidate(
+              asText(payload['candidate']),
+              payload['sdpMid'] == null ? null : asText(payload['sdpMid']),
+              payload['sdpMLineIndex'] == null ? null : asInt(payload['sdpMLineIndex']),
+            );
+            if (_remoteReady) {
+              await peer.addCandidate(ice);
+            } else {
+              _queuedIce.add(ice);
+            }
           }
-          var answer = await peer.getLocalDescription();
-          if (answer == null || answer.type != 'answer' || (answer.sdp ?? '').isEmpty) {
-            answer = await _described(peer, await peer.createAnswer());
-          }
-          await model.api.sendCallSignal(
-            session: session,
-            callId: callId,
-            type: 'answer',
-            payload: {'type': answer.type, 'sdp': answer.sdp},
-          );
-          _localPosted = true;
-          await _flushLocalIce();
-        } else if (type == 'answer' && !_remoteReady) {
-          await peer.setRemoteDescription(
-            RTCSessionDescription(
-              asText(payload['sdp']),
-              asText(payload['type']),
-            ),
-          );
-          _remoteReady = true;
-          await _flushIce(peer);
-        } else if (type == 'ice') {
-          final ice = RTCIceCandidate(
-            asText(payload['candidate']),
-            asText(payload['sdpMid']),
-            asInt(payload['sdpMLineIndex']),
-          );
-          if (_remoteReady) {
-            await peer.addCandidate(ice);
-          } else {
-            _queuedIce.add(ice);
-          }
+        } catch (error) {
+          debugPrint('Call signal $type failed: ${error.runtimeType}');
+          if (type != 'ice') break;
         }
         if (id > _afterSignal) _afterSignal = id;
       }
@@ -660,8 +726,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     _connectedAt = null;
     _signals?.cancel();
     _signals = null;
-    PhonePermissions.stopIncomingRing();
-    PhonePermissions.stopOutgoingRing();
+    PhonePermissions.stopVoiceService();
     _mediaQueue = _mediaQueue
         .then((_) async {
           final peer = _pc;
@@ -684,6 +749,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         });
     _remoteReady = false;
     _localPosted = false;
+    _iceRestarts = 0;
     _queuedIce.clear();
     _localIce.clear();
     _remote = null;

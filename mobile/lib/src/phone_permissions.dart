@@ -36,6 +36,10 @@ class PhonePermissions {
   static Future<void> stopOutgoingRing() async {
     try { await _channel.invokeMethod('stopOutgoingRing'); } on PlatformException { return; }
   }
+  /// Stops the ringtone without putting the speaker back to normal mode.
+  static Future<void> releaseCallTone() async {
+    try { await _channel.invokeMethod('releaseCallTone'); } on PlatformException { return; }
+  }
   static Future<void> notificationSettings() async =>
       _channel.invokeMethod('notificationSettings');
   static Future<void> startVoiceService() async =>

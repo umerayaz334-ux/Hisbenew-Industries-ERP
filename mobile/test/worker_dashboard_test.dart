@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hisbenew_erp/src/app_model.dart';
 import 'package:hisbenew_erp/src/erp_api.dart';
 import 'package:hisbenew_erp/src/dashboard_data.dart';
+import 'package:hisbenew_erp/src/page_kit.dart';
 import 'package:hisbenew_erp/src/worker_portal.dart';
 
 class DashboardApi extends ErpApi {
@@ -26,7 +27,7 @@ class DashboardApi extends ErpApi {
   Future<List<Map<String, dynamic>>> messageUsers(ErpSession session) async => [];
   @override
   Future<List<Map<String, dynamic>>> manufacturingNeeds(ErpSession session) async => [
-    {'article_no': 'SKU-9', 'image_url': '', 'shortage': 4, 'product_name': 'Sample'},
+    {'article_no': 'SKU-9', 'image_url': '/static/uploads/sku-9.jpg', 'shortage': 4, 'product_name': 'Sample'},
   ];
   @override
   Future<Map<String, dynamic>?> activeCall(ErpSession session) async => null;
@@ -53,14 +54,22 @@ void main() {
     final model = AppModel(api: DashboardApi())..session = const ErpSession(baseUrl: 'https://example.test', token: 'test', name: 'Faheem', username: 'worker', role: 'worker', workerId: 1, tenantSlug: 'test', tenantName: 'Factory', companyCode: '');
     await tester.pumpWidget(MaterialApp(home: WorkerPortal(model: model)));
     await tester.pumpAndSettle();
-    expect(find.text('Your day, Faheem'), findsOneWidget);
+    expect(find.text('${helloFor(DateTime.now()).$1}, Faheem'), findsOneWidget);
     expect(find.text('#1001'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('#1008'), 400);
     expect(find.text('#1008'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('To make · 1'), 300);
     expect(find.text('To make · 1'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('SKU-9'), 200);
+    final thumb = find.byType(ProductThumb);
+    await tester.dragUntilVisible(thumb.hitTestable(), find.byType(ListView), const Offset(0, -280));
     expect(find.text('SKU-9'), findsOneWidget);
+    await tester.tap(thumb);
+    await tester.pump();
+    expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+    expect(find.text('SKU-9'), findsWidgets);
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pump();
+    expect(find.byIcon(Icons.close_rounded), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Menu'));
     await tester.pumpAndSettle();

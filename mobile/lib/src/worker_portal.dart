@@ -41,12 +41,14 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
   bool _fetching = false;
   bool _hasData = false;
   List<PendingShip> _pending = const [];
-  List<ShipmentRecord> _moving = const [];
   List<Map<String, dynamic>> _needs = const [];
   List<Map<String, dynamic>> _tasks = const [];
   List<Map<String, dynamic>> _payments = const [];
   List<Map<String, dynamic>> _expenses = const [];
   var _unread = 0;
+  final _openPages = <int>{};
+  final _pageKeys = <int, GlobalKey>{};
+  final _pageVisits = <int, int>{};
   Timer? _unreadTimer;
   Timer? _syncTimer;
   Timer? _firstSync;
@@ -143,8 +145,6 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     final worker = session.workerId;
     final saved = await Future.wait([
       api.savedList(session, '/shipping/pending'),
-      api.savedList(session, '/shipping'),
-      api.savedList(session, '/orders'),
       api.savedList(session, '/production/tasks?worker_id=$worker'),
       api.savedList(session, '/order-workflow/tasks?worker_id=$worker'),
       api.savedList(session, '/worker-payments?worker_id=$worker'),
@@ -152,31 +152,19 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     ]);
     if (!mounted || _hasData || saved.every((rows) => rows == null)) return;
     final pending = saved[0] ?? const <Map<String, dynamic>>[];
-    final records = saved[1] ?? const <Map<String, dynamic>>[];
-    final orders = saved[2] ?? const <Map<String, dynamic>>[];
-    final tasks = saved[3] ?? const <Map<String, dynamic>>[];
-    final orderTasks = saved[4] ?? const <Map<String, dynamic>>[];
+    final tasks = saved[1] ?? const <Map<String, dynamic>>[];
+    final orderTasks = saved[2] ?? const <Map<String, dynamic>>[];
     setState(() {
       _pending = [for (final row in pending) PendingShip.fromJson(row)];
-      _moving = [for (final row in api.shipmentRecords(records, orders)) if (_stillMoving(row.status)) row];
       _tasks = [...tasks, ...orderTasks];
-      _payments = saved[5] ?? const [];
-      _expenses = saved[6] ?? const [];
+      _payments = saved[3] ?? const [];
+      _expenses = saved[4] ?? const [];
       _loading = false;
       _hasData = true;
     });
   }
 
   Future<List<Map<String, dynamic>>> _keepList(Future<List<Map<String, dynamic>>> request) async {
-    try {
-      return await request;
-    } on ErpException catch (error) {
-      if (error.code == 'invalidLogin') rethrow;
-      return const [];
-    }
-  }
-
-  Future<List<ShipmentRecord>> _keepShipments(Future<List<ShipmentRecord>> request) async {
     try {
       return await request;
     } on ErpException catch (error) {
@@ -201,7 +189,6 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       final orderTasksFuture = _allow('My Tasks') ? widget.model.api.workerOrderTasks(session) : Future.value(const <Map<String, dynamic>>[]);
       final paymentsFuture = _allow('Worker Payouts') ? widget.model.api.workerPayments(session) : Future.value(const <Map<String, dynamic>>[]);
       final expensesFuture = _allow('Worker Payouts') ? widget.model.api.workerExpenses(session) : Future.value(const <Map<String, dynamic>>[]);
-      final shippedFuture = _allow('Shipping') ? widget.model.api.shipments(session) : Future.value(const <ShipmentRecord>[]);
       final needsFuture = widget.model.api.manufacturingNeeds(session);
       // Attach error handlers to every request immediately: a revoked page
       // must not produce an unhandled error while another request is loading.
@@ -211,7 +198,6 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
         _keepList(orderTasksFuture),
         _keepList(paymentsFuture),
         _keepList(expensesFuture),
-        _keepShipments(shippedFuture),
         _keepList(needsFuture),
       ]);
       final pending = results[0] as List<Map<String, dynamic>>;
@@ -219,18 +205,13 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       final orderTasks = results[2] as List<Map<String, dynamic>>;
       final payments = results[3] as List<Map<String, dynamic>>;
       final expenses = results[4] as List<Map<String, dynamic>>;
-      final shipped = results[5] as List<ShipmentRecord>;
-      final needs = results[6] as List<Map<String, dynamic>>;
+      final needs = results[5] as List<Map<String, dynamic>>;
       if (!mounted) return;
       setState(() {
         _pending = [for (final row in pending) PendingShip.fromJson(row)];
         _needs = [
           for (final row in needs)
             if (asInt(row['shortage']) > 0) row,
-        ];
-        _moving = [
-          for (final row in shipped)
-            if (_stillMoving(row.status)) row,
         ];
         _tasks = [...tasks, ...orderTasks];
         _payments = payments;
@@ -268,16 +249,38 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     if (index == 5 && !_allow('Orders')) index = 0;
     if (index == 6 && !_allow('Products')) index = 0;
     if (index == 8 && !_allow('Manufacturing')) index = 0;
-    setState(() { _index = index; _notifications = false; });
+    setState(() {
+      _index = index;
+      _notifications = false;
+      if (index != 0) {
+        _openPages.add(index);
+        _pageVisits[index] = (_pageVisits[index] ?? 0) + 1;
+      }
+    });
+  }
+
+  Widget _keptPage(int index) {
+    final key = _pageKeys.putIfAbsent(index, GlobalKey.new);
+    final tick = _pageVisits[index] ?? 0;
+    final page = switch (index) {
+      1 => ShippingPage(key: key, model: widget.model, refreshTick: tick),
+      2 => WorkerChat(key: key, model: widget.model, calls: _calls, refreshTick: tick),
+      5 => OrdersPage(key: key, model: widget.model, refreshTick: tick),
+      6 => ProductsPage(key: key, model: widget.model, refreshTick: tick),
+      8 => ManufacturingPage(key: key, model: widget.model, refreshTick: tick),
+      _ => ProfilePage(key: key, model: widget.model),
+    };
+    final visible = !_notifications && _index == index;
+    return Offstage(
+      offstage: !visible,
+      child: TickerMode(enabled: visible, child: page),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
-      const SizedBox.shrink(),
-      ShippingPage(model: widget.model),
-      WorkerChat(model: widget.model, calls: _calls),
-      _PayoutPage(
+    final pages = <int, Widget>{
+      3: _PayoutPage(
         model: widget.model,
         loading: _loading,
         error: _error,
@@ -287,12 +290,9 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
         onRetry: _load,
         onChanged: _load,
       ),
-      ProfilePage(model: widget.model),
-      OrdersPage(model: widget.model),
-      ProductsPage(model: widget.model),
-      PreferencesPage(model: widget.model),
-      ManufacturingPage(model: widget.model),
-    ];
+      4: ProfilePage(model: widget.model),
+      7: PreferencesPage(model: widget.model),
+    };
 
     return ListenableBuilder(
       listenable: _calls,
@@ -330,18 +330,12 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
                     trailing: IconButton(tooltip: 'Sync now', icon: const Icon(Icons.sync), onPressed: () async { await _syncOffline(); await _load(); }),
                   )),
                 ),
-                Expanded(child: _notifications
-                    ? Padding(
-                        padding: EdgeInsets.only(top: showSync ? 0 : top),
-                        child: NotificationInbox(model: widget.model, onClose: () => setState(() => _notifications = false), onChat: () => _open(2), onShipping: () => _open(1)),
-                      )
-                    : home
-                        ? _WorkerHome(
+                Expanded(child: Stack(children: [
+                        if (home) _WorkerHome(
                             model: widget.model,
                             loading: _loading,
                             error: _error,
                             pending: _pending,
-                            moving: _moving,
                             tasks: _tasks,
                             payments: _payments,
                             expenses: _expenses,
@@ -355,8 +349,17 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
                             onOpenProducts: () => _open(6),
                             unread: _unread,
                             topInset: showSync ? 0 : top,
-                          )
-                        : Padding(padding: EdgeInsets.only(top: showSync ? 0 : top), child: pages[_index])),
+                          ),
+                        for (final index in _openPages)
+                          if (const {1, 2, 5, 6, 8}.contains(index))
+                            Padding(padding: EdgeInsets.only(top: showSync ? 0 : top), child: _keptPage(index)),
+                        if (!home && !_notifications && pages.containsKey(_index))
+                          Padding(padding: EdgeInsets.only(top: showSync ? 0 : top), child: pages[_index]!),
+                        if (_notifications) Padding(
+                          padding: EdgeInsets.only(top: showSync ? 0 : top),
+                          child: NotificationInbox(model: widget.model, onClose: () => setState(() => _notifications = false), onChat: () => _open(2), onShipping: () => _open(1)),
+                        ),
+                      ])),
               ]),
             );
           }),
@@ -414,9 +417,12 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
   }
 }
 
-bool _stillMoving(String status) {
-  final value = status.trim().toLowerCase();
-  return value != 'delivered' && value != 'completed';
+(String, String) helloFor(DateTime now) {
+  final hour = now.hour;
+  if (hour >= 5 && hour < 12) return ('Good morning', 'صبح بخیر');
+  if (hour >= 12 && hour < 17) return ('Good afternoon', 'دوپہر بخیر');
+  if (hour >= 17 && hour < 21) return ('Good evening', 'شام بخیر');
+  return ('Hello', 'سلام');
 }
 
 class _Money {
@@ -444,7 +450,6 @@ class _WorkerHome extends StatelessWidget {
     required this.loading,
     required this.error,
     required this.pending,
-    required this.moving,
     required this.tasks,
     required this.payments,
     required this.expenses,
@@ -464,7 +469,6 @@ class _WorkerHome extends StatelessWidget {
   final bool loading;
   final bool error;
   final List<PendingShip> pending;
-  final List<ShipmentRecord> moving;
   final List<Map<String, dynamic>> tasks;
   final List<Map<String, dynamic>> payments;
   final List<Map<String, dynamic>> expenses;
@@ -482,12 +486,12 @@ class _WorkerHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = model.session?.name.split(' ').first ?? '';
+    final hello = helloFor(DateTime.now());
     final money = _moneyOf(tasks, payments, expenses);
     final shipping = model.canAccess('Shipping');
     final payouts = model.canAccess('Worker Payouts');
     final stats = <_DashStat>[
       if (shipping) _DashStat(phrase(context, 'To ship', 'بھیجنا'), '${pending.length}', onOpenShipping),
-      if (shipping) _DashStat(phrase(context, 'On the way', 'راستے میں'), '${moving.length}', onOpenShipping),
       if (payouts) _DashStat(phrase(context, 'Balance', 'بقایا'), _pkr(money.balance), onOpenPayouts),
     ];
     return RefreshIndicator(
@@ -513,7 +517,7 @@ class _WorkerHome extends StatelessWidget {
                     style: const TextStyle(fontSize: 11, letterSpacing: 1.6, fontWeight: FontWeight.w700, color: Color(0xFFE7C98A)),
                   ),
                   const SizedBox(height: 8),
-                  Text('Your day, $name', style: const TextStyle(fontSize: 30, height: 1.05, letterSpacing: -0.8, fontWeight: FontWeight.w800, color: Colors.white)),
+                  Text('${phrase(context, hello.$1, hello.$2)}, $name', style: const TextStyle(fontSize: 30, height: 1.05, letterSpacing: -0.8, fontWeight: FontWeight.w800, color: Colors.white)),
                   const SizedBox(height: 6),
                   Text(phrase(context, 'Orders, pay, and messages in one place.', 'آرڈر، رقم اور پیغام ایک جگہ۔'), style: const TextStyle(color: Color(0xFFC9DDD4), fontSize: 14)),
                   if (stats.isNotEmpty) ...[
@@ -536,9 +540,9 @@ class _WorkerHome extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (loading && pending.isEmpty && moving.isEmpty)
+                if (loading && pending.isEmpty)
                   const Padding(padding: EdgeInsets.only(bottom: 12), child: LinearProgressIndicator(color: hisbenewForest, backgroundColor: Color(0xFFE7DDD0), minHeight: 2)),
-                if (error && pending.isEmpty && moving.isEmpty)
+                if (error && pending.isEmpty)
                   OutlinedButton(onPressed: onRetry, child: const Text('Reload dashboard'))
                 else ...[
                   if (shipping) ...[
@@ -550,7 +554,6 @@ class _WorkerHome extends StatelessWidget {
                         when: row.when,
                         customer: row.customer,
                         orderNo: row.orderNo,
-                        units: row.units,
                         items: row.items,
                         onTap: () => openPendingShip(context, model: model, row: row, onChanged: onRetry),
                       ),
@@ -570,17 +573,6 @@ class _WorkerHome extends StatelessWidget {
                     if (payouts) Expanded(child: _QuickTile(icon: Icons.add_rounded, label: phrase(context, 'Spending', 'خرچ'), onTap: onOpenPayouts)),
                   ]),
                   const SizedBox(height: 16),
-                  if (shipping && moving.isNotEmpty) ...[
-                    _SectionHead(title: phrase(context, 'On the way', 'راستے میں'), action: phrase(context, 'Queue', 'قطار'), count: moving.length, onAction: onOpenShipping),
-                    for (final row in moving) _OpenOrderCard(
-                      when: row.when,
-                      customer: row.customer,
-                      orderNo: row.orderNo,
-                      units: row.units,
-                      items: row.items,
-                      onTap: () => openShippedShip(context, model: model, row: row, onChanged: onRetry),
-                    ),
-                  ],
                   if (model.canAccess('Messages')) _ChatCallBar(onTap: onOpenChat, unread: unread),
                 ],
               ],
@@ -658,7 +650,6 @@ class _OpenOrderCard extends StatelessWidget {
     required this.when,
     required this.customer,
     required this.orderNo,
-    required this.units,
     required this.items,
     required this.onTap,
   });
@@ -666,7 +657,6 @@ class _OpenOrderCard extends StatelessWidget {
   final String when;
   final String customer;
   final String orderNo;
-  final int units;
   final List<ItemShot> items;
   final VoidCallback onTap;
 
@@ -679,25 +669,14 @@ class _OpenOrderCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(headline.isEmpty ? '#$orderNo' : headline, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  if (orderNo.isNotEmpty) Text('#$orderNo', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: hisbenewMuted, fontSize: 12, fontWeight: FontWeight.w600)),
-                ])),
-                const SizedBox(width: 8),
-                OrderPhotos(items: items),
-              ]),
-              if (items.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                for (final item in items.take(4)) ProductLine(item: item),
-              ],
-              const SizedBox(height: 2),
-              Text('$units ${phrase(context, 'units', 'یونٹ')}', style: const TextStyle(color: hisbenewMuted, fontSize: 12, fontWeight: FontWeight.w600)),
-            ],
-          ),
+          child: Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(headline.isEmpty ? '#$orderNo' : headline, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              if (orderNo.isNotEmpty) Text('#$orderNo', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: hisbenewMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+            ])),
+            const SizedBox(width: 8),
+            OrderPhotos(items: items),
+          ]),
         ),
       ),
     );
@@ -714,16 +693,21 @@ class _MakeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = units == 1 ? phrase(context, 'unit', 'یونٹ') : phrase(context, 'units', 'یونٹ');
+    final skuLabel = sku.trim().isEmpty ? '—' : sku.trim();
+    final canOpen = productImageUrl(image) != null;
     return WorkCard(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         child: Row(
           children: [
-            ProductThumb(path: image, size: 56),
+            GestureDetector(
+              onTap: canOpen ? () => openProductPhoto(context, path: image, title: skuLabel) : null,
+              child: ProductThumb(path: image, size: 56),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                sku.trim().isEmpty ? '—' : sku.trim(),
+                skuLabel,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 22, height: 1.05, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: hisbenewInk),
@@ -1063,11 +1047,10 @@ List<_StatementLine> _statementLines(
               : asText(task['updated_at']).isNotEmpty
                   ? asText(task['updated_at'])
                   : asText(task['created_at'])),
-          title: asText(task['step_name']).isNotEmpty ? asText(task['step_name']) : asText(task['product_name']),
-          detail: [
-            asText(task['article_no']),
-            asText(task['order_no']),
-          ].where((part) => part.isNotEmpty).join(' · '),
+          title: asText(task['article_no']).isNotEmpty
+              ? asText(task['article_no'])
+              : asText(task['step_name']),
+          detail: asText(task['order_no']),
           kind: 'work',
           signed: _taskPay(task),
         ),

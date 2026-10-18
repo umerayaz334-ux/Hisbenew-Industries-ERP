@@ -53,9 +53,10 @@ class ProductRow {
 }
 
 class ProductsPage extends StatefulWidget {
-  const ProductsPage({required this.model, super.key});
+  const ProductsPage({required this.model, this.refreshTick = 0, super.key});
 
   final AppModel model;
+  final int refreshTick;
 
   @override
   State<ProductsPage> createState() => _ProductsPageState();
@@ -80,13 +81,32 @@ class _ProductsPageState extends State<ProductsPage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(ProductsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshTick != widget.refreshTick) _load();
+  }
+
   Future<void> _load() async {
     final session = widget.model.session;
     if (session == null) return;
-    setState(() {
-      _loading = _products.isEmpty;
-      _error = false;
-    });
+    if (_products.isEmpty) {
+      final saved = await widget.model.api.rememberedList(session, '/products');
+      if (!mounted) return;
+      if (saved != null && saved.isNotEmpty) {
+        setState(() {
+          _products = [for (final row in saved) ProductRow.fromJson(row)];
+          _loading = false;
+          _error = false;
+        });
+      }
+    }
+    if (_products.isEmpty && mounted) {
+      setState(() {
+        _loading = true;
+        _error = false;
+      });
+    }
     try {
       final rows = await widget.model.api.products(session);
       if (!mounted) return;
@@ -105,17 +125,19 @@ class _ProductsPageState extends State<ProductsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final worker = widget.model.isWorker;
     final query = _search.text.trim().toLowerCase();
     final visible = _products.where((row) {
       if (query.isEmpty) return true;
-      return '${row.name} ${row.article} ${row.category}'.toLowerCase().contains(query);
+      final haystack = worker ? row.article : '${row.name} ${row.article} ${row.category}';
+      return haystack.toLowerCase().contains(query);
     }).toList();
 
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: WorkSearch(controller: _search, hint: phrase(context, 'Name or article', 'نام یا آرٹیکل')),
+          child: WorkSearch(controller: _search, hint: phrase(context, worker ? 'SKU' : 'Name or article', worker ? 'آرٹیکل' : 'نام یا آرٹیکل')),
         ),
         Expanded(
           child: RefreshIndicator(
@@ -129,9 +151,10 @@ class _ProductsPageState extends State<ProductsPage> {
                     itemCount: visible.length,
                     itemBuilder: (context, index) {
                       final row = visible[index];
+                      final title = worker || row.name.isEmpty ? row.article : row.name;
                       return SummaryCard(
                           tint: row.lowStock ? const Color(0xFFFFF1F2) : null,
-                          sheetTitle: row.name.isEmpty ? row.article : row.name,
+                          sheetTitle: title.trim().isEmpty ? '—' : title,
                           summary: Row(
                             children: [
                               ProductThumb(path: row.image, size: 42),
@@ -140,8 +163,8 @@ class _ProductsPageState extends State<ProductsPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(row.name.isEmpty ? row.article : row.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                                    Text(row.article, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
+                                    Text(title.trim().isEmpty ? '—' : title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    if (!worker) Text(row.article, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
                                   ],
                                 ),
                               ),
@@ -179,7 +202,7 @@ class _ProductsPageState extends State<ProductsPage> {
     final usa = TextEditingController(text: '${row.usa}');
     await showWorkSheet(
       context: context,
-      title: row.name,
+      title: widget.model.isWorker || row.name.isEmpty ? row.article : row.name,
       child: Column(
         children: [
           TextField(controller: factory, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: phrase(context, 'Factory stock', 'فیکٹری اسٹاک'))),

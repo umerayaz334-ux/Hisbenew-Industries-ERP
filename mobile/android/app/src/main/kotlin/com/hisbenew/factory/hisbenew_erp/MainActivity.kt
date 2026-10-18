@@ -41,13 +41,18 @@ class MainActivity : FlutterActivity() {
                 result.success(true)
                 return@setMethodCallHandler
             }
+            if (call.method == "releaseCallTone") {
+                PhoneRing.releaseForCall()
+                result.success(true)
+                return@setMethodCallHandler
+            }
             if (call.method == "startOutgoingRing") {
                 PhoneRing.startOutgoing(this)
                 result.success(true)
                 return@setMethodCallHandler
             }
             if (call.method == "stopOutgoingRing") {
-                PhoneRing.stop()
+                PhoneRing.releaseForCall()
                 result.success(true)
                 return@setMethodCallHandler
             }
@@ -94,6 +99,7 @@ class MainActivity : FlutterActivity() {
                 return@setMethodCallHandler
             }
             if (call.method == "stopVoiceService") {
+                PhoneRing.finishCall()
                 stopService(Intent(this, VoiceCallService::class.java))
                 result.success(true)
                 return@setMethodCallHandler

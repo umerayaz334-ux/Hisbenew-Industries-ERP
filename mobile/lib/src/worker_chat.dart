@@ -11,10 +11,11 @@ import 'theme.dart';
 import 'notification_navigation.dart';
 
 class WorkerChat extends StatefulWidget {
-  const WorkerChat({required this.model, required this.calls, super.key});
+  const WorkerChat({required this.model, required this.calls, this.refreshTick = 0, super.key});
 
   final AppModel model;
   final CallDesk calls;
+  final int refreshTick;
 
   @override
   State<WorkerChat> createState() => _WorkerChatState();
@@ -59,10 +60,32 @@ class _WorkerChatState extends State<WorkerChat> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(WorkerChat oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshTick == widget.refreshTick) return;
+    if (_personId == null) {
+      _loadPeople(quiet: _people.isNotEmpty);
+    } else {
+      _loadThread(quiet: _thread.isNotEmpty);
+    }
+  }
+
   Future<void> _loadPeople({bool quiet = false}) async {
     final session = widget.model.session;
     if (session == null) return;
-    if (!quiet) setState(() => _loading = true);
+    if (_people.isEmpty) {
+      final saved = await widget.model.api.rememberedList(session, '/internal-message-users');
+      if (!mounted) return;
+      if (saved != null && saved.isNotEmpty) {
+        setState(() {
+          _people = saved;
+          _loading = false;
+          _error = '';
+        });
+      }
+    }
+    if (!quiet && _people.isEmpty) setState(() => _loading = true);
     try {
       final people = await widget.model.api.messageUsers(session);
       if (!mounted) return;
@@ -85,7 +108,18 @@ class _WorkerChatState extends State<WorkerChat> {
     final session = widget.model.session;
     final personId = _personId;
     if (session == null || personId == null) return;
-    if (!quiet) setState(() => _loading = true);
+    if (_thread.isEmpty) {
+      final saved = await widget.model.api.rememberedList(session, '/internal-messages?user_id=$personId');
+      if (!mounted || _personId != personId) return;
+      if (saved != null && saved.isNotEmpty) {
+        setState(() {
+          _thread = saved;
+          _loading = false;
+          _error = '';
+        });
+      }
+    }
+    if (!quiet && _thread.isEmpty) setState(() => _loading = true);
     try {
       final thread = await widget.model.api.messages(session, personId);
       if (!mounted || _personId != personId) return;

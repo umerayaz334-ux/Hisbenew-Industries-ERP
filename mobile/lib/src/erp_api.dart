@@ -92,23 +92,53 @@ class ErpApi {
   String _account(ErpSession session) => '${session.baseUrl}|${session.tenantSlug}|${session.username}|${session.workerId}';
 
   final _listRequests = <String, Future<List<Map<String, dynamic>>>>{};
+  final _memoryLists = <String, List<Map<String, dynamic>>>{};
+  String _listKey(ErpSession session, String path) => '${_account(session)}|$path';
+  List<Map<String, dynamic>>? peekList(ErpSession session, String path) => _memoryLists[_listKey(session, path)];
+  Future<List<Map<String, dynamic>>?> rememberedList(ErpSession session, String path) async {
+    final hot = peekList(session, path);
+    if (hot != null) return hot;
+    final saved = await savedList(session, path);
+    if (saved != null) _memoryLists[_listKey(session, path)] = saved;
+    return saved;
+  }
+  void warmLists(ErpSession session) {
+    for (final path in const [
+      '/products',
+      '/orders',
+      '/shipping/pending',
+      '/shipping',
+      '/manufacturing/dispatch-needs',
+      '/customers',
+      '/internal-message-users',
+    ]) {
+      if (_memoryLists.containsKey(_listKey(session, path))) continue;
+      unawaited(_cachedList(session, path).then<void>((_) {}, onError: (Object _) {}));
+    }
+  }
   Future<List<Map<String, dynamic>>> _cachedList(ErpSession session, String path) {
     final key = '${session.token}|${_account(session)}|$path';
     return _listRequests.putIfAbsent(key, () => _loadList(session, path).whenComplete(() { _listRequests.remove(key); }));
   }
   Future<List<Map<String, dynamic>>> _loadList(ErpSession session, String path) async {
+    final key = _listKey(session, path);
     try {
       final rows = await _sendList(url: '${session.baseUrl}$path', token: session.token).timeout(const Duration(seconds: 8));
-      await offline.saveCache(_account(session), path, rows);
+      _memoryLists[key] = rows;
+      unawaited(() async {
+        try {
+          await offline.saveCache(_account(session), path, rows);
+        } catch (_) {}
+      }());
       unawaited(ProductImageCache.instance.prefetch(rows, limit: 6));
       return rows;
     } on TimeoutException {
       offline.markOffline();
-      return await offline.cache(_account(session), path) ?? [];
+      return _memoryLists[key] ?? await offline.cache(_account(session), path) ?? [];
     } on ErpException catch (error) {
       if (error.code == 'invalidLogin' || error.code == 'denied') rethrow;
       if (error.code != 'denied') offline.markOffline();
-      return await offline.cache(_account(session), path) ?? [];
+      return _memoryLists[key] ?? await offline.cache(_account(session), path) ?? [];
     }
   }
 
@@ -297,7 +327,7 @@ class ErpApi {
   }
 
   Future<List<Map<String, dynamic>>> customers(ErpSession session) async {
-    return _sendList(url: '${session.baseUrl}/customers', token: session.token);
+    return _cachedList(session, '/customers');
   }
 
   Future<void> saveCustomer(ErpSession session, Map<String, String> body, {int? id}) async {
