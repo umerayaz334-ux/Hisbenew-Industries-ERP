@@ -39,12 +39,12 @@ object PhoneRing {
             }
             silenceCallKit()
             if (playingKind == "incoming" && player != null) return@post
-            start(context, "incoming", AudioAttributes.USAGE_NOTIFICATION_RINGTONE, AudioManager.STREAM_RING, AudioManager.MODE_RINGTONE)
+            start(context, "incoming", AudioAttributes.USAGE_NOTIFICATION_RINGTONE, AudioManager.STREAM_RING, AudioManager.MODE_RINGTONE, speaker = true)
             handler.postDelayed({
                 if (playingKind != "incoming") return@postDelayed
                 silenceCallKit()
                 if (player == null) {
-                    start(context, "incoming", AudioAttributes.USAGE_NOTIFICATION_RINGTONE, AudioManager.STREAM_RING, AudioManager.MODE_RINGTONE)
+                    start(context, "incoming", AudioAttributes.USAGE_NOTIFICATION_RINGTONE, AudioManager.STREAM_RING, AudioManager.MODE_RINGTONE, speaker = true)
                 }
             }, 400)
         }
@@ -53,8 +53,18 @@ object PhoneRing {
     fun startOutgoing(context: Context) {
         handler.post {
             silenceCallKit()
-            if (playingKind == "outgoing" && player?.isPlaying == true) return@post
-            start(context, "outgoing", AudioAttributes.USAGE_VOICE_COMMUNICATION, AudioManager.STREAM_VOICE_CALL, AudioManager.MODE_IN_COMMUNICATION)
+            if (playingKind == "outgoing" && player != null) return@post
+            // Keep this on the earpiece. Forcing the loudspeaker for the
+            // ringback plays a blast, then the call audio pulls it back down.
+            start(
+                context,
+                "outgoing",
+                AudioAttributes.USAGE_VOICE_COMMUNICATION,
+                AudioManager.STREAM_VOICE_CALL,
+                AudioManager.MODE_IN_COMMUNICATION,
+                speaker = false,
+                volume = 0.4f,
+            )
         }
     }
 
@@ -97,15 +107,15 @@ object PhoneRing {
         return audio.ringerMode == AudioManager.RINGER_MODE_NORMAL && audio.getStreamVolume(AudioManager.STREAM_RING) > 0
     }
 
-    private fun start(context: Context, kind: String, usage: Int, stream: Int, mode: Int) {
+    private fun start(context: Context, kind: String, usage: Int, stream: Int, mode: Int, speaker: Boolean, volume: Float = 1f) {
         val app = context.applicationContext
         currentContext = app
         releasePlayer()
         val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         previousMode = audio.mode
         previousSpeaker = audio.isSpeakerphoneOn
+        audio.isSpeakerphoneOn = speaker
         audio.mode = mode
-        audio.isSpeakerphoneOn = true
         val attributes = AudioAttributes.Builder()
             .setUsage(usage)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -124,7 +134,7 @@ object PhoneRing {
         created.setDataSource(file.fileDescriptor, file.startOffset, file.length)
         file.close()
         created.isLooping = true
-        created.setVolume(1f, 1f)
+        created.setVolume(volume, volume)
         created.setOnPreparedListener { ready ->
             if (playingKind == kind) ready.start()
         }

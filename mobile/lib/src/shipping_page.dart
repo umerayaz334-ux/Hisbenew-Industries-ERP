@@ -92,17 +92,21 @@ class _ShippingPageState extends State<ShippingPage> {
       setState(() => _error = false);
     }
     try {
-      final results = await Future.wait([
-        widget.model.api.pendingShipping(session),
-        widget.model.api.shipments(session),
-      ]);
+      final pendingResult = await widget.model.api.pendingShipping(session);
+      List<ShipmentRecord> shippedResult = const [];
+      try {
+        shippedResult = await widget.model.api.shipments(session);
+      } on ErpException catch (error) {
+        if (error.code == 'invalidLogin') rethrow;
+      }
       if (!mounted) return;
       setState(() {
         _pending = [
-          for (final row in results[0] as List<Map<String, dynamic>>) PendingShip.fromJson(row),
+          for (final row in pendingResult) PendingShip.fromJson(row),
         ];
-        _shipped = results[1].cast<ShipmentRecord>();
+        _shipped = shippedResult;
         _loading = false;
+        _error = false;
       });
     } on ErpException {
       if (!mounted) return;

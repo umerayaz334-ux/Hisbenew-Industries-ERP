@@ -94,20 +94,28 @@ CallKitParams incomingCallParams({required int callId, required String name}) {
 
 var _shownIncomingId = 0;
 final Set<int> _answeredCallIds = {};
+final Set<int> _presentedIncoming = {};
+
+void forgetIncomingScreen(int callId) {
+  if (callId > 0) _presentedIncoming.remove(callId);
+}
 
 Future<void> showIncomingIfNeeded(int callId, String name) async {
-  if (callId <= 0) return;
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.reload();
-  if (prefs.getInt('erp.skipMissedCall') == callId ||
-      prefs.getInt('erp.pendingAcceptCall') == callId) {
-    return;
+  if (callId <= 0 || !_presentedIncoming.add(callId)) return;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
+    if (prefs.getInt('erp.skipMissedCall') == callId ||
+        prefs.getInt('erp.pendingAcceptCall') == callId) {
+      return;
+    }
+    await prefs.setString('erp.ringingName', name);
+    await FlutterCallkitIncoming.showCallkitIncoming(incomingCallParams(callId: callId, name: name));
+    await PhonePermissions.startIncomingRing();
+  } catch (error) {
+    _presentedIncoming.remove(callId);
+    rethrow;
   }
-  final active = await FlutterCallkitIncoming.activeCalls();
-  if (active.any((call) => call.id == callScreenId(callId))) return;
-  await prefs.setString('erp.ringingName', name);
-  await FlutterCallkitIncoming.showCallkitIncoming(incomingCallParams(callId: callId, name: name));
-  await PhonePermissions.startIncomingRing();
 }
 
 Future<void> watchIncomingCall(String token) async {
@@ -160,6 +168,7 @@ Future<void> _hideShownCall() async {
   final callId = _shownIncomingId;
   final screenId = callScreenId(callId);
   _shownIncomingId = 0;
+  forgetIncomingScreen(callId);
   await PhonePermissions.stopIncomingRing();
   try {
     await FlutterCallkitIncoming.endCall(screenId);

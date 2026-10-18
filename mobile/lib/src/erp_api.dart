@@ -192,8 +192,18 @@ class ErpApi {
   }
 
   Future<List<ShipmentRecord>> shipments(ErpSession session) async {
-    final data = await Future.wait([_cachedList(session, '/shipping'), _cachedList(session, '/orders')]);
-    return _shipmentRows(data[0], data[1]);
+    final recordsFuture = _cachedList(session, '/shipping');
+    final ordersFuture = _optionalList(session, '/orders');
+    return _shipmentRows(await recordsFuture, await ordersFuture);
+  }
+
+  Future<List<Map<String, dynamic>>> _optionalList(ErpSession session, String path) async {
+    try {
+      return await _cachedList(session, path);
+    } on ErpException catch (error) {
+      if (error.code == 'invalidLogin') rethrow;
+      return const [];
+    }
   }
 
   List<ShipmentRecord> shipmentRecords(List<Map<String, dynamic>> records, List<Map<String, dynamic>> orders) {

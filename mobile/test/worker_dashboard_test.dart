@@ -25,6 +25,10 @@ class DashboardApi extends ErpApi {
   @override
   Future<List<Map<String, dynamic>>> messageUsers(ErpSession session) async => [];
   @override
+  Future<List<Map<String, dynamic>>> manufacturingNeeds(ErpSession session) async => [
+    {'article_no': 'SKU-9', 'image_url': '', 'shortage': 4, 'product_name': 'Sample'},
+  ];
+  @override
   Future<Map<String, dynamic>?> activeCall(ErpSession session) async => null;
   @override
   Future<List<Map<String, dynamic>>> callIceServers(ErpSession session) async => [];
@@ -53,6 +57,10 @@ void main() {
     expect(find.text('#1001'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('#1008'), 400);
     expect(find.text('#1008'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('To make · 1'), 300);
+    expect(find.text('To make · 1'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('SKU-9'), 200);
+    expect(find.text('SKU-9'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Menu'));
     await tester.pumpAndSettle();

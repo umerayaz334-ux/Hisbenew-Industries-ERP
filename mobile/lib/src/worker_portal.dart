@@ -42,12 +42,14 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
   bool _hasData = false;
   List<PendingShip> _pending = const [];
   List<ShipmentRecord> _moving = const [];
+  List<Map<String, dynamic>> _needs = const [];
   List<Map<String, dynamic>> _tasks = const [];
   List<Map<String, dynamic>> _payments = const [];
   List<Map<String, dynamic>> _expenses = const [];
   var _unread = 0;
   Timer? _unreadTimer;
   Timer? _syncTimer;
+  Timer? _firstSync;
 
   @override
   void initState() {
@@ -64,7 +66,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       _refreshUnread();
       _unreadTimer = Timer.periodic(const Duration(seconds: 8), (_) => _refreshUnread());
       _syncTimer = Timer.periodic(const Duration(seconds: 20), (_) => _syncOffline());
-      Future<void>.delayed(const Duration(seconds: 3), () {
+      _firstSync = Timer(const Duration(seconds: 3), () {
         if (mounted) _syncOffline();
       });
     });
@@ -76,6 +78,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     notificationChat.removeListener(_openNotificationChat);
     _unreadTimer?.cancel();
     _syncTimer?.cancel();
+    _firstSync?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _calls.dispose();
     super.dispose();
@@ -164,6 +167,24 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     });
   }
 
+  Future<List<Map<String, dynamic>>> _keepList(Future<List<Map<String, dynamic>>> request) async {
+    try {
+      return await request;
+    } on ErpException catch (error) {
+      if (error.code == 'invalidLogin') rethrow;
+      return const [];
+    }
+  }
+
+  Future<List<ShipmentRecord>> _keepShipments(Future<List<ShipmentRecord>> request) async {
+    try {
+      return await request;
+    } on ErpException catch (error) {
+      if (error.code == 'invalidLogin') rethrow;
+      return const [];
+    }
+  }
+
   Future<void> _load() async {
     final session = widget.model.session;
     if (session == null || _fetching) return;
@@ -181,18 +202,32 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       final paymentsFuture = _allow('Worker Payouts') ? widget.model.api.workerPayments(session) : Future.value(const <Map<String, dynamic>>[]);
       final expensesFuture = _allow('Worker Payouts') ? widget.model.api.workerExpenses(session) : Future.value(const <Map<String, dynamic>>[]);
       final shippedFuture = _allow('Shipping') ? widget.model.api.shipments(session) : Future.value(const <ShipmentRecord>[]);
+      final needsFuture = widget.model.api.manufacturingNeeds(session);
       // Attach error handlers to every request immediately: a revoked page
       // must not produce an unhandled error while another request is loading.
-      final results = await Future.wait<Object>([pendingFuture, tasksFuture, orderTasksFuture, paymentsFuture, expensesFuture, shippedFuture]);
+      final results = await Future.wait<Object>([
+        _keepList(pendingFuture),
+        _keepList(tasksFuture),
+        _keepList(orderTasksFuture),
+        _keepList(paymentsFuture),
+        _keepList(expensesFuture),
+        _keepShipments(shippedFuture),
+        _keepList(needsFuture),
+      ]);
       final pending = results[0] as List<Map<String, dynamic>>;
       final tasks = results[1] as List<Map<String, dynamic>>;
       final orderTasks = results[2] as List<Map<String, dynamic>>;
       final payments = results[3] as List<Map<String, dynamic>>;
       final expenses = results[4] as List<Map<String, dynamic>>;
       final shipped = results[5] as List<ShipmentRecord>;
+      final needs = results[6] as List<Map<String, dynamic>>;
       if (!mounted) return;
       setState(() {
         _pending = [for (final row in pending) PendingShip.fromJson(row)];
+        _needs = [
+          for (final row in needs)
+            if (asInt(row['shortage']) > 0) row,
+        ];
         _moving = [
           for (final row in shipped)
             if (_stillMoving(row.status)) row,
@@ -310,9 +345,11 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
                             tasks: _tasks,
                             payments: _payments,
                             expenses: _expenses,
+                            needs: _needs,
                             onRetry: _load,
                             onOpenPayouts: () => _open(3),
                             onOpenShipping: () => _open(1),
+                            onOpenManufacturing: () => _open(8),
                             onOpenChat: () => _open(2),
                             onOpenOrders: () => _open(5),
                             onOpenProducts: () => _open(6),
@@ -411,9 +448,11 @@ class _WorkerHome extends StatelessWidget {
     required this.tasks,
     required this.payments,
     required this.expenses,
+    required this.needs,
     required this.onRetry,
     required this.onOpenPayouts,
     required this.onOpenShipping,
+    required this.onOpenManufacturing,
     required this.onOpenChat,
     required this.onOpenOrders,
     required this.onOpenProducts,
@@ -429,9 +468,11 @@ class _WorkerHome extends StatelessWidget {
   final List<Map<String, dynamic>> tasks;
   final List<Map<String, dynamic>> payments;
   final List<Map<String, dynamic>> expenses;
+  final List<Map<String, dynamic>> needs;
   final Future<void> Function() onRetry;
   final VoidCallback onOpenPayouts;
   final VoidCallback onOpenShipping;
+  final VoidCallback onOpenManufacturing;
   final VoidCallback onOpenChat;
   final VoidCallback onOpenOrders;
   final VoidCallback onOpenProducts;
@@ -515,6 +556,12 @@ class _WorkerHome extends StatelessWidget {
                       ),
                     const SizedBox(height: 8),
                   ],
+                  _SectionHead(title: phrase(context, 'To make', 'بنانا'), action: phrase(context, 'Make', 'بنائیں'), count: needs.length, onAction: onOpenManufacturing),
+                  if (needs.isEmpty)
+                    const WorkCard(child: Padding(padding: EdgeInsets.all(20), child: Text('Nothing to make right now.')))
+                  else
+                    for (final row in needs) _MakeRow(sku: asText(row['article_no']), image: asText(row['image_url']), units: asInt(row['shortage'])),
+                  const SizedBox(height: 8),
                   Row(children: [
                     if (model.canAccess('Orders')) Expanded(child: _QuickTile(icon: Icons.receipt_long_outlined, label: phrase(context, 'Orders', 'آرڈر'), onTap: onOpenOrders)),
                     if (model.canAccess('Orders') && model.canAccess('Products')) const SizedBox(width: 10),
@@ -651,6 +698,51 @@ class _OpenOrderCard extends StatelessWidget {
               Text('$units ${phrase(context, 'units', 'یونٹ')}', style: const TextStyle(color: hisbenewMuted, fontSize: 12, fontWeight: FontWeight.w600)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MakeRow extends StatelessWidget {
+  const _MakeRow({required this.sku, required this.image, required this.units});
+
+  final String sku;
+  final String image;
+  final int units;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = units == 1 ? phrase(context, 'unit', 'یونٹ') : phrase(context, 'units', 'یونٹ');
+    return WorkCard(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Row(
+          children: [
+            ProductThumb(path: image, size: 56),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                sku.trim().isEmpty ? '—' : sku.trim(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 22, height: 1.05, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: hisbenewInk),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              constraints: const BoxConstraints(minWidth: 64),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(color: hisbenewForest, borderRadius: BorderRadius.circular(14)),
+              child: Column(
+                children: [
+                  Text('$units', style: const TextStyle(color: Color(0xFFF3E6C8), fontSize: 22, height: 1, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text(label, style: const TextStyle(color: Color(0xFFD7E4DB), fontSize: 11, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

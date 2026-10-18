@@ -1,35 +1,35 @@
 {
-  "defaultFile": "hisbenew-erp-1.0.3-4002-universal.apk",
-  "build": 4002,
-  "version": "1.0.3",
+  "defaultFile": "hisbenew-erp-1.0.4-4003-universal.apk",
+  "build": 4003,
+  "version": "1.0.4",
   "assets": [
     {
       "label": "All processors",
-      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.3-4002/hisbenew-erp-1.0.3-4002-universal.apk",
-      "file": "hisbenew-erp-1.0.3-4002-universal.apk",
+      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.4-4003/hisbenew-erp-1.0.4-4003-universal.apk",
+      "file": "hisbenew-erp-1.0.4-4003-universal.apk",
       "bytes": 96177012,
-      "sha256": "74faf5c309eda48c531c956d559b424ada3cb1433d48fcb76016d1f43945eeef"
+      "sha256": "643070b137afe7d3d496fdb19eefcaebcbf2a1c0baa8aeafe92f0f5391685cbb"
     },
     {
       "label": "ARM64 - most recent phones",
-      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.3-4002/hisbenew-erp-1.0.3-4002-arm64.apk",
-      "file": "hisbenew-erp-1.0.3-4002-arm64.apk",
+      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.4-4003/hisbenew-erp-1.0.4-4003-arm64.apk",
+      "file": "hisbenew-erp-1.0.4-4003-arm64.apk",
       "bytes": 35543011,
-      "sha256": "6db4e1dd5445238c832beadad06cb5362a71ad5b37f7b21d393fbac256081d7d"
+      "sha256": "388cfaa12f021385e5b29659636b4e187ec2793f8fb15a043864bce6b38e4907"
     },
     {
       "label": "ARM32 - 32-bit phones",
-      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.3-4002/hisbenew-erp-1.0.3-4002-arm32.apk",
-      "file": "hisbenew-erp-1.0.3-4002-arm32.apk",
+      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.4-4003/hisbenew-erp-1.0.4-4003-arm32.apk",
+      "file": "hisbenew-erp-1.0.4-4003-arm32.apk",
       "bytes": 27673049,
-      "sha256": "a2e28537c7815450a0e51fa02f6f9501ce82d0c23e0d0cb1d021eb6fb43f9700"
+      "sha256": "71b1ec93b354b7965ffe9d3420629e07a23d59f51d59a1ef79a97735aca80072"
     },
     {
       "label": "x86_64",
-      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.3-4002/hisbenew-erp-1.0.3-4002-x86_64.apk",
-      "file": "hisbenew-erp-1.0.3-4002-x86_64.apk",
+      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.4-4003/hisbenew-erp-1.0.4-4003-x86_64.apk",
+      "file": "hisbenew-erp-1.0.4-4003-x86_64.apk",
       "bytes": 40896596,
-      "sha256": "05a010eb4614d2a4aacfc214ebca8bce23302743462e6236be9281eb26c4ba25"
+      "sha256": "defac0638c7cd433b31b2e138f223d8d5cad1d83ab392ed50cc4d839f23c3aef"
     }
   ]
 }

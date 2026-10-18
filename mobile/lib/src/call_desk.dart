@@ -166,6 +166,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
           return;
         }
         if (phase == 'incoming') {
+          forgetIncomingScreen(_callId ?? 0);
           _reset();
         }
       } on ErpException {
@@ -638,6 +639,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     phase = 'ended';
     final id = _callId;
     if (id != null) {
+      forgetIncomingScreen(id);
       FlutterCallkitIncoming.endCall(callScreenId(id))
           .catchError((Object _) {});
     }

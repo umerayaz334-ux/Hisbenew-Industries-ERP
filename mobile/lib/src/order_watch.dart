@@ -19,7 +19,7 @@ const _alertChannelId = 'hisbenew_orders';
 
 final _notifications = FlutterLocalNotificationsPlugin();
 
-Future<void> startOrderWatch({bool orders = false}) async {
+Future<void> startOrderWatch() async {
   if (!Platform.isAndroid) return;
   await _prepareNotifications();
   final service = FlutterBackgroundService();
@@ -28,14 +28,7 @@ Future<void> startOrderWatch({bool orders = false}) async {
       onStart: orderWatchStart,
       autoStart: false,
       autoStartOnBoot: false,
-      isForegroundMode: true,
-      notificationChannelId: _watchChannelId,
-      initialNotificationTitle: 'Hisbenew',
-      initialNotificationContent: orders
-          ? 'New orders will alert this phone'
-          : 'Messages and calls stay available',
-      foregroundServiceNotificationId: 701,
-      foregroundServiceTypes: const [AndroidForegroundType.dataSync],
+      isForegroundMode: false,
     ),
     iosConfiguration: IosConfiguration(
       autoStart: false,
@@ -50,9 +43,15 @@ Future<void> startOrderWatch({bool orders = false}) async {
       await FlutterCallkitIncoming.requestFullIntentPermission();
     }
   }
-  if (!await service.isRunning()) {
-    await service.startService();
+  if (await service.isRunning()) {
+    service.invoke('stop');
+    for (var attempt = 0; attempt < 20; attempt++) {
+      if (!await service.isRunning()) break;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
   }
+  await _notifications.cancel(id: 701);
+  await service.startService();
 }
 
 Future<void> stopOrderWatch() async {
@@ -165,6 +164,7 @@ Future<void> orderWatchStart(ServiceInstance service) async {
       android: AndroidInitializationSettings('@drawable/ic_stat_hisbenew'),
     ),
   );
+  await notes.cancel(id: 701);
 
   while (true) {
     final prefs = await SharedPreferences.getInstance();

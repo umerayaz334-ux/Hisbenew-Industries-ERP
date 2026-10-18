@@ -162,7 +162,7 @@ class AppModel extends ChangeNotifier {
 
   Future<void> _startPhoneServices() async {
     try {
-      await startOrderWatch(orders: isWorker);
+      await startOrderWatch();
       if (session != null) await MobilePush.start();
     } catch (error) {
       debugPrint('Phone services unavailable: ${error.runtimeType}');

@@ -2225,6 +2225,10 @@ async def auth_middleware(request: Request, call_next):
             ('/production/tasks', 'My Tasks'), ('/order-workflow/tasks', 'My Tasks'),
             ('/internal-message', 'Messages'), ('/internal-call', 'Messages'),
         ] if path == prefix or path.startswith(prefix + '/') or prefix in {'/internal-message', '/internal-call'} and path.startswith(prefix)), None)
+        # The phone shipping screen reads these lists together. A blocked one
+        # used to fail the whole worker screen while admin still loaded.
+        if request.method in {"GET", "HEAD", "OPTIONS"} and path in {"/orders", "/products"}:
+            required_page = None
         if required_page:
             with SessionLocal() as access_db:
                 try:
@@ -7010,7 +7014,7 @@ def order_response(order: Order, privacy: dict | None = None):
         "import_contact_name": order.import_contact_name,
         "import_contact_phone": privacy_order_contact_phone(order, privacy),
         "import_shipping_name": order.import_shipping_name,
-        "import_shipping_address": order.import_shipping_address,
+        "import_shipping_address": "" if access_privacy_role(privacy) == "worker" else order.import_shipping_address,
         "import_ship_date": order.import_ship_date,
         "import_batch_key": order.import_batch_key,
         "customer_match_reason": None,
