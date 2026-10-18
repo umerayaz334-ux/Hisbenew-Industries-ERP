@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API_BASE_URL, apiFetch, getStaticUrl } from "../api/api";
 import { formatUtcLocal } from "../utils/dateUtils";
 import "./Dashboard.css";
+import mobileRelease from "../../mobile-release.json";
 
 const AMAZON_SALE_JOBS_STORAGE_KEY = "erpAmazonSaleNotificationJobsV1";
 const AMAZON_ORDER_SYNC_INTERVAL_MS = 2 * 60 * 1000;
@@ -16,11 +17,11 @@ function FactoryAppDownloadNotice() {
       </div>
       <div className="erp-app-download-copy">
         <strong>Hisbenew ERP</strong>
+        <small>Android {mobileRelease.version} · build {mobileRelease.build}</small>
       </div>
       <a
         className="erp-app-download-action"
-        href="/downloads/hisbenew-factory-erp.apk"
-        download="hisbenew-factory-erp.apk"
+        href="/downloads/factory-app.html"
       >
         Download Android app
       </a>

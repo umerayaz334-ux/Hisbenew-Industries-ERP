@@ -104,7 +104,7 @@
       <h1>Hisbenew factory app</h1>
       <p>
         This is the phone version of the Hisbenew Industries factory ERP.
-        Each company signs in with its company code, username, and 4-digit PIN.
+        Sign in with your username and 4-digit PIN. Supports Android 7 and newer.
       </p>
       <div class="actions">
         <a id="android-download" class="primary" href="/downloads/hisbenew-factory-erp.apk" download>
@@ -113,6 +113,8 @@
         <a class="secondary" href="/portal">Back to dashboard</a>
       </div>
       <p id="android-note" class="note">Looking for the Android install file on this website.</p>
+      <div id="smaller-downloads" class="actions"></div>
+      <p class="note"><strong>Already installed?</strong> Keep your current app and saved work. This test release uses a different signing key from the previous portal download, so Android may reject the update. Do not uninstall or clear data while jobs are waiting to sync. Confirm all saved work has reached the admin before arranging a replacement installation.</p>
       <p class="note">
         iPhone does not install from this Android file. The iPhone app uses the
         same company login after it is built and installed through Apple.
@@ -121,16 +123,23 @@
     <script>
       const link = document.getElementById("android-download");
       const note = document.getElementById("android-note");
-      const apkUrl = "/downloads/hisbenew-factory-erp.apk";
-
-      fetch(apkUrl, { method: "HEAD" })
-        .then((response) => {
-          const type = response.headers.get("content-type") || "";
-          const ready = response.ok && !type.includes("text/html");
-          if (!ready) throw new Error("missing");
-          link.textContent = "Download Android app";
+      fetch('/downloads/release.json', { cache: 'no-store' })
+        .then(response => { if (!response.ok) throw new Error('manifest'); return response.json(); })
+        .then(async (release) => {
+          const apkUrl = release.assets.find(asset => asset.file === release.defaultFile).url;
+          link.href = apkUrl;
+          link.download = release.defaultFile;
+          link.textContent = `Download Android ${release.version}`;
           note.textContent =
-            "Install the downloaded file on an Android phone, then sign in with your company code, username, and PIN.";
+            `Build ${release.build}. The main download supports all included processors. Smaller downloads below contain the same app.`;
+          for (const asset of release.assets.filter(item => item.file !== release.defaultFile)) {
+            const option = document.createElement('a');
+            option.className = 'secondary';
+            option.href = asset.url;
+            option.download = asset.file;
+            option.textContent = `${asset.label} · ${Math.round(asset.bytes / 1048576)} MB`;
+            document.getElementById('smaller-downloads').appendChild(option);
+          }
         })
         .catch(() => {
           link.textContent = "Android file not published yet";
