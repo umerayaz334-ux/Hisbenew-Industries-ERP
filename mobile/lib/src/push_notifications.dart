@@ -36,6 +36,7 @@ class MobilePush {
       await Firebase.initializeApp();
       FirebaseMessaging.onBackgroundMessage(receiveMobilePush);
       final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
       if (prefs.getString('erp.pushBinding') == null) {
         await prefs.setString('erp.pushBinding', OfflineStore.newId());
       }
@@ -50,12 +51,14 @@ class MobilePush {
     } catch (_) {
       // No Firebase project in development builds: keep the polling fallback.
       final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
       await prefs.setBool('erp.pushReady', false);
     }
   }
 
   static Future<void> _register(String deviceToken) async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     final token = prefs.getString('erp.token') ?? '';
     final binding = prefs.getString('erp.pushBinding');
     if (token.isEmpty || binding == null) return;
@@ -64,15 +67,18 @@ class MobilePush {
         headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
         body: jsonEncode({'token': deviceToken, 'binding': binding}),
       ).timeout(const Duration(seconds: 10));
+      await prefs.reload();
       await prefs.setString('erp.pushToken', deviceToken);
       await prefs.setBool('erp.pushReady', response.statusCode == 200 && jsonDecode(response.body)['enabled'] == true);
     } catch (_) {
+      await prefs.reload();
       await prefs.setBool('erp.pushReady', false);
     }
   }
 
   static Future<void> stop() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     final binding = prefs.getString('erp.pushBinding');
     final deviceToken = prefs.getString('erp.pushToken');
     final token = prefs.getString('erp.token');

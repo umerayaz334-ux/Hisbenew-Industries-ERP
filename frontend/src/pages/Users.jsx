@@ -1702,8 +1702,9 @@ export default function Users({ authenticatedUser }) {
             <span className="users-eyebrow">Permanent action</span>
             <h3>Delete user?</h3>
             <p>
-              <strong>{deleteCandidate.name}</strong> will no longer be able to
-              access the ERP.
+              <strong>{deleteCandidate.name}</strong> and this account&apos;s
+              messenger conversations, calls, activity, and payment history
+              will be removed. The messages disappear for the other person too.
               {deleteCandidate.worker_id
                 ? " The linked worker record will also be removed from Workers."
                 : ""}{" "}

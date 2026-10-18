@@ -34,6 +34,7 @@ class AppModel extends ChangeNotifier {
       final changed = becameReady || pages.length != allowedPages.length || !allowedPages.containsAll(pages);
       allowedPages = pages.toSet();
       accessReady = true;
+      await prefs.reload();
       await prefs.setStringList(_accessKey, pages);
       if (changed) notifyListeners();
       return changed;
@@ -96,6 +97,7 @@ class AppModel extends ChangeNotifier {
     locale = next;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     await prefs.setString('erp.locale', next.languageCode);
   }
 
@@ -185,6 +187,7 @@ class AppModel extends ChangeNotifier {
     signingIn = false;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     await prefs.remove('erp.orderAlertAfter');
     await prefs.remove('erp.token');
     await prefs.remove('erp.baseUrl');
@@ -198,6 +201,7 @@ class AppModel extends ChangeNotifier {
 
   Future<void> _storeSession(ErpSession next) async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     await prefs.setString('erp.server', next.baseUrl);
     await prefs.setString('erp.company', next.companyCode);
     await prefs.setString('erp.baseUrl', next.baseUrl);

@@ -25,6 +25,7 @@ class OfflineStore extends ChangeNotifier {
   }
   Future<void> saveCache(String account, String path, List<Map<String, dynamic>> rows) async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     final at = DateTime.now();
     if (!await prefs.setString(_key(account, path), jsonEncode({'at': at.toIso8601String(), 'rows': rows}))) {
       throw StateError('Offline storage is unavailable');
@@ -46,6 +47,7 @@ class OfflineStore extends ChangeNotifier {
       final rows = await _read(account, kind);
       change(rows);
       final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
       if (!await prefs.setString(_key(account, kind), jsonEncode(rows))) throw StateError('Could not save this on the phone');
       if (kind == 'outbox') pendingExpenses = rows.length;
       if (kind == 'messages') pendingMessages = rows.length;

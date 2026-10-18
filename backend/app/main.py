@@ -6424,11 +6424,102 @@ def delete_worker_record(
         .all()
     ]
     if payment_transaction_ids:
+        db.query(WorkerPayment).filter(WorkerPayment.worker_id == worker.id).update(
+            {WorkerPayment.accounting_transaction_id: None},
+            synchronize_session=False,
+        )
         db.query(AccountingTransaction).filter(
             AccountingTransaction.id.in_(payment_transaction_ids),
             AccountingTransaction.source_type == ACCOUNTING_WORKER_PAYMENT_SOURCE,
         ).delete(synchronize_session=False)
     db.delete(worker)
+
+
+def _rows_referencing_users(table):
+    columns = []
+    for column in table.columns:
+        if any(fk.column.table.name == "users" and fk.column.name == "id" for fk in column.foreign_keys):
+            columns.append(column)
+    return columns
+
+
+def _delete_dependent_rows(db: Session, table, row_ids: list[int], seen: set | None = None) -> None:
+    """Remove child rows before a parent row that belongs to a deleted account."""
+    row_ids = [row_id for row_id in row_ids if row_id is not None]
+    if not row_ids:
+        return
+    seen = seen if seen is not None else set()
+    marker = (table.name, tuple(sorted(set(row_ids))))
+    if marker in seen or len(table.primary_key.columns) != 1:
+        return
+    seen.add(marker)
+    primary_key = list(table.primary_key.columns)[0]
+    for other in Base.metadata.tables.values():
+        if other is table or len(other.primary_key.columns) != 1:
+            continue
+        child_key = list(other.primary_key.columns)[0]
+        for column in other.columns:
+            if not any(fk.column.table is table and fk.column.name == primary_key.name for fk in column.foreign_keys):
+                continue
+            child_ids = [row[0] for row in db.execute(select(child_key).where(column.in_(row_ids))).all()]
+            _delete_dependent_rows(db, other, child_ids, seen)
+            db.execute(other.delete().where(column.in_(row_ids)))
+
+
+def erase_user_account(db: Session, user: User, actor_id: int) -> int | None:
+    """Remove one login and the history that belongs to it."""
+    from .mobile_push import MobilePushDevice
+    from .models import MuseApiKey
+
+    user_id = user.id
+    worker_id = user.worker_id
+    # Messenger history is removed for both people in each conversation.
+    db.query(InternalMessage).execution_options(skip_tenant_scope=True).filter(
+        or_(InternalMessage.sender_user_id == user_id, InternalMessage.recipient_user_id == user_id)
+    ).delete(synchronize_session=False)
+    db.query(InternalMessageContactRequest).execution_options(skip_tenant_scope=True).filter(
+        or_(
+            InternalMessageContactRequest.requester_user_id == user_id,
+            InternalMessageContactRequest.recipient_user_id == user_id,
+        )
+    ).delete(synchronize_session=False)
+    db.query(ActivityLog).execution_options(skip_tenant_scope=True).filter(
+        ActivityLog.actor_user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(MobilePushDevice).filter(MobilePushDevice.user_id == user_id).delete(synchronize_session=False)
+    # Keep the company Muse connection by moving it to the admin who is deleting.
+    db.query(MuseApiKey).execution_options(skip_tenant_scope=True).filter(
+        MuseApiKey.user_id == user_id
+    ).update({MuseApiKey.user_id: actor_id}, synchronize_session=False)
+
+    user.worker_id = None
+    db.flush()
+    if worker_id:
+        worker = db.query(Worker).execution_options(skip_tenant_scope=True).filter(Worker.id == worker_id).first()
+        if worker:
+            delete_worker_record(db, worker, delete_linked_users=False)
+
+    for table in reversed(list(Base.metadata.sorted_tables)):
+        if table.name in {"users", "workers", "muse_api_keys"}:
+            continue
+        links = _rows_referencing_users(table)
+        if not links:
+            continue
+        required = [column for column in links if not column.nullable]
+        optional = [column for column in links if column.nullable]
+        if required and len(table.primary_key.columns) == 1:
+            primary_key = list(table.primary_key.columns)[0]
+            owned_ids = [
+                row[0]
+                for row in db.execute(select(primary_key).where(or_(*(column == user_id for column in required)))).all()
+            ]
+            _delete_dependent_rows(db, table, owned_ids)
+            db.execute(table.delete().where(or_(*(column == user_id for column in required))))
+        for column in optional:
+            db.execute(table.update().where(column == user_id).values({column.key: None}))
+
+    db.delete(user)
+    return worker_id
 
 
 @app.delete("/users/{user_id}")
@@ -6443,25 +6534,17 @@ def delete_user(user_id: int, request: Request, db: Session = Depends(get_db)):
     existing = query.filter(User.id == user_id).first()
     if not existing:
         raise HTTPException(status_code=404, detail="User not found")
+    if existing.id == actor.id:
+        raise HTTPException(status_code=400, detail="You cannot delete the account you are signed in with.")
     if actor.role == "super_admin" and existing.tenant_id is not None:
         db.info["tenant_id"] = existing.tenant_id
-    worker_query = db.query(Worker)
-    if actor.role == "super_admin":
-        worker_query = worker_query.execution_options(skip_tenant_scope=True)
-    linked_worker = (
-        worker_query.filter(Worker.id == existing.worker_id).first()
-        if existing.worker_id
-        else None
-    )
-    existing.worker_id = None
-    db.delete(existing)
-    if linked_worker:
-        delete_worker_record(db, linked_worker, delete_linked_users=False)
-    db.commit()
-    return {
-        "status": "deleted",
-        "deleted_worker_id": linked_worker.id if linked_worker else None,
-    }
+    try:
+        deleted_worker_id = erase_user_account(db, existing, actor.id)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This user's records could not be removed.")
+    return {"status": "deleted", "deleted_worker_id": deleted_worker_id}
 
 @app.get("/inspiration", response_model=list[InspirationItemOut])
 def list_inspiration(db: Session = Depends(get_db)):

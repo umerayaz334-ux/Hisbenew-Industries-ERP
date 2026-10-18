@@ -43,18 +43,14 @@ Future<void> startOrderWatch() async {
   await FlutterCallkitIncoming.onBackgroundMessage(onIncomingCallBackground);
   if (!await FlutterCallkitIncoming.canUseFullScreenIntent()) {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     if (prefs.getBool('erp.fullScreenAsked') != true) {
       await prefs.setBool('erp.fullScreenAsked', true);
       await FlutterCallkitIncoming.requestFullIntentPermission();
     }
   }
-  if (await service.isRunning()) {
-    service.invoke('stop');
-    for (var attempt = 0; attempt < 20; attempt++) {
-      if (!await service.isRunning()) break;
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
-  }
+  // Restarting on every open posts the same chat notices again.
+  if (await service.isRunning()) return;
   await service.startService();
 }
 
@@ -286,6 +282,7 @@ Future<void> _watchMessages(
       // conversation is read and the total unread count stays unchanged.
       final cursor = 'erp.messageAlert.$account.$senderId';
       final marker = messageId > 0 ? '$messageId' : '${row['last_message_at']}';
+      await prefs.reload();
       if (prefs.getString(cursor) == marker) continue;
       final name = '${row['name'] ?? ''}'.trim();
       final who = name.isEmpty ? 'New message' : name;
@@ -323,8 +320,11 @@ Future<void> _watchMessages(
           ),
         ),
       );
+      await prefs.reload();
+      if (prefs.getString(cursor) == marker) continue;
       await prefs.setString(cursor, marker);
     }
+    await prefs.reload();
     await prefs.setInt('erp.chatUnread', unread);
   } catch (_) {}
 }
