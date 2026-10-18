@@ -104,19 +104,8 @@ function Restart-Backend {
         [string]$Name
     )
 
-    # 1. Check exact or wildcard service match (exclude runner service itself!)
+    # Only an explicitly named service/task may be restarted.
     $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
-    if (-not $service) {
-        $service = Get-Service | Where-Object { 
-            $_.Name -notlike "*actions.runner*" -and
-            $_.DisplayName -notlike "*Actions Runner*" -and
-            ($_.DisplayName -eq $Name -or 
-             $_.Name -like "*hisbenew*" -or 
-             $_.DisplayName -like "*hisbenew*" -or
-             $_.Name -like "*backend*" -or
-             $_.DisplayName -like "*backend*")
-        } | Select-Object -First 1
-    }
 
     if ($service) {
         Write-Host "Restarting Windows Service: $($service.Name) ($($service.DisplayName))"
@@ -126,12 +115,6 @@ function Restart-Backend {
 
     # 2. Check exact or wildcard scheduled task match
     $task = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
-    if (-not $task) {
-        $task = Get-ScheduledTask | Where-Object { 
-            $_.TaskName -notlike "*actions.runner*" -and
-            ($_.TaskName -like "*hisbenew*" -or $_.TaskName -like "*erp*" -or $_.TaskName -like "*backend*")
-        } | Select-Object -First 1
-    }
 
     if ($task) {
         Write-Host "Restarting Scheduled Task: $($task.TaskName)"
@@ -141,32 +124,35 @@ function Restart-Backend {
         return
     }
 
-    # 3. Kill any existing backend process listening on port 8000
-    try {
-        $connections = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
+    # Validate every listener before stopping anything; unrelated Python jobs stay running.
+        $connections = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
         if ($connections) {
             $owningPids = $connections.OwningProcess | Select-Object -Unique
             foreach ($pId in $owningPids) {
-                if ($pId -gt 4) {
-                    Write-Host "Stopping process PID $pId currently listening on port 8000..."
-                    Stop-Process -Id $pId -Force -ErrorAction SilentlyContinue
+                $process = Get-CimInstance Win32_Process -Filter "ProcessId=$pId"
+                $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($process.ParentProcessId)"
+                $expectedPython = [regex]::Escape($pythonPath)
+                if ($pId -le 4 -or $process.CommandLine -notmatch 'uvicorn\s+app\.main:app' -or
+                    ($process.CommandLine -notmatch $expectedPython -and $parent.CommandLine -notmatch $expectedPython)) {
+                    throw "Port 8000 belongs to an unverified process; refusing to stop PID $pId."
                 }
+            }
+            foreach ($pId in $owningPids) {
+                    Write-Host "Stopping process PID $pId currently listening on port 8000..."
+                    Stop-Process -Id $pId -Force
             }
             Start-Sleep -Seconds 2
         }
-    } catch {}
-
-    Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
 
     # 4. Start Uvicorn process via WMI so it's a top-level process independent of runner tree
     Write-Host "Launching persistent Uvicorn backend process..."
-    $cmdPath = Join-Path $backendPath "start_backend_daemon.bat"
-
-    $batContent = "@echo off`r`ncd /d `"$backendPath`"`r`n`"$pythonPath`" -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    Set-Content -Path $cmdPath -Value $batContent -Encoding ASCII
-
-    cmd /c "wmic process call create `"$cmdPath`"" | Out-Null
+    $startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }
+    $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+        CommandLine = "`"$pythonPath`" -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+        CurrentDirectory = $backendPath
+        ProcessStartupInformation = $startup
+    }
+    if ($created.ReturnValue -ne 0) { throw "Backend launch failed: $($created.ReturnValue)" }
     Start-Sleep -Seconds 5
 }
 
@@ -235,6 +221,36 @@ Write-Host "Restart target: $serviceName"
 Write-Host "Local health URL: $localHealthUrl"
 Write-Host "Public health URL: $publicHealthUrl"
 
+if ($env:ERP_INSPECT_ONLY -eq 'true' -or $env:GITHUB_REF_NAME -like 'codex/inspect-*') {
+    Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object {
+            $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$_"
+            $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($proc.ParentProcessId)"
+            Write-Host "Backend PID: $($proc.ProcessId), executable: $($proc.ExecutablePath)"
+            Write-Host "Backend launcher: $($parent.ExecutablePath)"
+            Write-Host "Uvicorn command verified: $($proc.CommandLine -match 'uvicorn\s+app\.main:app')"
+        }
+    foreach ($setting in @('GOOGLE_APPLICATION_CREDENTIALS', 'INTERNAL_CALL_ICE_SERVERS', 'DATABASE_URL', 'APP_DATA_DIR')) {
+        foreach ($scope in @('Process', 'Machine', 'User')) {
+            $configured = -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($setting, $scope))
+            Write-Host "${setting} ${scope} configured: $configured"
+        }
+    }
+    foreach ($folder in @($backendPath, (Join-Path $repoRoot 'mobile\android\app'))) {
+        if (Test-Path -LiteralPath $folder) {
+            Get-ChildItem -LiteralPath $folder -File | Where-Object { $_.Name -match 'google-services|firebase|service.account' } |
+                ForEach-Object { Write-Host "Push configuration file: $($_.FullName)" }
+        }
+    }
+    Write-Host 'Inspection complete. No server files or services changed.'
+    exit 0
+}
+
+Invoke-Step -Message 'Back up backend source and SQLite data before deployment' -Action {
+    $backupScript = Join-Path $env:GITHUB_WORKSPACE 'scripts\backup_backend.py'
+    Invoke-CheckedCommand -FilePath $pythonPath -Arguments @($backupScript, $backendPath)
+}
+
 
 
 Invoke-Step `
@@ -246,10 +262,6 @@ Invoke-Step `
             New-Item -ItemType Directory -Force -Path $backendPath | Out-Null
         }
 
-        # Grant access to destination if needed (ignore errors if runner lacks privilege)
-        try {
-            cmd /c "icacls `"$repoRoot`" /grant Users:(OI)(CI)F /T /C /Q 2>&1" | Out-Null
-        } catch {}
 
         $runnerBackend = Join-Path $env:GITHUB_WORKSPACE "backend"
 
@@ -262,8 +274,8 @@ Invoke-Step `
             $runnerBackend `
             $backendPath `
             /E `
-            /XD ".venv" "venv" "__pycache__" ".git" "uploads" "optimized" `
-            /XF "*.pyc" "*.db" "*.sqlite" `
+            /XD ".venv" "venv" "__pycache__" ".git" "static" "uploads" "optimized" `
+            /XF "*.pyc" "*.db*" "*.sqlite*" ".env*" ".secret_key" "*service-account*.json" "*firebase-adminsdk*.json" `
             /R:1 /W:2 /NFL /NDL /NJH /NJS
 
         if ($LASTEXITCODE -ge 8) {

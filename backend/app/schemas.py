@@ -399,6 +399,7 @@ class InternalMessageUserOut(BaseModel):
     unread_message_id: int | None = None
     unread_message_preview: str | None = None
     unread_message_at: datetime | None = None
+    unread_messages: list[dict] = Field(default_factory=list)
 
 
 

@@ -5812,7 +5812,8 @@ def get_internal_message_users(request: Request, db: Session = Depends(get_db)):
         )
         if tenant_scope_id is not None:
             unread_message_query = unread_message_query.filter(InternalMessage.tenant_id == tenant_scope_id)
-        unread_message = unread_message_query.order_by(InternalMessage.id.desc()).first()
+        unread_messages = unread_message_query.order_by(InternalMessage.id.desc()).limit(5).all()
+        unread_message = unread_messages[0] if unread_messages else None
         last_message_query = (
             db.query(func.max(InternalMessage.created_at))
             .execution_options(skip_tenant_scope=True)
@@ -5840,6 +5841,7 @@ def get_internal_message_users(request: Request, db: Session = Depends(get_db)):
                 unread_message_id=unread_message.id if unread_message else None,
                 unread_message_preview=((unread_message.body or '').strip() or unread_message.attachment_name or 'Attachment')[:500] if unread_message else None,
                 unread_message_at=unread_message.created_at if unread_message else None,
+                unread_messages=[{'id': entry.id, 'body': ((entry.body or '').strip() or entry.attachment_name or 'Attachment')[:500], 'created_at': iso_datetime(entry.created_at)} for entry in reversed(unread_messages)],
             )
         )
     return sorted(
@@ -18328,6 +18330,39 @@ def get_shipping_records(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Shipping history could not be loaded: {exc}") from exc
 
 
+@app.get('/manufacturing/dispatch-needs')
+def manufacturing_dispatch_needs(request: Request, db: Session = Depends(get_db)):
+    require_page_access(request, db, 'Manufacturing')
+    tenant_id = tenant_scope_id_for_request(request, db)
+    orders = db.query(Order).options(selectinload(Order.items).joinedload(OrderItem.product)).filter(
+        Order.tenant_id == tenant_id,
+        ~func.lower(func.coalesce(Order.shipping_status, '')).in_(list(STOCK_DEDUCTED_SHIPPING_STATUSES)),
+        ~func.lower(func.coalesce(Order.status, '')).in_(['cancelled', 'canceled']),
+    ).order_by(Order.order_date.asc(), Order.id.asc()).all()
+    grouped = {}
+    for order in orders:
+        for item in order.items:
+            product = item.product
+            if not product or product.tenant_id != tenant_id or int(item.quantity or 0) <= 0:
+                continue
+            row = grouped.setdefault(product.id, {
+                'product_id': product.id, 'article_no': product.article_no,
+                'product_name': product.name, 'image_url': product.image_url,
+                'factory_stock': max(0, int(product.factory_stock or 0)),
+                'usa_stock': max(0, int(product.usa_stock or 0)),
+                'front_room_stock': max(0, int(product.front_room_stock or 0)),
+                'required_quantity': 0, 'orders': [],
+            })
+            row['required_quantity'] += int(item.quantity)
+            row['orders'].append({'order_id': order.id, 'order_no': order.order_no, 'quantity': int(item.quantity), 'stock_source': item.stock_source})
+    for row in grouped.values():
+        # Same combined-stock basis used by reserve_order_item. Reservations
+        # are already represented by these orders and must not be subtracted twice.
+        row['available_stock'] = row['factory_stock'] + row['usa_stock'] + row['front_room_stock']
+        row['shortage'] = max(0, row['required_quantity'] - row['available_stock'])
+    return sorted(grouped.values(), key=lambda row: (-row['shortage'], row['article_no'] or ''))
+
+
 @app.get("/shipping/pending-count")
 def get_pending_shipping_count(request: Request, db: Session = Depends(get_db)):
     """Lightweight tenant-scoped badge count for the sidebar Shipping item."""
@@ -19377,7 +19412,7 @@ def get_worker_expenses(
 @app.get("/worker-expenses/sync-capabilities")
 def worker_expense_sync_capabilities(request: Request, db: Session = Depends(get_db)):
     get_authenticated_user(request, db)
-    return {"idempotent_expenses": True}
+    return {"idempotent_expenses": True, "idempotent_messages": True}
 
 
 @app.post("/worker-expenses", response_model=WorkerExpenseOut)

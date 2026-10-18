@@ -9,14 +9,14 @@ from sqlalchemy.orm import Session
 
 from app import main
 from app.database import Base
-from app.models import Tenant, User, InternalMessage, Worker, WorkerExpense
+from app.models import Tenant, User, InternalMessage, Worker, WorkerExpense, Product, Customer, Order, OrderItem
 from app.schemas import WorkerExpenseCreate
 
 
 class MobileDataTests(unittest.TestCase):
     def setUp(self):
         self.engine = create_engine('sqlite://')
-        Base.metadata.create_all(self.engine, tables=[Tenant.__table__, User.__table__, Worker.__table__, WorkerExpense.__table__, InternalMessage.__table__])
+        Base.metadata.create_all(self.engine, tables=[Tenant.__table__, User.__table__, Worker.__table__, WorkerExpense.__table__, InternalMessage.__table__, Product.__table__, Customer.__table__, Order.__table__, OrderItem.__table__])
         self.db = Session(self.engine)
         self.worker = Worker(id=1, tenant_id=1, name='Worker', role='worker')
         self.user = User(id=1, tenant_id=1, username='worker', name='Worker', role='worker', worker_id=1)
@@ -52,6 +52,23 @@ class MobileDataTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as error:
                 main.create_worker_expense(payload.model_copy(update={'amount': 200}), SimpleNamespace(), self.db)
             self.assertEqual(error.exception.status_code, 409)
+
+    def test_manufacturing_aggregates_pending_demand_against_stock_once(self):
+        product = Product(id=1, tenant_id=1, article_no='A', name='Chair', factory_stock=5, usa_stock=1, reserved_stock=6)
+        self.db.add(product)
+        for ident, qty, status, shipping, tenant in [(1, 4, 'New', 'Pending', 1), (2, 5, 'New', 'Pending', 1), (3, 20, 'Cancelled', 'Pending', 1), (4, 20, 'New', 'Shipped', 1), (5, 20, 'New', 'Pending', 2)]:
+            order = Order(id=ident, tenant_id=tenant, customer_id=1, order_no=str(ident), status=status, shipping_status=shipping)
+            order.items.append(OrderItem(tenant_id=tenant, product=product, quantity=qty))
+            self.db.add(order)
+        self.db.commit()
+        with patch.object(main, 'require_page_access') as access, patch.object(main, 'tenant_scope_id_for_request', return_value=1):
+            rows = main.manufacturing_dispatch_needs(SimpleNamespace(), self.db)
+        access.assert_called_once()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['required_quantity'], 9)
+        self.assertEqual(rows[0]['available_stock'], 6)
+        self.assertEqual(rows[0]['shortage'], 3)
+        self.assertEqual(len(rows[0]['orders']), 2)
 
 
 if __name__ == '__main__':
