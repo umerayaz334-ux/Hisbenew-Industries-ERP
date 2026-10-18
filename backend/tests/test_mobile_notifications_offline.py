@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 from app import main
@@ -42,6 +42,24 @@ class MobileDataTests(unittest.TestCase):
         self.assertEqual(rows[0].unread_message_id, 1)
         self.assertIsNone(self.db.get(InternalMessage, 1).read_at)
 
+    def test_summaries_bound_previews_and_use_two_queries(self):
+        from app.messenger_queries import conversation_summaries
+        self.db.add_all([InternalMessage(id=index, tenant_id=1, sender_user_id=2, recipient_user_id=1, body=f'Message {index}') for index in range(1, 9)])
+        self.db.add(InternalMessage(id=9, tenant_id=2, sender_user_id=3, recipient_user_id=1, body='Other company'))
+        self.db.commit()
+        statements = []
+        def record(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement)
+        event.listen(self.engine, 'before_cursor_execute', record)
+        try:
+            counts, activity, previews = conversation_summaries(self.db, 1, 1, list(range(2, 40)))
+        finally:
+            event.remove(self.engine, 'before_cursor_execute', record)
+        self.assertEqual(len(statements), 2)
+        self.assertEqual(counts, {2: 8})
+        self.assertEqual([item.id for item in previews[2]], [8, 7, 6, 5, 4])
+        self.assertEqual(set(activity), {2})
+
     def test_spending_retries_create_one_record_and_reject_changed_payload(self):
         payload = WorkerExpenseCreate(amount=100, note='Fuel', spent_at=datetime(2026, 10, 17), client_request_id='repeat-id')
         with patch.object(main, 'get_authenticated_user', return_value=self.user):
@@ -61,8 +79,8 @@ class MobileDataTests(unittest.TestCase):
             order.items.append(OrderItem(tenant_id=tenant, product=product, quantity=qty))
             self.db.add(order)
         self.db.commit()
-        with patch.object(main, 'require_page_access') as access, patch.object(main, 'tenant_scope_id_for_request', return_value=1):
-            rows = main.manufacturing_dispatch_needs(SimpleNamespace(), self.db)
+        with patch.object(main, 'require_page_access', return_value=self.user) as access:
+            rows = main.manufacturing_dispatch_needs(SimpleNamespace(state=SimpleNamespace(tenant_id=1)), self.db)
         access.assert_called_once()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['required_quantity'], 9)

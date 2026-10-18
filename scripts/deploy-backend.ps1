@@ -420,7 +420,12 @@ Invoke-Step `
     -Action {
 
         $relayInstaller = Join-Path $env:GITHUB_WORKSPACE 'scripts\install-call-relay.ps1'
-        if (Test-Path -LiteralPath $relayInstaller) { & $relayInstaller -BackendPath $backendPath }
+        if (Test-Path -LiteralPath $relayInstaller) {
+            $relayDirectory = Join-Path $repoRoot 'call-relay'
+            New-Item -ItemType Directory -Force -Path $relayDirectory | Out-Null
+            Copy-Item -LiteralPath $relayInstaller -Destination (Join-Path $relayDirectory 'install.ps1') -Force
+            & $relayInstaller -BackendPath $backendPath
+        }
 
         Restart-Backend `
             -Name $serviceName

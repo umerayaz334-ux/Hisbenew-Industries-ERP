@@ -5786,50 +5786,12 @@ def get_internal_message_users(request: Request, db: Session = Depends(get_db)):
     visible_contact_ids = messenger_visible_contact_ids(db, current_user.id, tenant_scope_id)
     users = [user for user in users_query.order_by(User.name.asc()).all() if user.id in visible_contact_ids]
     user_ids = [user.id for user in users]
-    unread_by_sender: dict[int, int] = {}
-
-    if user_ids:
-        unread_query = (
-            db.query(InternalMessage.sender_user_id, func.count(InternalMessage.id))
-            .execution_options(skip_tenant_scope=True)
-            .filter(
-                InternalMessage.sender_user_id.in_(user_ids),
-                InternalMessage.recipient_user_id == current_user.id,
-                InternalMessage.read_at.is_(None),
-            )
-        )
-        if tenant_scope_id is not None:
-            unread_query = unread_query.filter(InternalMessage.tenant_id == tenant_scope_id)
-        for sender_id, count in unread_query.group_by(InternalMessage.sender_user_id).all():
-            unread_by_sender[sender_id] = int(count or 0)
-
+    from .messenger_queries import conversation_summaries
+    unread_by_sender, last_by_peer, previews = conversation_summaries(db, current_user.id, tenant_scope_id, user_ids)
     rows = []
     for user in users:
-        unread_message_query = db.query(InternalMessage).execution_options(skip_tenant_scope=True).filter(
-            InternalMessage.sender_user_id == user.id,
-            InternalMessage.recipient_user_id == current_user.id,
-            InternalMessage.read_at.is_(None),
-        )
-        if tenant_scope_id is not None:
-            unread_message_query = unread_message_query.filter(InternalMessage.tenant_id == tenant_scope_id)
-        unread_messages = unread_message_query.order_by(InternalMessage.id.desc()).limit(5).all()
+        unread_messages = previews.get(user.id, [])
         unread_message = unread_messages[0] if unread_messages else None
-        last_message_query = (
-            db.query(func.max(InternalMessage.created_at))
-            .execution_options(skip_tenant_scope=True)
-            .filter(
-                (
-                    (InternalMessage.sender_user_id == current_user.id)
-                    & (InternalMessage.recipient_user_id == user.id)
-                )
-                | (
-                    (InternalMessage.sender_user_id == user.id)
-                    & (InternalMessage.recipient_user_id == current_user.id)
-                )
-            )
-        )
-        if tenant_scope_id is not None:
-            last_message_query = last_message_query.filter(InternalMessage.tenant_id == tenant_scope_id)
         rows.append(
             InternalMessageUserOut(
                 id=user.id,
@@ -5837,7 +5799,7 @@ def get_internal_message_users(request: Request, db: Session = Depends(get_db)):
                 username=user.username,
                 role=user.role,
                 unread_count=unread_by_sender.get(user.id, 0),
-                last_message_at=last_message_query.scalar(),
+                last_message_at=last_by_peer.get(user.id),
                 unread_message_id=unread_message.id if unread_message else None,
                 unread_message_preview=((unread_message.body or '').strip() or unread_message.attachment_name or 'Attachment')[:500] if unread_message else None,
                 unread_message_at=unread_message.created_at if unread_message else None,
@@ -18333,8 +18295,8 @@ def get_shipping_records(request: Request, db: Session = Depends(get_db)):
 
 @app.get('/manufacturing/dispatch-needs')
 def manufacturing_dispatch_needs(request: Request, db: Session = Depends(get_db)):
-    require_page_access(request, db, 'Manufacturing')
-    tenant_id = tenant_scope_id_for_request(request, db)
+    user = require_page_access(request, db, 'Manufacturing')
+    tenant_id = tenant_scope_id_for_request(request, user)
     orders = db.query(Order).options(selectinload(Order.items).joinedload(OrderItem.product)).filter(
         Order.tenant_id == tenant_id,
         ~func.lower(func.coalesce(Order.shipping_status, '')).in_(list(STOCK_DEDUCTED_SHIPPING_STATUSES)),

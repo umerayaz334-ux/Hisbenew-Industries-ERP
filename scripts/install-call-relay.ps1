@@ -7,6 +7,12 @@ $releaseUrl = 'https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/release
 $taskName = 'Hisbenew Call Relay'
 $secretPath = Join-Path $BackendPath '.turn-secret'
 $hostPath = Join-Path $BackendPath '.turn-host'
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$administrator = (New-Object Security.Principal.WindowsPrincipal($identity)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $administrator) {
+    Write-Warning 'Call relay setup requires an Administrator PowerShell on the VPS. Run C:\HisbenewERP\call-relay\install.ps1 -BackendPath C:\HisbenewERP\backend. Existing call configuration remains active.'
+    return
+}
 $publicIP = (Resolve-DnsName api.hisbenew.com -Type A | Where-Object Type -eq 'A' | Select-Object -First 1 -ExpandProperty IPAddress)
 if (-not $publicIP) { throw 'Unable to resolve the verified API host' }
 New-Item -ItemType Directory -Force -Path $relayRoot | Out-Null
