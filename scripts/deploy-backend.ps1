@@ -275,7 +275,7 @@ Invoke-Step `
             $backendPath `
             /E `
             /XD ".venv" "venv" "__pycache__" ".git" "static" "uploads" "optimized" `
-            /XF "*.pyc" "*.db*" "*.sqlite*" ".env*" ".secret_key" "*service-account*.json" "*firebase-adminsdk*.json" `
+            /XF "*.pyc" "*.db*" "*.sqlite*" ".env*" ".secret_key" ".turn-*" "*service-account*.json" "*firebase-adminsdk*.json" `
             /R:1 /W:2 /NFL /NDL /NJH /NJS
 
         if ($LASTEXITCODE -ge 8) {
@@ -418,6 +418,9 @@ print('Database migrations and tenant seeds applied.')
 Invoke-Step `
     -Message "Restart backend" `
     -Action {
+
+        $relayInstaller = Join-Path $env:GITHUB_WORKSPACE 'scripts\install-call-relay.ps1'
+        if (Test-Path -LiteralPath $relayInstaller) { & $relayInstaller -BackendPath $backendPath }
 
         Restart-Backend `
             -Name $serviceName

@@ -6011,9 +6011,10 @@ def get_active_internal_call(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/internal-calls/config")
 def get_internal_call_config(request: Request, db: Session = Depends(get_db)):
-    get_authenticated_user(request, db)
+    user = get_authenticated_user(request, db)
+    from .call_relay import ice_servers
     return {
-        "ice_servers": INTERNAL_CALL_ICE_SERVERS,
+        "ice_servers": ice_servers(user.id),
         **load_call_settings(),
     }
 
