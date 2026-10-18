@@ -91,7 +91,12 @@ class ErpApi {
   };
   String _account(ErpSession session) => '${session.baseUrl}|${session.tenantSlug}|${session.username}|${session.workerId}';
 
-  Future<List<Map<String, dynamic>>> _cachedList(ErpSession session, String path) async {
+  final _listRequests = <String, Future<List<Map<String, dynamic>>>>{};
+  Future<List<Map<String, dynamic>>> _cachedList(ErpSession session, String path) {
+    final key = '${session.token}|${_account(session)}|$path';
+    return _listRequests.putIfAbsent(key, () => _loadList(session, path).whenComplete(() { _listRequests.remove(key); }));
+  }
+  Future<List<Map<String, dynamic>>> _loadList(ErpSession session, String path) async {
     try {
       final rows = await _sendList(url: '${session.baseUrl}$path', token: session.token).timeout(const Duration(seconds: 8));
       await offline.saveCache(_account(session), path, rows);
@@ -183,8 +188,11 @@ class ErpApi {
   }
 
   Future<List<ShipmentRecord>> shipments(ErpSession session) async {
-    final records = await _cachedList(session, '/shipping');
-    final orders = await _cachedList(session, '/orders');
+    final data = await Future.wait([_cachedList(session, '/shipping'), _cachedList(session, '/orders')]);
+    return _shipmentRows(data[0], data[1]);
+  }
+
+  List<ShipmentRecord> _shipmentRows(List<Map<String, dynamic>> records, List<Map<String, dynamic>> orders) {
     final unitsByOrder = <int, int>{};
     final itemsByOrder = <int, List<ItemShot>>{};
     for (final order in orders) {

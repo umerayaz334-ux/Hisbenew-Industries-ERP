@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -72,13 +73,21 @@ class AppModel extends ChangeNotifier {
         companyCode: '',
       );
     }
-    if (session != null) await refreshAccess();
+    if (session != null) {
+      final cached = prefs.getStringList(_accessKey);
+      if (cached != null) {
+        allowedPages = cached.toSet();
+        accessReady = true;
+        unawaited(refreshAccess());
+      } else {
+        await refreshAccess();
+      }
+    }
     booting = false;
     notifyListeners();
     if (session != null) {
-      await startOrderWatch(orders: isWorker);
-      await MobilePush.start();
-      if (!isWorker) await refreshDashboard();
+      unawaited(_startPhoneServices());
+      if (!isWorker) unawaited(refreshDashboard());
     }
   }
 
@@ -121,9 +130,8 @@ class AppModel extends ChangeNotifier {
       signingIn = false;
       notifyListeners();
       final worker = next.role.trim().toLowerCase() == 'worker';
-      await startOrderWatch(orders: worker);
-      await MobilePush.start();
-      if (!worker) await refreshDashboard();
+      unawaited(_startPhoneServices());
+      if (!worker) unawaited(refreshDashboard());
       return true;
     } on ErpException catch (error) {
       loginError = error.code;
@@ -151,6 +159,15 @@ class AppModel extends ChangeNotifier {
       loadingDashboard = false;
       dashboardError = error.code;
       notifyListeners();
+    }
+  }
+
+  Future<void> _startPhoneServices() async {
+    try {
+      await startOrderWatch(orders: isWorker);
+      if (session != null) await MobilePush.start();
+    } catch (error) {
+      debugPrint('Phone services unavailable: ${error.runtimeType}');
     }
   }
 

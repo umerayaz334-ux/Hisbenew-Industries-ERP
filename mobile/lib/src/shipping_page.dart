@@ -148,16 +148,13 @@ class _ShippingPageState extends State<ShippingPage> {
             onRefresh: _load,
             child: _loading || _error
                 ? ListView(children: [SizedBox(height: 180, child: LoadState(loading: _loading, error: _error, empty: false, onRetry: _load, child: const SizedBox.shrink()))])
-                : ListView(
+                : ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                    children: _historyTab
-                        ? [
-                            for (final row in shipped) _ShippedTile(row: row, onChanged: _load, model: widget.model),
-                          ]
-                        : [
-                            for (final row in pending) _PendingTile(row: row, onChanged: _load, model: widget.model),
-                          ],
+                    itemCount: _historyTab ? shipped.length : pending.length,
+                    itemBuilder: (context, index) => _historyTab
+                        ? _ShippedTile(row: shipped[index], onChanged: _load, model: widget.model)
+                        : _PendingTile(row: pending[index], onChanged: _load, model: widget.model),
                   ),
           ),
         ),

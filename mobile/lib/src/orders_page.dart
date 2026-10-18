@@ -84,7 +84,7 @@ class _OrdersPageState extends State<OrdersPage> {
     final session = widget.model.session;
     if (session == null) return;
     setState(() {
-      _loading = true;
+      _loading = _orders.isEmpty;
       _error = false;
     });
     try {
@@ -123,12 +123,13 @@ class _OrdersPageState extends State<OrdersPage> {
             onRefresh: _load,
             child: _loading || _error
                 ? ListView(children: [SizedBox(height: 180, child: LoadState(loading: _loading, error: _error, empty: false, onRetry: _load, child: const SizedBox.shrink()))])
-                : ListView(
+                : ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                    children: [
-                      for (final order in visible)
-                        SummaryCard(
+                    itemCount: visible.length,
+                    itemBuilder: (context, index) {
+                      final order = visible[index];
+                      return SummaryCard(
                           sheetTitle: order.customer.isEmpty ? order.orderNo : order.customer,
                           summary: Row(
                             children: [
@@ -170,8 +171,8 @@ class _OrdersPageState extends State<OrdersPage> {
                               for (final line in order.items) ProductLine(item: line),
                             ],
                           ),
-                        ),
-                    ],
+                        );
+                    },
                   ),
           ),
         ),

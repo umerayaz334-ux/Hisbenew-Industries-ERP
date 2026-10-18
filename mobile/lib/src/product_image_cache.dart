@@ -93,9 +93,10 @@ class ProductImageCache {
 }
 
 class OfflineProductImage extends StatefulWidget {
-  const OfflineProductImage({required this.path, this.fit = BoxFit.cover, super.key});
+  const OfflineProductImage({required this.path, this.fit = BoxFit.cover, this.decodeWidth, super.key});
   final String path;
   final BoxFit fit;
+  final int? decodeWidth;
   @override
   State<OfflineProductImage> createState() => _OfflineProductImageState();
 }
@@ -110,7 +111,7 @@ class _OfflineProductImageState extends State<OfflineProductImage> {
   @override
   Widget build(BuildContext context) => FutureBuilder<File?>(future: _image, builder: (context, snapshot) {
     final file = snapshot.data;
-    if (file != null) return Image.file(file, fit: widget.fit, errorBuilder: (_, _, _) => const Icon(Icons.image_not_supported_outlined));
+    if (file != null) return Image.file(file, fit: widget.fit, cacheWidth: widget.decodeWidth, errorBuilder: (_, _, _) => const Icon(Icons.image_not_supported_outlined));
     return ColoredBox(color: const Color(0xFFEDF1EF), child: Center(child: Icon(snapshot.connectionState == ConnectionState.waiting ? Icons.downloading_outlined : Icons.image_outlined, color: const Color(0xFF7A8781))));
   });
 }

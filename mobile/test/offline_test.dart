@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -12,6 +13,39 @@ const session = ErpSession(baseUrl: 'https://example.test', token: 'test', name:
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test('concurrent list requests share transport but later requests fetch fresh data', () async {
+    final gate = Completer<void>();
+    var requests = 0;
+    final api = ErpApi(client: MockClient((request) async {
+      requests++;
+      await gate.future;
+      return http.Response('[{"id":1,"name":"Fresh product"}]', 200);
+    }));
+    final first = api.products(session);
+    final second = api.products(session);
+    await Future<void>.delayed(Duration.zero);
+    expect(requests, 1);
+    gate.complete();
+    await Future.wait([first, second]);
+    await api.products(session);
+    expect(requests, 2);
+  });
+
+  test('shipping and order details are requested concurrently', () async {
+    final gate = Completer<void>();
+    final paths = <String>[];
+    final api = ErpApi(client: MockClient((request) async {
+      paths.add(request.url.path);
+      await gate.future;
+      return http.Response('[]', 200);
+    }));
+    final loading = api.shipments(session);
+    await Future<void>.delayed(Duration.zero);
+    expect(paths, containsAll(['/shipping', '/orders']));
+    gate.complete();
+    await loading;
+  });
 
   test('one rejected expense does not block other saved jobs', () async {
     var online = false;

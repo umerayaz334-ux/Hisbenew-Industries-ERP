@@ -37,6 +37,8 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
   var _notifications = false;
   var _loading = true;
   var _error = false;
+  bool _fetching = false;
+  bool _hasData = false;
   List<PendingShip> _pending = const [];
   List<ShipmentRecord> _moving = const [];
   List<Map<String, dynamic>> _tasks = const [];
@@ -131,9 +133,11 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
 
   Future<void> _load() async {
     final session = widget.model.session;
-    if (session == null) return;
+    if (session == null || _fetching) return;
+    _fetching = true;
+    if (!mounted) { _fetching = false; return; }
     setState(() {
-      _loading = true;
+      _loading = !_hasData;
       _error = false;
     });
     try {
@@ -163,6 +167,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
         _payments = payments;
         _expenses = expenses;
         _loading = false;
+        _hasData = true;
       });
     } on ErpException {
       if (!mounted) return;
@@ -170,7 +175,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
         _loading = false;
         _error = true;
       });
-    }
+    } finally { _fetching = false; }
   }
 
   void _onAccess() {

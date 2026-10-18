@@ -16,21 +16,25 @@ Worker and admin remain in one app with server-controlled page access.
 
 ## APKs and verification
 
-Build number 10. ARM64 suits most recent phones; ARMv7 suits 32-bit Android installations; x86_64 suits compatible emulators/devices. Compatibility depends on Android version and CPU rather than brand.
+Version 1.0.1, build 4000. ARM64 suits most recent phones; ARMv7 suits 32-bit Android installations; x86_64 suits compatible emulators/devices. Compatibility depends on Android version and CPU rather than brand.
 
-Verified minimum Android version: Android 7 (API 24); target API 36. The universal APK includes all three architectures and is larger. Flutter assigns version codes 1010/2010/3010 to the split APKs and 10 to universal; continue updating with the same variant. If Android refuses an update, keep the installed app and its queued jobs intact rather than uninstalling.
+Minimum Android version: Android 7 (API 24); target API 36. The universal APK includes all three architectures and is larger. All new variants use version code 4000 to allow switching variants with the same signing key. If Android refuses an update, keep the installed app and its queued jobs intact rather than uninstalling.
 
 ```powershell
 flutter analyze --no-pub
-flutter test --no-pub
-flutter build apk --release --no-pub --split-per-abi --build-number=10
+flutter test --no-pub --concurrency=1
+flutter build apk --release --no-pub --split-per-abi
 ```
 
-The release build uses the existing debug signing key and is for testing. Update in place: uninstalling or clearing app data deletes unsynced jobs. Windows tests use SDK junction D:\DevCache\tmp\hisbenew-flutter-sdk because native hooks fail with spaces in the SDK path.
+The release build uses the existing local debug signing key and is for testing. The previous portal APK uses a DIFFERENT signing key: Android cannot update that installation with this APK. Do not uninstall or clear data while jobs remain unsynced. Local test builds signed with the same key can update in place. Windows tests use SDK junction D:\DevCache\tmp\hisbenew-flutter-sdk because native hooks fail with spaces in the SDK path.
+
+Signing certificate SHA-256: local test build b7a6bd19eb15f7830730e0e1332ca827c987048d8372765674c6b1c2d8f24f70; previous portal build 46d39f56150a03c7bf710844c4c8424a98db2a3a074f72a5a07eb3dd133dd654. The portal now selects the exact release artifacts through frontend/mobile-release.json; it no longer distributes CI's fresh ephemeral signing key.
+
+The custom loader is removed. Startup defers notification setup, simultaneous duplicate list requests share transport, shipping/orders load concurrently, and long lists build visible rows lazily. Thumbnail decoding is size-bounded. Online requests still fetch fresh data; persistent storage supports the requested offline workflows.
 
 ## Required deployment and configuration
 
-The live API checked during this work lacked the sync capability endpoint, message preview schema and manufacturing endpoint. Deploy this backend before testing those features. Verify OpenAPI includes /worker-expenses/sync-capabilities, /manufacturing/dispatch-needs and InternalMessageUserOut.unread_messages. The authenticated capability response must include idempotent_expenses and idempotent_messages, both true. Retry pending jobs under the same account; do not recreate them manually.
+The backend sync capability endpoint, message preview schema and manufacturing endpoint were deployed. Verify OpenAPI includes /worker-expenses/sync-capabilities, /manufacturing/dispatch-needs and InternalMessageUserOut.unread_messages. The authenticated capability response must include idempotent_expenses and idempotent_messages, both true. Retry pending jobs under the same account; do not recreate them manually. The three jobs on the user's phone still require device verification.
 
 Firebase client/server integration exists, but this checkout has no Firebase Android configuration. Reliable background push is not activated in this test APK:
 
@@ -39,7 +43,13 @@ Firebase client/server integration exists, but this checkout has no Firebase And
 3. Set GOOGLE_APPLICATION_CREDENTIALS on the deployed backend to a protected server-side service-account file from that same Firebase project. Never package the credential in the APK or commit it.
 4. Sign in again and verify device registration plus foreground/background/locked-phone delivery.
 
-Configure a maintained TURN relay in backend environment variable INTERNAL_CALL_ICE_SERVERS (JSON list with urls, username, credential). Public fallback servers do not guarantee production call reliability. Test two-way audio across different mobile networks.
+A dedicated Pion TURN relay and temporary per-user credentials are prepared. The deployment runner cannot change Windows firewall rules, so activation requires Administrator PowerShell on the VPS after deployment:
+
+```powershell
+& 'C:\HisbenewERP\call-relay\install.ps1' -BackendPath 'C:\HisbenewERP\backend'
+```
+
+The installer verifies the executable hash, opens UDP/TCP 3478 and UDP 50000–50199 for that executable, registers a Local Service startup task, and checks a two-way UDP/TCP relay exchange before activation. Any provider-level firewall must allow those ports too. Public fallback servers remain active until successful installation; production call reliability is not yet verified. Test two-way audio across different mobile networks.
 
 GitHub access works outside the network sandbox. The Windows VPS deployment runner was verified online. Server inspection confirmed Firebase credentials and dedicated ICE/TURN configuration are absent. Deployment now backs up SQLite data and source, preserves server configuration, and restarts only the verified ERP backend process.
 

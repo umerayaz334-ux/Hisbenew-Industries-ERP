@@ -51,7 +51,7 @@ class ProductThumb extends StatelessWidget {
         height: size,
         child: url == null
             ? const ColoredBox(color: Color(0xFFEEF2FF), child: Icon(Icons.image_outlined, size: 18, color: hisbenewMuted))
-            : OfflineProductImage(path: path),
+            : OfflineProductImage(path: path, decodeWidth: (size * MediaQuery.devicePixelRatioOf(context)).ceil()),
       ),
     );
   }

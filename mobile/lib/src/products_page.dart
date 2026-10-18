@@ -84,7 +84,7 @@ class _ProductsPageState extends State<ProductsPage> {
     final session = widget.model.session;
     if (session == null) return;
     setState(() {
-      _loading = true;
+      _loading = _products.isEmpty;
       _error = false;
     });
     try {
@@ -123,12 +123,13 @@ class _ProductsPageState extends State<ProductsPage> {
             onRefresh: _load,
             child: _loading || _error
                 ? ListView(children: [SizedBox(height: 180, child: LoadState(loading: _loading, error: _error, empty: false, onRetry: _load, child: const SizedBox.shrink()))])
-                : ListView(
+                : ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                    children: [
-                      for (final row in visible)
-                        SummaryCard(
+                    itemCount: visible.length,
+                    itemBuilder: (context, index) {
+                      final row = visible[index];
+                      return SummaryCard(
                           tint: row.lowStock ? const Color(0xFFFFF1F2) : null,
                           sheetTitle: row.name.isEmpty ? row.article : row.name,
                           summary: Row(
@@ -164,8 +165,8 @@ class _ProductsPageState extends State<ProductsPage> {
                               ),
                             ],
                           ),
-                        ),
-                    ],
+                        );
+                    },
                   ),
           ),
         ),

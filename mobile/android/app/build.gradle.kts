@@ -4,6 +4,9 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Direct-download variants must be interchangeable without a version downgrade.
+extra["force-version-code-ignoring-abi"] = true
+
 // An unconfigured test APK remains usable; production push requires this file.
 if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
