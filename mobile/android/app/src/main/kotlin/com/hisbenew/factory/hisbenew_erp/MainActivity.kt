@@ -22,6 +22,22 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var pendingMic: MethodChannel.Result? = null
     private var previewRingtone: Ringtone? = null
+    private var incomingRingtone: Ringtone? = null
+    private var outgoingRingtone: Ringtone? = null
+
+    private fun bundledRing(usage: Int, contentType: Int, streamType: Int, loop: Boolean): Ringtone {
+        val ringtone = RingtoneManager.getRingtone(this, Uri.parse("android.resource://$packageName/${R.raw.hisbenew_ring}"))
+        ringtone.audioAttributes = AudioAttributes.Builder()
+            .setUsage(usage)
+            .setContentType(contentType)
+            .setLegacyStreamType(streamType)
+            .build()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ringtone.isLooping = loop
+            ringtone.volume = 1f
+        }
+        return ringtone
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -41,12 +57,43 @@ class MainActivity : FlutterActivity() {
                     return@setMethodCallHandler
                 }
                 previewRingtone?.stop()
-                val ringtone = RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
-                ringtone.audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) ringtone.volume = 1f
+                val ringtone = bundledRing(AudioAttributes.USAGE_NOTIFICATION_RINGTONE, AudioAttributes.CONTENT_TYPE_SONIFICATION, AudioManager.STREAM_RING, loop = false)
                 previewRingtone = ringtone
                 ringtone.play()
                 Handler(Looper.getMainLooper()).postDelayed({ ringtone.stop() }, 4000)
+                result.success(true)
+                return@setMethodCallHandler
+            }
+            if (call.method == "startIncomingRing") {
+                val audio = getSystemService(AUDIO_SERVICE) as AudioManager
+                if (audio.ringerMode == AudioManager.RINGER_MODE_NORMAL && audio.getStreamVolume(AudioManager.STREAM_RING) > 0) {
+                    incomingRingtone?.stop()
+                    incomingRingtone = bundledRing(AudioAttributes.USAGE_NOTIFICATION_RINGTONE, AudioAttributes.CONTENT_TYPE_SONIFICATION, AudioManager.STREAM_RING, loop = true)
+                    incomingRingtone?.play()
+                }
+                result.success(true)
+                return@setMethodCallHandler
+            }
+            if (call.method == "stopIncomingRing") {
+                incomingRingtone?.stop()
+                incomingRingtone = null
+                result.success(true)
+                return@setMethodCallHandler
+            }
+            if (call.method == "startOutgoingRing") {
+                incomingRingtone?.stop()
+                incomingRingtone = null
+                outgoingRingtone?.stop()
+                val audio = getSystemService(AUDIO_SERVICE) as AudioManager
+                audio.mode = AudioManager.MODE_IN_COMMUNICATION
+                outgoingRingtone = bundledRing(AudioAttributes.USAGE_VOICE_COMMUNICATION, AudioAttributes.CONTENT_TYPE_SPEECH, AudioManager.STREAM_VOICE_CALL, loop = true)
+                outgoingRingtone?.play()
+                result.success(true)
+                return@setMethodCallHandler
+            }
+            if (call.method == "stopOutgoingRing") {
+                outgoingRingtone?.stop()
+                outgoingRingtone = null
                 result.success(true)
                 return@setMethodCallHandler
             }
@@ -135,5 +182,11 @@ class MainActivity : FlutterActivity() {
     override fun onPause() {
         previewRingtone?.stop()
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        incomingRingtone?.stop()
+        outgoingRingtone?.stop()
+        super.onDestroy()
     }
 }

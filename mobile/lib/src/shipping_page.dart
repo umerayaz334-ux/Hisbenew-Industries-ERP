@@ -83,10 +83,14 @@ class _ShippingPageState extends State<ShippingPage> {
   Future<void> _load() async {
     final session = widget.model.session;
     if (session == null) return;
-    setState(() {
-      _loading = true;
-      _error = false;
-    });
+    if (_pending.isEmpty && _shipped.isEmpty) {
+      setState(() {
+        _loading = true;
+        _error = false;
+      });
+    } else {
+      setState(() => _error = false);
+    }
     try {
       final results = await Future.wait([
         widget.model.api.pendingShipping(session),
@@ -146,8 +150,8 @@ class _ShippingPageState extends State<ShippingPage> {
           child: RefreshIndicator(
             color: hisbenewForest,
             onRefresh: _load,
-            child: _loading || _error
-                ? ListView(children: [SizedBox(height: 180, child: LoadState(loading: _loading, error: _error, empty: false, onRetry: _load, child: const SizedBox.shrink()))])
+            child: _error && pending.isEmpty && shipped.isEmpty
+                ? ListView(children: [SizedBox(height: 180, child: LoadState(loading: false, error: true, empty: false, onRetry: _load, child: const SizedBox.shrink()))])
                 : ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),

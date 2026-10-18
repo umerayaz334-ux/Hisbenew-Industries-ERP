@@ -24,6 +24,18 @@ class PhonePermissions {
   static Future<void> soundSettings() async =>
       _channel.invokeMethod('soundSettings');
   static Future<bool> testRingtone() async => await _channel.invokeMethod<bool>('testRingtone') == true;
+  static Future<void> startIncomingRing() async {
+    try { await _channel.invokeMethod('startIncomingRing'); } on PlatformException { return; }
+  }
+  static Future<void> stopIncomingRing() async {
+    try { await _channel.invokeMethod('stopIncomingRing'); } on PlatformException { return; }
+  }
+  static Future<void> startOutgoingRing() async {
+    try { await _channel.invokeMethod('startOutgoingRing'); } on PlatformException { return; }
+  }
+  static Future<void> stopOutgoingRing() async {
+    try { await _channel.invokeMethod('stopOutgoingRing'); } on PlatformException { return; }
+  }
   static Future<void> notificationSettings() async =>
       _channel.invokeMethod('notificationSettings');
   static Future<void> startVoiceService() async =>

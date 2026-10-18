@@ -2219,7 +2219,7 @@ async def auth_middleware(request: Request, call_next):
     if user.role == "worker":
         path = request.url.path
         required_page = next((page for prefix, page in [
-            ('/shipping', 'Shipping'), ('/products', 'Products'),
+            ('/products', 'Products'),
             ('/orders', 'Orders'), ('/worker-order-alerts', 'Orders'),
             ('/worker-expenses', 'Worker Payouts'), ('/worker-payments', 'Worker Payouts'),
             ('/production/tasks', 'My Tasks'), ('/order-workflow/tasks', 'My Tasks'),

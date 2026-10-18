@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -205,23 +206,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _WorkerHome(
-        model: widget.model,
-        loading: _loading,
-        error: _error,
-        pending: _pending,
-        moving: _moving,
-        tasks: _tasks,
-        payments: _payments,
-        expenses: _expenses,
-        onRetry: _load,
-        onOpenPayouts: () => _open(3),
-        onOpenShipping: () => _open(1),
-        onOpenChat: () => _open(2),
-        onOpenOrders: () => _open(5),
-        onOpenProducts: () => _open(6),
-        unread: _unread,
-      ),
+      const SizedBox.shrink(),
       ShippingPage(model: widget.model),
       WorkerChat(model: widget.model, calls: _calls),
       _PayoutPage(
@@ -250,27 +235,61 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       backgroundColor: hisbenewCanvas,
       body: Stack(
         children: [
-          SafeArea(child: Column(children: [
-            ListenableBuilder(listenable: widget.model.api.offline, builder: (context, _) {
-              final store = widget.model.api.offline;
-              if (!store.offline && store.pending == 0) return const SizedBox.shrink();
-              return Material(color: const Color(0xFFFFF3D5), child: ListTile(dense: true,
-                onTap: store.pending > 0 ? _showPendingSync : null,
-                leading: Icon(store.offline ? Icons.cloud_off : Icons.cloud_upload_outlined, size: 20),
-                title: Text(store.offline
-                    ? 'Offline · showing saved data'
-                    : '${store.pending} saved item${store.pending == 1 ? '' : 's'} waiting to sync'),
-                subtitle: Text(store.pending > 0
-                    ? (store.syncNotice.isNotEmpty
-                        ? store.syncNotice
-                        : 'Tap to review saved entries. Sync retries automatically.')
-                    : 'Only previously downloaded information is available.'),
-                trailing: IconButton(tooltip: 'Sync now', icon: const Icon(Icons.sync), onPressed: () async { await _syncOffline(); await _load(); }),
-              ));
-            }),
-            Expanded(child: _notifications ? NotificationInbox(model: widget.model,
-              onClose: () => setState(() => _notifications = false), onChat: () => _open(2), onShipping: () => _open(1)) : pages[_index]),
-          ])),
+          ListenableBuilder(listenable: widget.model.api.offline, builder: (context, _) {
+            final store = widget.model.api.offline;
+            final showSync = store.offline || store.pending > 0;
+            final top = MediaQuery.paddingOf(context).top;
+            final home = _index == 0 && !_notifications;
+            final notchHeader = home && !showSync;
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: notchHeader
+                  ? SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.light, statusBarBrightness: Brightness.dark)
+                  : SystemUiOverlayStyle.dark.copyWith(statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.dark, statusBarBrightness: Brightness.light),
+              child: Column(children: [
+                if (showSync) Padding(
+                  padding: EdgeInsets.only(top: top),
+                  child: Material(color: const Color(0xFFFFF3D5), child: ListTile(dense: true,
+                    onTap: store.pending > 0 ? _showPendingSync : null,
+                    leading: Icon(store.offline ? Icons.cloud_off : Icons.cloud_upload_outlined, size: 20),
+                    title: Text(store.offline
+                        ? 'Offline · showing saved data'
+                        : '${store.pending} saved item${store.pending == 1 ? '' : 's'} waiting to sync'),
+                    subtitle: Text(store.pending > 0
+                        ? (store.syncNotice.isNotEmpty
+                            ? store.syncNotice
+                            : 'Tap to review saved entries. Sync retries automatically.')
+                        : 'Only previously downloaded information is available.'),
+                    trailing: IconButton(tooltip: 'Sync now', icon: const Icon(Icons.sync), onPressed: () async { await _syncOffline(); await _load(); }),
+                  )),
+                ),
+                Expanded(child: _notifications
+                    ? Padding(
+                        padding: EdgeInsets.only(top: showSync ? 0 : top),
+                        child: NotificationInbox(model: widget.model, onClose: () => setState(() => _notifications = false), onChat: () => _open(2), onShipping: () => _open(1)),
+                      )
+                    : home
+                        ? _WorkerHome(
+                            model: widget.model,
+                            loading: _loading,
+                            error: _error,
+                            pending: _pending,
+                            moving: _moving,
+                            tasks: _tasks,
+                            payments: _payments,
+                            expenses: _expenses,
+                            onRetry: _load,
+                            onOpenPayouts: () => _open(3),
+                            onOpenShipping: () => _open(1),
+                            onOpenChat: () => _open(2),
+                            onOpenOrders: () => _open(5),
+                            onOpenProducts: () => _open(6),
+                            unread: _unread,
+                            topInset: showSync ? 0 : top,
+                          )
+                        : Padding(padding: EdgeInsets.only(top: showSync ? 0 : top), child: pages[_index])),
+              ]),
+            );
+          }),
           if (_calls.phase != 'idle') CallCover(desk: _calls),
         ],
       ),
@@ -366,6 +385,7 @@ class _WorkerHome extends StatelessWidget {
     required this.onOpenOrders,
     required this.onOpenProducts,
     required this.unread,
+    required this.topInset,
   });
 
   final AppModel model;
@@ -383,73 +403,253 @@ class _WorkerHome extends StatelessWidget {
   final VoidCallback onOpenOrders;
   final VoidCallback onOpenProducts;
   final int unread;
+  final double topInset;
 
   @override
   Widget build(BuildContext context) {
     final name = model.session?.name.split(' ').first ?? '';
     final money = _moneyOf(tasks, payments, expenses);
-    return RefreshIndicator(onRefresh: onRetry, child: ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
-      children: [
-        Text(DateFormat('EEEE, d MMMM').format(DateTime.now()).toUpperCase(), style: const TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w700, color: hisbenewMuted)),
-        const SizedBox(height: 8),
-        Text('Your day, $name', style: const TextStyle(fontSize: 30, height: 1.15, letterSpacing: -1, fontWeight: FontWeight.w800, color: hisbenewForest)),
-        const SizedBox(height: 8),
-        const Text('A clear view of what needs your attention.', style: TextStyle(color: hisbenewMuted)),
-        const SizedBox(height: 24),
-        if (loading) const AppLoader()
-        else if (error) OutlinedButton(onPressed: onRetry, child: const Text('Reload dashboard'))
-        else ...[
-          if (model.canAccess('Shipping')) ...[
-            Row(children: [
-              const Expanded(child: Text('Pending dispatch', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
-              TextButton(onPressed: onOpenShipping, child: Text('View all (${pending.length})')),
-            ]),
-            const SizedBox(height: 10),
-            if (pending.isEmpty) const WorkCard(child: Padding(padding: EdgeInsets.all(24), child: Text('All caught up. No orders waiting to dispatch.')))
-            else SizedBox(height: 230 + (MediaQuery.textScalerOf(context).scale(16) - 16).clamp(0, 32) * 4, child: PageView.builder(
-              padEnds: false,
-              itemCount: pending.length,
-              itemBuilder: (context, index) {
-                final row = pending[index];
-                return Padding(padding: const EdgeInsets.only(right: 12), child: Material(
-                  color: const Color(0xFF163F35), borderRadius: BorderRadius.circular(22),
-                  child: InkWell(borderRadius: BorderRadius.circular(22), onTap: () => openPendingShip(context, model: model, row: row, onChanged: onRetry),
-                    child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [Expanded(child: Text('#${row.orderNo}', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600))), Text('${index + 1} / ${pending.length}', style: const TextStyle(color: Colors.white70))]),
-                      const SizedBox(height: 12),
-                      Text(row.customer.isEmpty ? 'Order ready for review' : row.customer, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 8),
-                      Text('${row.units} units · ${prettyWhen(row.when)}', style: const TextStyle(color: Color(0xFFC0D7CA))),
-                      const Spacer(),
-                      Row(children: [for (final item in row.items.take(3)) Padding(padding: const EdgeInsets.only(right: 8), child: ProductThumb(path: item.image, size: 48)), const Spacer(), const Icon(Icons.arrow_forward_rounded, color: Colors.white)]),
-                    ])),
+    final shipping = model.canAccess('Shipping');
+    final payouts = model.canAccess('Worker Payouts');
+    final stats = <_DashStat>[
+      if (shipping) _DashStat(phrase(context, 'To ship', 'بھیجنا'), '${pending.length}', onOpenShipping),
+      if (shipping) _DashStat(phrase(context, 'On the way', 'راستے میں'), '${moving.length}', onOpenShipping),
+      if (payouts) _DashStat(phrase(context, 'Balance', 'بقایا'), _pkr(money.balance), onOpenPayouts),
+    ];
+    return RefreshIndicator(
+      color: Colors.white,
+      backgroundColor: hisbenewForest,
+      onRefresh: onRetry,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        children: [
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              color: hisbenewForest,
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+            ),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(20, topInset + 18, 20, 22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    DateFormat('EEEE, d MMMM').format(DateTime.now()).toUpperCase(),
+                    style: const TextStyle(fontSize: 11, letterSpacing: 1.6, fontWeight: FontWeight.w700, color: Color(0xFFE7C98A)),
                   ),
-                ));
-              },
-            )),
-            const SizedBox(height: 8),
-            const Text('Swipe through every pending order', style: TextStyle(fontSize: 12, color: hisbenewMuted)),
-            const SizedBox(height: 22),
-          ],
-          Wrap(spacing: 10, runSpacing: 10, children: [
-            if (model.canAccess('Orders')) ActionChip(avatar: const Icon(Icons.receipt_long_outlined, size: 18), label: const Text('Orders'), onPressed: onOpenOrders),
-            if (model.canAccess('Products')) ActionChip(avatar: const Icon(Icons.inventory_2_outlined, size: 18), label: const Text('Products'), onPressed: onOpenProducts),
-            if (model.canAccess('Worker Payouts')) ActionChip(avatar: const Icon(Icons.add, size: 18), label: const Text('Spending'), onPressed: onOpenPayouts),
-          ]),
-          const SizedBox(height: 22),
-          if (model.canAccess('Worker Payouts')) WorkCard(child: ListTile(contentPadding: const EdgeInsets.all(16), leading: const Icon(Icons.account_balance_wallet_outlined, color: hisbenewForest), title: const Text('Your balance', style: TextStyle(fontSize: 12, color: hisbenewMuted)), subtitle: Text(_pkr(money.balance), style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w800)), trailing: const Icon(Icons.arrow_forward), onTap: onOpenPayouts)),
-          if (model.canAccess('Shipping')) ...[
-            const SizedBox(height: 12),
-            Text('On the way · ${moving.length}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 12),
-            for (final row in moving.take(3)) WorkCard(child: InkWell(onTap: () => openShippedShip(context, model: model, row: row, onChanged: onRetry), child: Padding(padding: const EdgeInsets.all(16), child: ShippingSummary(when: row.when, customer: row.customer, units: row.units, orderNo: row.orderNo, items: row.items)))),
-          ],
-          if (model.canAccess('Messages')) _ChatCallBar(onTap: onOpenChat, unread: unread),
+                  const SizedBox(height: 8),
+                  Text('Your day, $name', style: const TextStyle(fontSize: 30, height: 1.05, letterSpacing: -0.8, fontWeight: FontWeight.w800, color: Colors.white)),
+                  const SizedBox(height: 6),
+                  Text(phrase(context, 'Orders, pay, and messages in one place.', 'آرڈر، رقم اور پیغام ایک جگہ۔'), style: const TextStyle(color: Color(0xFFC9DDD4), fontSize: 14)),
+                  if (stats.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        for (var i = 0; i < stats.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 8),
+                          Expanded(child: _NotchStat(stat: stats[i])),
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (loading && pending.isEmpty && moving.isEmpty)
+                  const Padding(padding: EdgeInsets.only(bottom: 12), child: LinearProgressIndicator(color: hisbenewForest, backgroundColor: Color(0xFFE7DDD0), minHeight: 2)),
+                if (error && pending.isEmpty && moving.isEmpty)
+                  OutlinedButton(onPressed: onRetry, child: const Text('Reload dashboard'))
+                else ...[
+                  if (shipping) ...[
+                    _SectionHead(title: phrase(context, 'To ship', 'بھیجنا'), action: phrase(context, 'Queue', 'قطار'), count: pending.length, onAction: onOpenShipping),
+                    if (pending.isEmpty)
+                      const WorkCard(child: Padding(padding: EdgeInsets.all(20), child: Text('All caught up. No orders waiting to dispatch.')))
+                    else
+                      for (final row in pending) _OpenOrderCard(
+                        when: row.when,
+                        customer: row.customer,
+                        orderNo: row.orderNo,
+                        units: row.units,
+                        items: row.items,
+                        onTap: () => openPendingShip(context, model: model, row: row, onChanged: onRetry),
+                      ),
+                    const SizedBox(height: 8),
+                  ],
+                  Row(children: [
+                    if (model.canAccess('Orders')) Expanded(child: _QuickTile(icon: Icons.receipt_long_outlined, label: phrase(context, 'Orders', 'آرڈر'), onTap: onOpenOrders)),
+                    if (model.canAccess('Orders') && model.canAccess('Products')) const SizedBox(width: 10),
+                    if (model.canAccess('Products')) Expanded(child: _QuickTile(icon: Icons.inventory_2_outlined, label: phrase(context, 'Products', 'مصنوعات'), onTap: onOpenProducts)),
+                    if (payouts && (model.canAccess('Orders') || model.canAccess('Products'))) const SizedBox(width: 10),
+                    if (payouts) Expanded(child: _QuickTile(icon: Icons.add_rounded, label: phrase(context, 'Spending', 'خرچ'), onTap: onOpenPayouts)),
+                  ]),
+                  const SizedBox(height: 16),
+                  if (shipping && moving.isNotEmpty) ...[
+                    _SectionHead(title: phrase(context, 'On the way', 'راستے میں'), action: phrase(context, 'Queue', 'قطار'), count: moving.length, onAction: onOpenShipping),
+                    for (final row in moving) _OpenOrderCard(
+                      when: row.when,
+                      customer: row.customer,
+                      orderNo: row.orderNo,
+                      units: row.units,
+                      items: row.items,
+                      onTap: () => openShippedShip(context, model: model, row: row, onChanged: onRetry),
+                    ),
+                  ],
+                  if (model.canAccess('Messages')) _ChatCallBar(onTap: onOpenChat, unread: unread),
+                ],
+              ],
+            ),
+          ),
         ],
-      ],
-    ));
+      ),
+    );
+  }
+}
+
+class _DashStat {
+  const _DashStat(this.label, this.value, this.onTap);
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+}
+
+class _NotchStat extends StatelessWidget {
+  const _NotchStat({required this.stat});
+
+  final _DashStat stat;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0x1AFFFFFF),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: stat.onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0x33FFFFFF)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(stat.value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+              const SizedBox(height: 2),
+              Text(stat.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFC9DDD4), fontSize: 11, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHead extends StatelessWidget {
+  const _SectionHead({required this.title, required this.action, required this.count, required this.onAction});
+
+  final String title;
+  final String action;
+  final int count;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(children: [
+        Expanded(child: Text('$title · $count', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: hisbenewInk))),
+        TextButton(onPressed: onAction, child: Text(action)),
+      ]),
+    );
+  }
+}
+
+class _OpenOrderCard extends StatelessWidget {
+  const _OpenOrderCard({
+    required this.when,
+    required this.customer,
+    required this.orderNo,
+    required this.units,
+    required this.items,
+    required this.onTap,
+  });
+
+  final String when;
+  final String customer;
+  final String orderNo;
+  final int units;
+  final List<ItemShot> items;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final headline = [prettyWhen(when), customer].where((part) => part.isNotEmpty).join('  ·  ');
+    return WorkCard(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(headline.isEmpty ? '#$orderNo' : headline, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  if (orderNo.isNotEmpty) Text('#$orderNo', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: hisbenewMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+                ])),
+                const SizedBox(width: 8),
+                OrderPhotos(items: items),
+              ]),
+              if (items.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                for (final item in items.take(4)) ProductLine(item: item),
+              ],
+              const SizedBox(height: 2),
+              Text('$units ${phrase(context, 'units', 'یونٹ')}', style: const TextStyle(color: hisbenewMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickTile extends StatelessWidget {
+  const _QuickTile({required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: hisbenewLine)),
+          child: Column(children: [
+            Icon(icon, color: hisbenewForest, size: 22),
+            const SizedBox(height: 6),
+            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: hisbenewInk)),
+          ]),
+        ),
+      ),
+    );
   }
 }
 
@@ -485,9 +685,7 @@ class _PayoutPage extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
         children: [
-          if (loading)
-            const AppLoader()
-          else if (error)
+          if (error && tasks.isEmpty && payments.isEmpty && expenses.isEmpty)
             FilledButton(onPressed: onRetry, child: Text(phrase(context, 'Try again', 'دوبارہ کوشش')))
           else if (!linked)
             Text(phrase(context, 'This login is not linked to a worker record yet.', 'یہ لاگ اِن ورکر سے منسلک نہیں۔'))

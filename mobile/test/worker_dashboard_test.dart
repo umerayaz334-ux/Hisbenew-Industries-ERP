@@ -36,7 +36,7 @@ class DashboardApi extends ErpApi {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  testWidgets('dashboard fits small phone, includes every dispatch and opens sidebar', (tester) async {
+  testWidgets('dashboard fits small phone, lists every dispatch and opens sidebar', (tester) async {
     SharedPreferences.setMockInitialValues({'erp.micAsked': true});
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     for (final channel in ['hisbenew/phone', 'flutter_callkit_incoming', 'flutter_callkit_incoming_events']) {
@@ -50,12 +50,9 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: WorkerPortal(model: model)));
     await tester.pumpAndSettle();
     expect(find.text('Your day, Faheem'), findsOneWidget);
-    expect(find.text('1 / 8'), findsOneWidget);
-    for (var i = 0; i < 7; i++) {
-      await tester.drag(find.byType(PageView), const Offset(-320, 0));
-      await tester.pumpAndSettle();
-    }
-    expect(find.text('8 / 8'), findsOneWidget);
+    expect(find.text('#1001'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('#1008'), 400);
+    expect(find.text('#1008'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Menu'));
     await tester.pumpAndSettle();

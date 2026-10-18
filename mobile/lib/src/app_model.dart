@@ -20,7 +20,7 @@ class AppModel extends ChangeNotifier {
   bool booting = true;
   Set<String> allowedPages = {};
   bool accessReady = false;
-  bool canAccess(String page) => !isWorker || !accessReady || allowedPages.contains(page);
+  bool canAccess(String page) => page == 'Shipping' || !isWorker || !accessReady || allowedPages.contains(page);
   String get _accessKey => 'erp.pageAccess.${session?.tenantSlug}.${session?.username}';
 
   Future<bool> refreshAccess() async {
@@ -78,10 +78,8 @@ class AppModel extends ChangeNotifier {
       if (cached != null) {
         allowedPages = cached.toSet();
         accessReady = true;
-        unawaited(refreshAccess());
-      } else {
-        await refreshAccess();
       }
+      unawaited(refreshAccess());
     }
     booting = false;
     notifyListeners();
@@ -126,7 +124,7 @@ class AppModel extends ChangeNotifier {
       await _storeSession(next);
       allowedPages = {};
       accessReady = false;
-      await refreshAccess();
+      unawaited(refreshAccess());
       signingIn = false;
       notifyListeners();
       final worker = next.role.trim().toLowerCase() == 'worker';

@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'erp_api.dart';
+import 'phone_permissions.dart';
 
 const missedCallChannel = 'hisbenew_calls';
 const messageChannel = 'hisbenew_messages';
@@ -19,6 +20,16 @@ List<Map<String, dynamic>> relayIceServers() => const [
   {'urls': 'stun:stun.cloudflare.com:3478'},
   {'urls': 'stun:stun.l.google.com:19302'},
   {'urls': 'stun:stun.relay.metered.ca:80'},
+  {
+    'urls': 'turn:openrelay.metered.ca:80',
+    'username': 'openrelayproject',
+    'credential': 'openrelayproject',
+  },
+  {
+    'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
+    'username': 'openrelayproject',
+    'credential': 'openrelayproject',
+  },
   {
     'urls': 'turn:global.relay.metered.ca:80',
     'username': 'openrelayproject',
@@ -66,11 +77,11 @@ CallKitParams incomingCallParams({required int callId, required String name}) {
     duration: 55000,
     extra: {'callId': callId},
     android: const AndroidParams(
-      isCustomNotification: false,
+      isCustomNotification: true,
       isShowFullLockedScreen: true,
       isFullScreen: true,
       isImportant: true,
-      ringtonePath: 'system_ringtone_default',
+      ringtonePath: 'hisbenew_ring',
       backgroundColor: '#141210',
       actionColor: '#1F4D3A',
       textColor: '#F3E6C8',
@@ -95,6 +106,7 @@ Future<void> showIncomingIfNeeded(int callId, String name) async {
   final active = await FlutterCallkitIncoming.activeCalls();
   if (active.any((call) => call.id == callScreenId(callId))) return;
   await prefs.setString('erp.ringingName', name);
+  await PhonePermissions.startIncomingRing();
   await FlutterCallkitIncoming.showCallkitIncoming(incomingCallParams(callId: callId, name: name));
 }
 
@@ -122,6 +134,7 @@ Future<void> watchIncomingCall(String token) async {
     final incoming = decoded['is_incoming'] == true;
     final status = '${decoded['status'] ?? ''}'.toLowerCase();
     if (incoming && status == 'accepted') {
+      await PhonePermissions.stopIncomingRing();
       _answeredCallIds.add(callId);
       await FlutterCallkitIncoming.hideCallkitIncoming(
         incomingCallParams(callId: callId, name: ''),
@@ -147,6 +160,7 @@ Future<void> _hideShownCall() async {
   final callId = _shownIncomingId;
   final screenId = callScreenId(callId);
   _shownIncomingId = 0;
+  await PhonePermissions.stopIncomingRing();
   try {
     await FlutterCallkitIncoming.endCall(screenId);
   } catch (_) {}

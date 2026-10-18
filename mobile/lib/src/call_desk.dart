@@ -185,6 +185,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     phase = 'outgoing';
     final generation = ++_generation;
     notifyListeners();
+    await PhonePermissions.startOutgoingRing();
     if (!await PhonePermissions.request()) {
       _fail(
         phraseFromLocale(
@@ -209,8 +210,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         _fail('The call could not start.');
         return;
       }
-      final offer = await _pc!.createOffer({'offerToReceiveAudio': 1});
-      await _pc!.setLocalDescription(offer);
+      final offer = await _described(_pc!, await _pc!.createOffer({'offerToReceiveAudio': 1}));
       if (_disposed || generation != _generation) return;
       await model.api.sendCallSignal(
         session: session,
@@ -236,6 +236,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> accept({int? callId, String? name}) async {
+    await PhonePermissions.stopIncomingRing();
     // Native Answer can arrive before Android has resumed the Activity. Audio
     // must start from the visible Activity so microphone access is available.
     final lifecycle = WidgetsBinding.instance.lifecycleState;
@@ -319,6 +320,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> decline({int? callId}) async {
+    await PhonePermissions.stopIncomingRing();
     final session = model.session;
     callId ??= _callId;
     if (session != null && callId != null) {
@@ -348,6 +350,19 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         // The other side may already have ended it.
       }
     }
+  }
+
+  Future<RTCSessionDescription> _described(RTCPeerConnection peer, RTCSessionDescription created) async {
+    await peer.setLocalDescription(created);
+    final done = Completer<void>();
+    final previous = peer.onIceGatheringState;
+    peer.onIceGatheringState = (state) {
+      previous?.call(state);
+      if (state == RTCIceGatheringState.RTCIceGatheringStateComplete && !done.isCompleted) done.complete();
+    };
+    if (peer.iceGatheringState == RTCIceGatheringState.RTCIceGatheringStateComplete && !done.isCompleted) done.complete();
+    await done.future.timeout(const Duration(seconds: 3), onTimeout: () {});
+    return await peer.getLocalDescription() ?? created;
   }
 
   Future<void> _openMedia() {
@@ -385,6 +400,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     _pc = await createPeerConnection({
       'iceServers': _ice,
       'sdpSemantics': 'unified-plan',
+      'iceCandidatePoolSize': 4,
     });
     // Keep a stable peer identity so callbacks from an old call cannot revive it.
     final peer = _pc!;
@@ -438,6 +454,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     phase = 'connected';
     notice = '';
     notifyListeners();
+    PhonePermissions.stopOutgoingRing();
     final id = _callId;
     if (id != null) {
       FlutterCallkitIncoming.setCallConnected(callScreenId(id)).catchError((Object _) {});
@@ -558,9 +575,8 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
           await _flushIce(peer);
           }
           var answer = await peer.getLocalDescription();
-          if (answer == null || answer.type != 'answer') {
-            answer = await peer.createAnswer();
-            await peer.setLocalDescription(answer);
+          if (answer == null || answer.type != 'answer' || (answer.sdp ?? '').isEmpty) {
+            answer = await _described(peer, await peer.createAnswer());
           }
           await model.api.sendCallSignal(
             session: session,
@@ -642,6 +658,8 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     _connectedAt = null;
     _signals?.cancel();
     _signals = null;
+    PhonePermissions.stopIncomingRing();
+    PhonePermissions.stopOutgoingRing();
     _mediaQueue = _mediaQueue
         .then((_) async {
           final peer = _pc;
