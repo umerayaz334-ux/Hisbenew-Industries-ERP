@@ -65,6 +65,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   var _localPosted = false;
   bool _sendingIce = false;
   var _iceRestarts = 0;
+  var _isOfferer = false;
   List<Map<String, dynamic>> _ice = relayIceServers();
 
   void startWatch() {
@@ -208,12 +209,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         );
         return;
       }
-      // The website always answers with a video section. A voice-only offer
-      // is rejected, so the phone stays on Connecting and no audio flows.
-      await _pc!.addTransceiver(
-        kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
-        init: RTCRtpTransceiverInit(direction: TransceiverDirection.SendRecv),
-      );
+      _isOfferer = true;
       final call = await model.api.startCall(session: session, userId: userId);
       if (_disposed || generation != _generation) {
         await model.api.endCall(session: session, callId: asInt(call['id']));
@@ -250,6 +246,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> accept({int? callId, String? name}) async {
+    _isOfferer = false;
     await PhonePermissions.releaseCallTone();
     // Native Answer can arrive before Android has resumed the Activity. Audio
     // must start from the visible Activity so microphone access is available.
@@ -420,6 +417,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _createMedia() async {
     await PhonePermissions.releaseCallTone();
     await PhonePermissions.startVoiceService();
+    await Helper.ensureAudioSession();
     await WebRTC.initialize(options: {'androidUseHardwareAudioProcessing': false});
     muted = false;
     await _applyCallAudio();
@@ -501,7 +499,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
 
   void _recoverOrEnd(RTCPeerConnection peer) {
     if (_disposed || _pc != peer || phase == 'ended' || phase == 'idle') return;
-    if (_iceRestarts < 1 && phase != 'incoming') {
+    if (_isOfferer && _iceRestarts < 1 && phase != 'incoming') {
       _iceRestarts++;
       notice = phraseFromLocale('Reconnecting audio…', 'آواز دوبارہ جوڑ رہے ہیں');
       notifyListeners();
@@ -649,15 +647,14 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
             await _flushLocalIce();
             await _applyCallAudio();
           } else if (type == 'answer') {
-            if (peer.signalingState != RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
-              break;
+            if (peer.signalingState == RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
+              await peer.setRemoteDescription(
+                RTCSessionDescription(asText(payload['sdp']), asText(payload['type'])),
+              );
+              _remoteReady = true;
+              await _flushIce(peer);
+              await _applyCallAudio();
             }
-            await peer.setRemoteDescription(
-              RTCSessionDescription(asText(payload['sdp']), asText(payload['type'])),
-            );
-            _remoteReady = true;
-            await _flushIce(peer);
-            await _applyCallAudio();
           } else if (type == 'ice') {
             final ice = RTCIceCandidate(
               asText(payload['candidate']),
@@ -750,6 +747,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     _remoteReady = false;
     _localPosted = false;
     _iceRestarts = 0;
+    _isOfferer = false;
     _queuedIce.clear();
     _localIce.clear();
     _remote = null;

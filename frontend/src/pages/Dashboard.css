@@ -6479,6 +6479,9 @@
 .dashboard-action-info small {
   font-size: 11.5px;
   color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-action-tag {

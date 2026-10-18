@@ -28,7 +28,12 @@ Future<void> startOrderWatch() async {
       onStart: orderWatchStart,
       autoStart: false,
       autoStartOnBoot: false,
-      isForegroundMode: false,
+      isForegroundMode: true,
+      notificationChannelId: _watchChannelId,
+      initialNotificationTitle: 'Hisbenew',
+      initialNotificationContent: 'Message alerts are on',
+      foregroundServiceNotificationId: 701,
+      foregroundServiceTypes: const [AndroidForegroundType.dataSync],
     ),
     iosConfiguration: IosConfiguration(
       autoStart: false,
@@ -50,7 +55,6 @@ Future<void> startOrderWatch() async {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
   }
-  await _notifications.cancel(id: 701);
   await service.startService();
 }
 
@@ -112,6 +116,8 @@ Future<void> _prepareNotifications() async {
       'Messages',
       description: 'When someone sends a chat message',
       importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
     ),
   );
   await plugin?.createNotificationChannel(
@@ -164,8 +170,20 @@ Future<void> orderWatchStart(ServiceInstance service) async {
       android: AndroidInitializationSettings('@drawable/ic_stat_hisbenew'),
     ),
   );
-  await notes.cancel(id: 701);
-
+  await notes
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          messageChannel,
+          'Messages',
+          description: 'When someone sends a chat message',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
   while (true) {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
@@ -283,11 +301,12 @@ Future<void> _watchMessages(
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             messageChannel, 'Messages',
-            channelDescription: 'Chat messages and lock-screen previews',
+            channelDescription: 'Chat messages on the lock screen',
             importance: Importance.max,
-            priority: Priority.high,
+            priority: Priority.max,
             category: AndroidNotificationCategory.message,
             visibility: NotificationVisibility.public,
+            audioAttributesUsage: AudioAttributesUsage.notification,
             autoCancel: true,
             playSound: true,
             enableVibration: true,

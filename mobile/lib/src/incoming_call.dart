@@ -14,37 +14,12 @@ import 'erp_api.dart';
 import 'phone_permissions.dart';
 
 const missedCallChannel = 'hisbenew_calls';
-const messageChannel = 'hisbenew_messages';
+const messageChannel = 'hisbenew_messages_lock';
 
 List<Map<String, dynamic>> relayIceServers() => const [
-  {'urls': 'stun:stun.cloudflare.com:3478'},
   {'urls': 'stun:stun.l.google.com:19302'},
-  {'urls': 'stun:stun.relay.metered.ca:80'},
-  {
-    'urls': 'turn:openrelay.metered.ca:80',
-    'username': 'openrelayproject',
-    'credential': 'openrelayproject',
-  },
-  {
-    'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
-    'username': 'openrelayproject',
-    'credential': 'openrelayproject',
-  },
-  {
-    'urls': 'turn:global.relay.metered.ca:80',
-    'username': 'openrelayproject',
-    'credential': 'openrelayproject',
-  },
-  {
-    'urls': 'turn:global.relay.metered.ca:443',
-    'username': 'openrelayproject',
-    'credential': 'openrelayproject',
-  },
-  {
-    'urls': 'turns:global.relay.metered.ca:443?transport=tcp',
-    'username': 'openrelayproject',
-    'credential': 'openrelayproject',
-  },
+  {'urls': 'stun:stun1.l.google.com:19302'},
+  {'urls': 'stun:stun.cloudflare.com:3478'},
 ];
 
 List<Map<String, dynamic>> withRelay(List<Map<String, dynamic>> servers) {
@@ -53,6 +28,8 @@ List<Map<String, dynamic>> withRelay(List<Map<String, dynamic>> servers) {
   for (final server in [...servers, ...relayIceServers()]) {
     final urls = '${server['urls']}';
     if (urls.isEmpty || !seen.add(urls)) continue;
+    // Retired public relays answer slowly and never carry the call.
+    if ('${server['username']}' == 'openrelayproject' || urls.contains('metered.ca')) continue;
     merged.add(server);
   }
   return merged;

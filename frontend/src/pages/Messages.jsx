@@ -26,20 +26,6 @@ function PhoneIcon() {
   );
 }
 
-function VideoIcon() {
-  return (
-    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
-      <path
-        d="M15 10 20.5 7v10L15 14M5 5h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
-
 function BackIcon() {
   return (
     <svg aria-hidden="true" fill="none" height="22" viewBox="0 0 24 24" width="22">
@@ -103,9 +89,7 @@ function Messages() {
   const fileInputRef = useRef(null);
   const {
     isCallBusy,
-    isVideoCallingEnabled,
     startCall,
-    startVideoCall,
   } = useInternalCall();
 
   const selectedUser = useMemo(
@@ -451,19 +435,6 @@ function Messages() {
                     <PhoneIcon />
                     <span>Call</span>
                   </button>
-                  {isVideoCallingEnabled && (
-                    <button
-                      aria-label={`Start video call with ${selectedUser.name}`}
-                      className="erp-messages-call-button is-video"
-                      disabled={isCallBusy}
-                      onClick={() => startVideoCall(selectedUser)}
-                      title={isCallBusy ? "Finish the current call first" : `Video call ${selectedUser.name}`}
-                      type="button"
-                    >
-                      <VideoIcon />
-                      <span>Video</span>
-                    </button>
-                  )}
                 </div>
               </>
             ) : (

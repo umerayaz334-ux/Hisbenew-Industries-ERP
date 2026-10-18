@@ -138,6 +138,18 @@ const formatAmount = (value, currency = "PKR") =>
     maximumFractionDigits: 0,
   })}`;
 
+const formatShortWhen = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("en-PK", {
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+  });
+};
+
 const pluralize = (count, singular, plural = `${singular}s`) =>
   `${count} ${count === 1 ? singular : plural}`;
 
@@ -715,6 +727,8 @@ function OperationalDashboard({ userRole, workerId, userName }) {
     payments: [],
     expenses: [],
   });
+  const [inboxNotes, setInboxNotes] = useState([]);
+  const [workerSpends, setWorkerSpends] = useState([]);
   const [loading, setLoading] = useState(true);
   const [backendError, setBackendError] = useState(false);
   const [dashboardErrorMessage, setDashboardErrorMessage] = useState("");
@@ -883,6 +897,52 @@ function OperationalDashboard({ userRole, workerId, userName }) {
       } else if (requestId === dashboardRequestIdRef.current) {
         setOrderTasks([]);
         setWorkerPayoutData({ tasks: [], orderTasks: [], payments: [], expenses: [] });
+      }
+
+      if (userRole !== "worker") {
+        secondaryLoads.push(
+          (async () => {
+            try {
+              const [messagesResponse, expensesResponse] = await Promise.all([
+                apiFetch(`${API_BASE_URL}/internal-message-users`, freshFetchOptions),
+                apiFetch(
+                  `${API_BASE_URL}/worker-expenses?limit=12`,
+                  freshFetchOptions
+                ),
+              ]);
+              if (
+                requestId !== dashboardRequestIdRef.current ||
+                !dashboardMountedRef.current
+              ) {
+                return;
+              }
+              if (messagesResponse.ok) {
+                const people = await messagesResponse.json();
+                setInboxNotes(
+                  (Array.isArray(people) ? people : [])
+                    .filter((person) => Number(person.unread_count) > 0)
+                    .slice(0, 4)
+                );
+              }
+              if (expensesResponse.ok) {
+                const expenses = await expensesResponse.json();
+                const recentAfter = Date.now() - 14 * 24 * 60 * 60 * 1000;
+                setWorkerSpends(
+                  (Array.isArray(expenses) ? expenses : [])
+                    .filter((expense) => {
+                      const spent = new Date(
+                        expense.spent_at || expense.created_at
+                      ).getTime();
+                      return Number.isFinite(spent) && spent >= recentAfter;
+                    })
+                    .slice(0, 4)
+                );
+              }
+            } catch (error) {
+              console.error("Dashboard messages and spending error:", error);
+            }
+          })()
+        );
       }
 
       // Load active In-Transit shipments with live tracking (non-blocking)
@@ -1672,6 +1732,37 @@ function OperationalDashboard({ userRole, workerId, userName }) {
     workerOrderTasks,
   ]);
 
+  const officeAwarenessItems = useMemo(() => {
+    if (userRole === "worker") return [];
+    const messages = inboxNotes.map((person) => {
+      const count = Number(person.unread_count) || 0;
+      return {
+        key: `message-${person.id}`,
+        title: person.name || person.username || "New message",
+        detail: person.unread_message_preview || "Unread message",
+        meta: count > 1 ? `${count} new` : "Message",
+        attention: true,
+        href: "/portal/messages",
+      };
+    });
+    const spends = workerSpends.map((expense) => ({
+      key: `spend-${expense.id}`,
+      title: `${expense.worker_name || "Worker"} spent ${formatAmount(expense.amount)}`,
+      detail: [expense.note, formatShortWhen(expense.spent_at)]
+        .filter(Boolean)
+        .join(" · "),
+      meta: "Spent",
+      attention: false,
+      href: "/portal/worker-payouts",
+    }));
+    return [...messages, ...spends];
+  }, [inboxNotes, userRole, workerSpends]);
+
+  const actionQueue = useMemo(
+    () => [...officeAwarenessItems, ...attentionItems],
+    [attentionItems, officeAwarenessItems]
+  );
+
   const focusNotice =
     overdueBillCount > 0
       ? {
@@ -1782,7 +1873,7 @@ function OperationalDashboard({ userRole, workerId, userName }) {
   const priorityCount =
     userRole === "worker"
       ? workerOpenTaskCount
-      : attentionItems.length;
+      : actionQueue.length;
   const priorityTone =
     userRole === "worker"
       ? workerLateTasks.length
@@ -2484,13 +2575,13 @@ function OperationalDashboard({ userRole, workerId, userName }) {
                 <span className="dashboard-panel-eyebrow">WORK QUEUE</span>
                 <h2>Pending Action Items</h2>
               </div>
-              <span className="dashboard-badge-count">{attentionItems.length}</span>
+              <span className="dashboard-badge-count">{actionQueue.length}</span>
             </header>
-            {attentionItems.length === 0 ? (
+            {actionQueue.length === 0 ? (
               <div className="dashboard-modern-empty">No urgent work waiting.</div>
             ) : (
               <div className="dashboard-modern-action-list">
-                {attentionItems.slice(0, 5).map((item) => (
+                {[...officeAwarenessItems, ...attentionItems.slice(0, 5)].map((item) => (
                   <a className="dashboard-action-row" href={item.href} key={item.key}>
                     <div className="dashboard-action-info">
                       <strong>{item.title}</strong>

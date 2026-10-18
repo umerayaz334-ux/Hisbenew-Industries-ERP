@@ -15,9 +15,15 @@ import { InternalCallContext } from "./InternalCallContext";
 import "./InternalCallProvider.css";
 
 const FALLBACK_ICE_SERVERS = [
+  { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
   { urls: "stun:stun.cloudflare.com:3478" },
-  { urls: "stun:stun.l.google.com:19302" },
 ];
+
+const usableIceServers = (servers) =>
+  (Array.isArray(servers) ? servers : []).filter((server) => {
+    const urls = Array.isArray(server?.urls) ? server.urls.join(" ") : String(server?.urls || "");
+    return urls && server?.username !== "openrelayproject" && !urls.includes("metered.ca");
+  });
 
 const TERMINAL_STATUSES = new Set([
   "declined",
@@ -486,7 +492,7 @@ export function InternalCallProvider({ children, user }) {
     [cleanupMedia, updateCall, updatePhase]
   );
 
-  const requireMedia = useCallback(async (callType = "audio") => {
+  const requireMedia = useCallback(async () => {
     if (!window.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia) {
       const error = new Error("Calling is unavailable in this browser.");
       error.name = window.isSecureContext ? "NotSupportedError" : "SecurityError";
@@ -494,7 +500,7 @@ export function InternalCallProvider({ children, user }) {
     }
     return navigator.mediaDevices.getUserMedia({
       ...AUDIO_CONSTRAINTS,
-      video: callType === "video" ? CAMERA_CONSTRAINTS : false,
+      video: false,
     });
   }, []);
 
@@ -523,7 +529,10 @@ export function InternalCallProvider({ children, user }) {
 
   const createPeer = useCallback(
     (callId, stream) => {
-      const peer = new RTCPeerConnection({ iceServers: iceServersRef.current });
+      const peer = new RTCPeerConnection({
+        iceCandidatePoolSize: 4,
+        iceServers: iceServersRef.current,
+      });
       peerRef.current = peer;
       stream.getAudioTracks().forEach((track) => {
         if ("contentHint" in track) track.contentHint = "speech";
@@ -532,9 +541,6 @@ export function InternalCallProvider({ children, user }) {
         if ("contentHint" in track) track.contentHint = "motion";
       });
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
-      if (!stream.getVideoTracks().length) {
-        peer.addTransceiver("video", { direction: "sendrecv" });
-      }
 
       const audioTransceiver = peer
         .getTransceivers()
@@ -812,8 +818,9 @@ export function InternalCallProvider({ children, user }) {
     const loadCallConfig = () => {
       api.get("/internal-calls/config").then((response) => {
         const servers = response.data?.ice_servers;
-        if (!disposed && Array.isArray(servers) && servers.length) {
-          iceServersRef.current = servers;
+        const usable = usableIceServers(servers);
+        if (!disposed && usable.length) {
+          iceServersRef.current = usable;
         }
         if (!disposed) {
           setIsVideoCallingEnabled(response.data?.video_calls_enabled !== false);
@@ -838,10 +845,9 @@ export function InternalCallProvider({ children, user }) {
   }, [user?.id]);
 
   const startCall = useCallback(
-    async (person, callType = "audio") => {
+    async (person) => {
       if (!person?.id || callRef.current) return;
-      const normalizedCallType = callType === "video" ? "video" : "audio";
-      if (normalizedCallType === "video" && !isVideoCallingEnabled) return;
+      const normalizedCallType = "audio";
       const operationId = callOperationRef.current + 1;
       callOperationRef.current = operationId;
       if (dismissTimerRef.current) window.clearTimeout(dismissTimerRef.current);
@@ -860,7 +866,7 @@ export function InternalCallProvider({ children, user }) {
       let stream;
       let createdCallId = null;
       try {
-        stream = await requireMedia(normalizedCallType);
+        stream = await requireMedia();
         if (callOperationRef.current !== operationId) {
           stream.getTracks().forEach((track) => track.stop());
           return;
@@ -908,15 +914,12 @@ export function InternalCallProvider({ children, user }) {
         dismissTimerRef.current = window.setTimeout(clearCall, 4200);
       }
     },
-    [clearCall, cleanupMedia, createPeer, isVideoCallingEnabled, requireMedia, sendMediaState, sendSignal, updateCall, updatePhase]
+    [clearCall, cleanupMedia, createPeer, requireMedia, sendMediaState, sendSignal, updateCall, updatePhase]
   );
 
   const startVideoCall = useCallback(
-    (person) => {
-      if (!isVideoCallingEnabled) return;
-      startCall(person, "video");
-    },
-    [isVideoCallingEnabled, startCall]
+    (person) => startCall(person),
+    [startCall]
   );
 
   const acceptCall = useCallback(async () => {
@@ -930,8 +933,7 @@ export function InternalCallProvider({ children, user }) {
     updatePhase("preparing");
     let stream;
     try {
-      const callType = call.call_type === "video" ? "video" : "audio";
-      stream = await requireMedia(callType);
+      stream = await requireMedia();
       if (callOperationRef.current !== operationId) {
         stream.getTracks().forEach((track) => track.stop());
         return;
@@ -1341,11 +1343,10 @@ export function InternalCallProvider({ children, user }) {
   );
 
   const otherName = activeCall?.other_user_name || "ERP user";
-  const isVideoCall = activeCall?.call_type === "video";
+  const isVideoCall = false;
   const isIncoming = phase === "incoming";
   const canControlAudio = ["outgoing", "connecting", "connected"].includes(phase);
-  const showVideoStage =
-    isVideoCall || hasRemoteVideo || isCameraEnabled || isScreenSharing || isRemoteScreenSharing;
+  const showVideoStage = false;
   const canShareScreen = Boolean(navigator.mediaDevices?.getDisplayMedia);
   const canFullscreen = Boolean(
     document.fullscreenEnabled ||
@@ -1480,26 +1481,6 @@ export function InternalCallProvider({ children, user }) {
                   >
                     <CallIcon name={isMuted ? "micOff" : "mic"} />
                     <span>{isMuted ? "Unmute" : "Mute"}</span>
-                  </button>
-                )}
-                {canControlAudio && isVideoCallingEnabled && (
-                  <button
-                    className={`erp-call-action is-camera ${isCameraEnabled ? "is-active" : ""}`}
-                    onClick={toggleCamera}
-                    type="button"
-                  >
-                    <CallIcon name={isCameraEnabled ? "camera" : "cameraOff"} />
-                    <span>{isCameraEnabled ? "Camera off" : "Camera on"}</span>
-                  </button>
-                )}
-                {canControlAudio && canShareScreen && (
-                  <button
-                    className={`erp-call-action is-screen ${isScreenSharing ? "is-active" : ""}`}
-                    onClick={isScreenSharing ? stopScreenShare : startScreenShare}
-                    type="button"
-                  >
-                    <CallIcon name={isScreenSharing ? "screenOff" : "screen"} />
-                    <span>{isScreenSharing ? "Stop share" : "Share screen"}</span>
                   </button>
                 )}
                 <button className="erp-call-action is-decline" onClick={endCall} type="button">
