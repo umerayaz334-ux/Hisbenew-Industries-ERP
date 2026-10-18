@@ -130,9 +130,11 @@
           link.href = apkUrl;
           link.download = release.defaultFile;
           link.textContent = `Download Android ${release.version}`;
-          note.textContent =
-            `Build ${release.build}. The main download supports all included processors. Smaller downloads below contain the same app.`;
-          for (const asset of release.assets.filter(item => item.file !== release.defaultFile)) {
+          const extras = release.assets.filter(item => item.file !== release.defaultFile);
+          note.textContent = extras.length
+            ? `Build ${release.build}. The main download supports all included processors. Smaller downloads below contain the same app.`
+            : `Build ${release.build}. This one install file works on the company Android phones.`;
+          for (const asset of extras) {
             const option = document.createElement('a');
             option.className = 'secondary';
             option.href = asset.url;
