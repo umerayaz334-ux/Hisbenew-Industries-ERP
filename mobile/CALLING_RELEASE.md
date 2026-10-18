@@ -1,49 +1,56 @@
-# Android calling and messaging test release
+﻿# Android test release — 18 October 2026
 
-ERP website: https://app.hisbenew.com. Backend: https://api.hisbenew.com.
-Changing the website hostname does not change the mobile API hostname.
+Website: https://app.hisbenew.com. Mobile API: https://api.hisbenew.com.
+Worker and admin remain in one app with server-controlled page access.
 
-## Changes
+## Included changes
 
-- Direct coworker conversations with no contact-request approval. Active accounts remain scoped to their company; visitors are excluded.
-- Native incoming-call screen with a bundled repeating Hisbenew double chime. Ring volume, silent mode and DND remain controlled by Android.
-- Native decline, delayed activity resume after Answer, duplicate answers, connecting/connected state, duration, mute, speaker and serialized media cleanup.
-- Android network-state permission and a microphone foreground service for ongoing calls after switching apps.
-- Account settings expose microphone permission recovery, notification settings and sound settings.
-- Notification bell/inbox show unread messages and worker dispatch reminders. These are live actionable alerts, not historical notifications.
+- Worker dashboard: every pending dispatch in a carousel, compact actions, shared shipping/order summaries, no fixed bell/header row.
+- Menu opens a sidebar. Account and Settings are separate destinations; Notifications are in the drawer.
+- Manufacturing aggregates pending demand against stock, excluding shipped, cancelled and other-company orders.
+- Product photos persist in application support storage after download. Settings can clear images without deleting pending jobs.
+- Spending/messages keep request IDs until server confirmation. Rejected entries show reasons without blocking other valid jobs. Older servers cannot consume queued entries without idempotency support.
+- Calls wait for ICE configuration, initialize WebRTC before audio settings, retain unsent ICE candidates and retry unacknowledged answers. Ending the call service resets audio mode.
+- Incoming calls use the default phone ringtone and native notification. System ringtone volume, silent mode and DND apply. Settings includes a ringtone preview.
+- Message notifications show sender names and up to five unread previews, subject to phone lock-screen privacy settings.
 
-## Build and checks
+## APKs and verification
+
+Build number 10. ARM64 suits most recent phones; ARMv7 suits 32-bit Android installations; x86_64 suits compatible emulators/devices. Compatibility depends on Android version and CPU rather than brand.
+
+Verified minimum Android version: Android 7 (API 24); target API 36. The universal APK includes all three architectures and is larger. Flutter assigns version codes 1010/2010/3010 to the split APKs and 10 to universal; continue updating with the same variant. If Android refuses an update, keep the installed app and its queued jobs intact rather than uninstalling.
 
 ```powershell
 flutter analyze --no-pub
 flutter test --no-pub
-flutter build apk --release --no-pub --build-number=2
+flutter build apk --release --no-pub --split-per-abi --build-number=10
 ```
 
-Windows native test hooks fail when the SDK executable path has spaces. Tests use a temporary SDK junction without spaces at `D:\DevCache\tmp\hisbenew-flutter-sdk`, without moving the SDK. For stalled Maven metadata lookups, use cached dependencies:
+The release build uses the existing debug signing key and is for testing. Update in place: uninstalling or clearing app data deletes unsynced jobs. Windows tests use SDK junction D:\DevCache\tmp\hisbenew-flutter-sdk because native hooks fail with spaces in the SDK path.
 
-```powershell
-cd android
-.\gradlew.bat --offline --console=plain assembleRelease '-Ptarget-platform=android-arm64' '-Ptarget=lib/main.dart'
-```
+## Required deployment and configuration
 
-The arm64 APK is for the Redmi test device. The project retains its existing debug signing configuration for release builds; production distribution needs a maintained signing key. Regenerate the original ringtone with `python tool/generate_ringtone.py`.
+The live API checked during this work lacked the sync capability endpoint, message preview schema and manufacturing endpoint. Deploy this backend before testing those features. Verify OpenAPI includes /worker-expenses/sync-capabilities, /manufacturing/dispatch-needs and InternalMessageUserOut.unread_messages. The authenticated capability response must include idempotent_expenses and idempotent_messages, both true. Retry pending jobs under the same account; do not recreate them manually.
 
-## Deployment and device verification
+Firebase client/server integration exists, but this checkout has no Firebase Android configuration. Reliable background push is not activated in this test APK:
 
-Deploy backend and web changes together with this APK. The API must expose all eligible coworkers and accept repeated call actions. Message history and legacy request records are retained; obsolete request-creation/review routes return 410.
+1. Register package com.hisbenew.factory.hisbenew_erp in the owner's Firebase project.
+2. Place its Android configuration at mobile/android/app/google-services.json and rebuild.
+3. Set GOOGLE_APPLICATION_CREDENTIALS on the deployed backend to a protected server-side service-account file from that same Firebase project. Never package the credential in the APK or commit it.
+4. Sign in again and verify device registration plus foreground/background/locked-phone delivery.
 
-Test on two phones and between mobile and web:
+Configure a maintained TURN relay in backend environment variable INTERNAL_CALL_ICE_SERVERS (JSON list with urls, username, credential). Public fallback servers do not guarantee production call reliability. Test two-way audio across different mobile networks.
 
-1. Call from the Redmi with microphone permission initially granted and initially denied.
-2. Ring and answer with the app visible, on the home screen, and locked. Confirm two-way audio.
-3. Decline from both native and in-app screens; confirm the caller stops ringing. Cancel from the caller before answering.
-4. End/repeat calls quickly, toggle mute/speaker, switch apps during a call, and switch Wi-Fi/mobile data.
-5. Verify ringtone stops after answer/decline/timeout, permission settings open, and the bell reflects unread messages.
-6. Verify cross-company, disabled and visitor accounts do not appear as recipients.
+GitHub access works outside the network sandbox. The Windows VPS deployment runner was verified online. Server inspection confirmed Firebase credentials and dedicated ICE/TURN configuration are absent. Deployment now backs up SQLite data and source, preserves server configuration, and restarts only the verified ERP backend process.
 
-The supplied Redmi trace identifies a native WebRTC abort but lacks the preceding Java exception/WebRTC assertion. ACCESS_NETWORK_STATE was missing and is now declared; hardware verification is required. If it crashes, capture `adb logcat -b all -v threadtime`, including lines before `Fatal signal`.
+## Physical phone acceptance checks
 
-## Remaining infrastructure
+- Update in place, reconnect and retry the three saved jobs. Confirm each appears exactly once for admin.
+- Browse products online and let photos download; restart offline and check products, orders and photos. Save spending offline, reconnect and check admin receipt.
+- Test mobile/mobile and web/mobile calls: open, home-screen and locked answers, two-way audio, decline/cancel on both sides, quick repeat calls, microphone permissions, speaker and headset.
+- Verify message previews with lock-screen content enabled, revoked worker pages and read-only worker shipping.
+- Compare manufacturing quantities to a known shared-stock shortage.
 
-Incoming discovery still uses a background service; calls poll independently every two seconds. Android battery management or process termination can stop it. The data-sync service no longer starts at boot because newer Android versions restrict that service type at boot. Reliable waking after process termination needs high-priority push delivery (e.g. Firebase Cloud Messaging), project configuration, and a server sender. Android force-stop is not guaranteed reachable. A dedicated TURN service is needed for production network coverage. This test APK does not claim those infrastructure capabilities.
+No physical phone was connected. The native crash trace alone does not identify the exact assertion; if it recurs, capture logcat including lines before Fatal signal.
+
+Android restricts full-screen notifications; force-stopped apps need reopening before FCM resumes. References: [Firebase delivery](https://firebase.google.com/docs/cloud-messaging/flutter/receive-messages), [Android full-screen intent restrictions](https://developer.android.com/about/versions/14/behavior-changes-14).

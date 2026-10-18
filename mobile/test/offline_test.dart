@@ -13,12 +13,64 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test('one rejected expense does not block other saved jobs', () async {
+    var online = false;
+    final api = ErpApi(client: MockClient((request) async {
+      if (!online) throw http.ClientException('offline');
+      if (request.url.path.endsWith('sync-capabilities')) return http.Response('{"idempotent_expenses":true}', 200);
+      final row = jsonDecode(request.body) as Map<String, dynamic>;
+      if (row['note'] == 'Rejected') return http.Response('{"detail":"Worker record unavailable"}', 422);
+      return http.Response(jsonEncode({...row, 'id': row['amount']}), 200);
+    }));
+    for (final note in ['Rejected', 'Fuel', 'Travel']) {
+      await api.sendWorkerExpense(session: session, amount: 100, note: note, spentAt: DateTime.utc(2026));
+      await api.syncExpenses(session);
+    }
+    online = true;
+    await api.syncExpenses(session);
+    expect(api.offline.pendingExpenses, 1);
+    final pending = await api.pendingSync(session);
+    expect(pending.single['note'], 'Rejected');
+    expect(pending.single['sync_error'], 'Worker record unavailable');
+  });
+
   test('cached products survive offline restart', () async {
     final api = ErpApi(client: MockClient((_) async => http.Response('[{"id":1,"name":"Chair"}]', 200)));
     await api.products(session);
     final restarted = ErpApi(client: MockClient((_) async => throw http.ClientException('offline')));
     expect((await restarted.products(session)).single['name'], 'Chair');
     expect(restarted.offline.offline, isTrue);
+  });
+
+  test('an old server never receives queued messages it cannot deduplicate', () async {
+    var posts = 0;
+    final api = ErpApi(client: MockClient((request) async {
+      if (request.method == 'POST') posts++;
+      return http.Response('{}', 200);
+    }));
+    await api.sendMessage(session: session, userId: 2, body: 'Saved message');
+    await api.syncMessages(session);
+    expect(posts, 0);
+    expect(api.offline.pendingMessages, 1);
+  });
+
+  test('a rejected message does not block the next recipient', () async {
+    var online = false;
+    final api = ErpApi(client: MockClient((request) async {
+      if (!online) throw http.ClientException('offline');
+      if (request.method == 'GET') return http.Response('{"idempotent_messages":true}', 200);
+      final row = jsonDecode(request.body) as Map<String, dynamic>;
+      if (row['recipient_user_id'] == 2) return http.Response('{"detail":"Recipient no longer active"}', 403);
+      return http.Response(jsonEncode({...row, 'id': 8}), 200);
+    }));
+    for (final id in [2, 3]) {
+      await api.sendMessage(session: session, userId: id, body: 'Hello');
+      await api.syncMessages(session);
+    }
+    online = true;
+    await api.syncMessages(session);
+    expect(api.offline.pendingMessages, 1);
+    expect((await api.pendingSync(session)).single['sync_error'], 'Recipient no longer active');
   });
 
   test('outbox is durable and isolated between accounts', () async {
@@ -70,6 +122,7 @@ void main() {
     final bodies = <String>[];
     final api = ErpApi(client: MockClient((request) async {
       if (!online) throw http.ClientException('offline');
+      if (request.url.path.endsWith('sync-capabilities')) return http.Response('{"idempotent_messages":true}', 200);
       final row = jsonDecode(request.body) as Map<String, dynamic>;
       bodies.add(row['body'] as String);
       return http.Response(jsonEncode({...row, 'id': 7, 'is_mine': true}), 200);

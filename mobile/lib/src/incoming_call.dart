@@ -66,11 +66,11 @@ CallKitParams incomingCallParams({required int callId, required String name}) {
     duration: 55000,
     extra: {'callId': callId},
     android: const AndroidParams(
-      isCustomNotification: true,
+      isCustomNotification: false,
       isShowFullLockedScreen: true,
       isFullScreen: true,
       isImportant: true,
-      ringtonePath: 'hisbenew_ring',
+      ringtonePath: 'system_ringtone_default',
       backgroundColor: '#141210',
       actionColor: '#1F4D3A',
       textColor: '#F3E6C8',

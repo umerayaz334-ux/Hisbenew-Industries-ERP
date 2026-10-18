@@ -5,6 +5,7 @@ import 'dashboard_data.dart';
 import 'erp_api.dart';
 import 'page_kit.dart';
 import 'theme.dart';
+import 'orders_page.dart';
 
 class PendingShip {
   const PendingShip({
@@ -165,59 +166,25 @@ class _ShippingPageState extends State<ShippingPage> {
   }
 }
 
-class _CollapsedTitle extends StatelessWidget {
-  const _CollapsedTitle({required this.when, required this.customer, required this.units});
+class ShippingSummary extends StatelessWidget {
+  const ShippingSummary({required this.when, required this.customer, required this.units, required this.orderNo, required this.items, super.key});
 
   final String when;
   final String customer;
   final int units;
+  final String orderNo;
+  final List<ItemShot> items;
 
   @override
-  Widget build(BuildContext context) {
-    final name = customer.trim().isEmpty ? '—' : customer.trim();
-    final date = prettyWhen(when);
-    final unitLabel = units == 1 ? phrase(context, '1 unit', '1 یونٹ') : phrase(context, '$units units', '$units یونٹس');
-    return Row(
-      children: [
-        if (date.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: Text(
-              date,
-              maxLines: 1,
-              softWrap: false,
-              style: const TextStyle(color: hisbenewMuted, fontWeight: FontWeight.w700, fontSize: 12.5),
-            ),
-          ),
-        Expanded(
-          child: Text(
-            name,
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: hisbenewInk),
-          ),
-        ),
-        if (units > 0) ...[
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE7F2EB),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: const Color(0xFFC5D9CC)),
-            ),
-            child: Text(
-              unitLabel,
-              maxLines: 1,
-              softWrap: false,
-              style: const TextStyle(color: hisbenewForest, fontWeight: FontWeight.w800, fontSize: 12, height: 1.1),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Row(children: [
+    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text([prettyWhen(when), customer].where((part) => part.isNotEmpty).join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+      const SizedBox(height: 4),
+      Text('#$orderNo · $units units', style: const TextStyle(color: hisbenewMuted, fontSize: 12)),
+    ])),
+    const SizedBox(width: 10),
+    OrderPhotos(items: items),
+  ]);
 }
 
 Future<void> openPendingShip(
@@ -260,7 +227,7 @@ class _PendingTile extends StatelessWidget {
     final title = row.customer.isEmpty ? row.orderNo : row.customer;
     return SummaryCard(
       sheetTitle: title.isEmpty ? phrase(context, 'Shipment', 'شپمنٹ') : title,
-      summary: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units),
+      summary: ShippingSummary(when: row.when, customer: row.customer, units: row.units, orderNo: row.orderNo, items: row.items),
       details: _PendingBody(row: row, model: model, onChanged: onChanged),
     );
   }
@@ -353,7 +320,7 @@ class _ShippedTile extends StatelessWidget {
     final title = row.customer.isEmpty ? row.orderNo : row.customer;
     return SummaryCard(
       sheetTitle: title.isEmpty ? phrase(context, 'Shipment', 'شپمنٹ') : title,
-      summary: _CollapsedTitle(when: row.when, customer: row.customer, units: row.units),
+      summary: ShippingSummary(when: row.when, customer: row.customer, units: row.units, orderNo: row.orderNo, items: row.items),
       details: _ShippedBody(row: row, model: model, onChanged: onChanged),
     );
   }

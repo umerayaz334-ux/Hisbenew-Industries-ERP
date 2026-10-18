@@ -274,6 +274,7 @@ Future<void> _watchMessages(
       final preview = '${row['unread_message_preview'] ?? ''}'.trim();
       final text = preview.isEmpty ? 'Sent you a message' : preview;
       final timestamp = DateTime.tryParse('${row['unread_message_at']}') ?? DateTime.now();
+      final recent = row['unread_messages'] is List ? row['unread_messages'] as List : const [];
       await notes.show(
         id: notificationId,
         title: who,
@@ -287,12 +288,18 @@ Future<void> _watchMessages(
             priority: Priority.high,
             category: AndroidNotificationCategory.message,
             visibility: NotificationVisibility.public,
+            autoCancel: true,
+            playSound: true,
+            enableVibration: true,
+            color: const Color(0xFF215C4A),
             number: count,
             icon: '@drawable/ic_stat_hisbenew',
             styleInformation: MessagingStyleInformation(
               const Person(name: 'You'),
               groupConversation: false,
-              messages: [Message(text, timestamp, Person(name: who, key: '$senderId'))],
+              messages: recent.isEmpty ? [Message(text, timestamp, Person(name: who, key: '$senderId'))] : [
+                for (final entry in recent.whereType<Map>()) Message('${entry['body'] ?? ''}', DateTime.tryParse('${entry['created_at']}') ?? timestamp, Person(name: who, key: '$senderId')),
+              ],
             ),
           ),
         ),

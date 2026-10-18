@@ -19,6 +19,7 @@ import 'products_page.dart';
 import 'shipping_page.dart';
 import 'theme.dart';
 import 'worker_chat.dart';
+import 'workspace_menu.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({required this.model, super.key});
@@ -191,7 +192,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   late final CallDesk _calls = CallDesk(widget.model);
   Timer? _unreadTimer;
 
-  static const _bottom = [0, 1, 2, 4, 3];
+  static const _bottom = [0, 1, 2, 8, 7];
   static const _chat = 8;
 
   @override
@@ -242,8 +243,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       ProductsPage(model: widget.model),
       AmazonPage(model: widget.model),
       LabelsPage(model: widget.model),
-      AccountPage(model: widget.model),
+      ProfilePage(model: widget.model),
       WorkerChat(model: widget.model, calls: _calls),
+      PreferencesPage(model: widget.model),
+      NotificationInbox(model: widget.model, onClose: () => setState(() => _index = 0), onChat: () => setState(() => _index = _chat), onShipping: () => setState(() => _index = 2)),
     ];
     final labels = [
       phrase(context, 'Home', 'ہوم'),
@@ -253,8 +256,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       phrase(context, 'Products', 'پروڈکٹس'),
       phrase(context, 'Amazon', 'ایمیزون'),
       phrase(context, 'Labels', 'لیبل'),
-      phrase(context, 'Menu', 'مینو'),
+      phrase(context, 'Account', 'اکاؤنٹ'),
       phrase(context, 'Chat', 'چیٹ'),
+      'Settings',
+      'Notifications ($_unread)',
     ];
     final icons = [
       Icons.home_rounded,
@@ -266,6 +271,8 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       Icons.sell_rounded,
       Icons.menu_rounded,
       Icons.forum_rounded,
+      Icons.settings_outlined,
+      Icons.notifications_outlined,
     ];
 
     return ListenableBuilder(
@@ -282,8 +289,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
   Widget _officeScaffold(BuildContext context, List<Widget> pages, List<String> labels, List<IconData> icons) {
     return Scaffold(
       key: _scaffold,
-      drawer: _index == 0
-          ? _SideMenu(
+      drawer: _SideMenu(
               labels: labels,
               icons: icons,
               index: _index,
@@ -291,35 +297,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 setState(() => _index = value);
                 Navigator.pop(context);
               },
-            )
-          : null,
+            ),
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
-              child: Row(
-                children: [
-                  if (_index == 0)
-                    IconButton(
-                      onPressed: () => _scaffold.currentState?.openDrawer(),
-                      icon: const Icon(Icons.menu_rounded, color: hisbenewInk),
-                    )
-                  else
-                    const SizedBox(width: 12),
-                  Expanded(child: Text(labels[_index], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4))),
-                  if (_index == 0) NotificationBell(count: _unread, onTap: () => setState(() => _notifications = !_notifications)),
-                  IconButton(
-                    onPressed: () => setState(() => _index = _index == _chat ? 0 : _chat),
-                    icon: Badge(
-                      isLabelVisible: _unread > 0 && _index != _chat,
-                      label: Text(_unread > 9 ? '9+' : '$_unread'),
-                      child: Icon(_index == _chat ? Icons.close_rounded : Icons.forum_rounded, color: hisbenewInk),
-                    ),
-                  ),
-                ],
-              ),
-            ),
             Expanded(child: _notifications ? NotificationInbox(model: widget.model,
               onClose: () => setState(() => _notifications = false),
               onChat: () => setState(() { _notifications = false; _index = _chat; }),
@@ -330,10 +311,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _bottom.contains(_index) ? _bottom.indexOf(_index) : 0,
         indicatorColor: const Color(0xFFF3E6C8),
-        onDestinationSelected: (value) => setState(() => _index = _bottom[value]),
+        onDestinationSelected: (value) { if (_bottom[value] == 7) { _scaffold.currentState?.openDrawer(); } else { setState(() { _index = _bottom[value]; _notifications = false; }); } },
         destinations: [
           for (final slot in _bottom)
-            NavigationDestination(icon: Icon(icons[slot]), label: labels[slot]),
+            NavigationDestination(icon: Icon(icons[slot]), label: slot == 7 ? 'Menu' : labels[slot]),
         ],
       ),
     );
@@ -356,11 +337,10 @@ class _SideMenu extends StatelessWidget {
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: ListView(
             children: [
               const Text(
-                'Hisbenew',
+                'Workspace',
                 style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.6),
               ),
               const SizedBox(height: 6),

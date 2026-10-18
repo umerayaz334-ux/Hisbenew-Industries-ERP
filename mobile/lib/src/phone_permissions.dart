@@ -118,7 +118,7 @@ class _CallPermissionTileState extends State<CallPermissionTile>
         contentPadding: EdgeInsets.zero,
         leading: const Icon(Icons.volume_up_outlined),
         title: const Text('Incoming ringtone'),
-        subtitle: const Text('Hisbenew double chime · phone ring volume'),
+        subtitle: const Text('Phone ringtone · uses your ringtone volume'),
         trailing: const Icon(Icons.chevron_right),
         onTap: PhonePermissions.soundSettings,
       ),

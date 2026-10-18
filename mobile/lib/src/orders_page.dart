@@ -156,7 +156,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              _OrderPhotos(items: order.items),
+                              OrderPhotos(items: order.items),
                             ],
                           ),
                           details: Column(
@@ -180,8 +180,8 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 }
 
-class _OrderPhotos extends StatelessWidget {
-  const _OrderPhotos({required this.items});
+class OrderPhotos extends StatelessWidget {
+  const OrderPhotos({required this.items, super.key});
 
   final List<ItemShot> items;
 

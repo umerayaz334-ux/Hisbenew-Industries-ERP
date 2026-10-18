@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'dashboard_data.dart';
 import 'erp_api.dart';
 import 'theme.dart';
+import 'product_image_cache.dart';
 
 String? productImageUrl(String path, {int width = 160}) {
   final value = path.trim();
@@ -50,15 +51,7 @@ class ProductThumb extends StatelessWidget {
         height: size,
         child: url == null
             ? const ColoredBox(color: Color(0xFFEEF2FF), child: Icon(Icons.image_outlined, size: 18, color: hisbenewMuted))
-            : Image.network(
-                url,
-                fit: BoxFit.cover,
-                cacheWidth: (size * 3).round(),
-                errorBuilder: (context, error, stack) => const ColoredBox(
-                  color: Color(0xFFEEF2FF),
-                  child: Icon(Icons.image_outlined, size: 18, color: hisbenewMuted),
-                ),
-              ),
+            : OfflineProductImage(path: path),
       ),
     );
   }
@@ -114,15 +107,7 @@ void openProductPhoto(BuildContext context, {required String path, String title 
               child: InteractiveViewer(
                 minScale: 1,
                 maxScale: 4,
-                child: Image.network(
-                  url,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    return const Center(child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2));
-                  },
-                  errorBuilder: (context, error, stack) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
-                ),
+                child: OfflineProductImage(path: path, fit: BoxFit.contain),
               ),
             ),
           ),
@@ -230,7 +215,7 @@ class WorkCard extends StatelessWidget {
           BoxShadow(color: Color(0x0F101828), blurRadius: 16, offset: Offset(0, 6)),
         ],
       ),
-      child: child,
+      child: Material(color: Colors.transparent, borderRadius: BorderRadius.circular(18), child: child),
     );
   }
 }

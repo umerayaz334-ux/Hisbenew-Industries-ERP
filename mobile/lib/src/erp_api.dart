@@ -5,13 +5,16 @@ import 'package:http/http.dart' as http;
 
 import 'dashboard_data.dart';
 import 'offline_store.dart';
+import 'product_image_cache.dart';
 
 const erpApiBase = 'https://api.hisbenew.com';
 
 class ErpException implements Exception {
-  const ErpException(this.code);
+  const ErpException(this.code, {this.detail = '', this.statusCode});
 
   final String code;
+  final String detail;
+  final int? statusCode;
 }
 
 class ErpSession {
@@ -76,18 +79,29 @@ class ErpApi {
     return (result['allowed_pages'] as List).cast<String>();
   }
   Future<void>? _syncing;
+  Future<List<Map<String, dynamic>>> pendingSync(ErpSession session) async => [
+    for (final row in await offline.expenses(_account(session))) {...row, 'kind': 'Spending'},
+    for (final row in await offline.messages(_account(session))) {...row, 'kind': 'Message'},
+  ];
+  String _syncError(ErpException error) => switch (error.code) {
+    'invalidLogin' => 'Sign in again to sync your saved items.',
+    'unreachable' => 'Cannot reach the server. Will retry automatically.',
+    'denied' => error.detail.isEmpty ? 'Your account does not have access. Ask your admin to restore it.' : error.detail,
+    _ => error.statusCode == 404 ? 'Server update required for offline sync. Your entries remain saved.' : error.detail.isEmpty ? 'The server could not save this entry. Will retry.' : error.detail,
+  };
   String _account(ErpSession session) => '${session.baseUrl}|${session.tenantSlug}|${session.username}|${session.workerId}';
 
   Future<List<Map<String, dynamic>>> _cachedList(ErpSession session, String path) async {
     try {
       final rows = await _sendList(url: '${session.baseUrl}$path', token: session.token).timeout(const Duration(seconds: 8));
       await offline.saveCache(_account(session), path, rows);
+      unawaited(ProductImageCache.instance.prefetch(rows));
       return rows;
     } on TimeoutException {
       offline.markOffline();
       return await offline.cache(_account(session), path) ?? [];
     } on ErpException catch (error) {
-      if (error.code == 'invalidLogin') rethrow;
+      if (error.code == 'invalidLogin' || error.code == 'denied') rethrow;
       if (error.code != 'denied') offline.markOffline();
       return await offline.cache(_account(session), path) ?? [];
     }
@@ -105,7 +119,9 @@ class ErpApi {
         offline.notice('Saved on this phone. Server update required before syncing.');
         return;
       }
+      var failed = 0;
       for (final row in rows) {
+        try {
         final saved = await _send(method: 'POST', url: '${session.baseUrl}/worker-expenses', token: session.token, body: row).timeout(const Duration(seconds: 12));
         if (saved['client_request_id'] != row['client_request_id']) {
           offline.notice('Saved locally. Server sync confirmation is missing.');
@@ -118,14 +134,22 @@ class ErpApi {
         cached.add(saved);
         await offline.saveCache(account, path, cached);
         await offline.acknowledge(account, '${row['client_request_id']}');
+        } on ErpException catch (error) {
+          failed++;
+          await offline.recordFailure(account, 'outbox', '${row['client_request_id']}', _syncError(error));
+          if (error.code == 'unreachable' || error.code == 'invalidLogin') rethrow;
+        } on TimeoutException {
+          await offline.recordFailure(account, 'outbox', '${row['client_request_id']}', 'Server did not respond. Retrying with the same entry ID.');
+          rethrow;
+        }
       }
-      offline.notice('All spending synced');
+      offline.notice(failed == 0 ? '' : '$failed spending entries need attention. Tap to view the reason.');
     } on TimeoutException {
       offline.markOffline();
       offline.notice('Saved on this phone. Sync will retry automatically.');
     } on ErpException catch (error) {
       if (error.code == 'unreachable') offline.markOffline();
-      offline.notice(error.code == 'invalidLogin' ? 'Sign in again to sync saved spending.' : 'Saved on this phone. Waiting for the server to accept sync.');
+      offline.notice(_syncError(error));
     } on StateError {
       offline.notice('Phone storage is unavailable. Your pending spending has not been removed.');
     }
@@ -201,6 +225,7 @@ class ErpApi {
   Future<List<Map<String, dynamic>>> products(ErpSession session) async {
     return _cachedList(session, '/products');
   }
+  Future<List<Map<String, dynamic>>> manufacturingNeeds(ErpSession session) => _cachedList(session, '/manufacturing/dispatch-needs');
 
   Future<List<String>> labelPrinters(ErpSession session) async {
     final raw = await _request(method: 'GET', url: '${session.baseUrl}/label-printers', token: session.token);
@@ -385,7 +410,14 @@ class ErpApi {
     final rows = await offline.messages(account);
     if (rows.isEmpty) return;
     try {
+      final capabilities = await _send(method: 'GET', url: '${session.baseUrl}/worker-expenses/sync-capabilities', token: session.token).timeout(const Duration(seconds: 8));
+      if (capabilities['idempotent_messages'] != true) {
+        offline.notice('Messages saved on this phone. Server update required before syncing.');
+        return;
+      }
+      var failed = 0;
       for (final row in List<Map<String, dynamic>>.from(rows)) {
+        try {
         final saved = await _send(
           method: 'POST',
           url: '${session.baseUrl}/internal-messages',
@@ -393,7 +425,7 @@ class ErpApi {
           body: row,
         ).timeout(const Duration(seconds: 12));
         final savedId = saved['client_request_id'];
-        final confirmed = savedId == row['client_request_id'] || (saved['id'] != null && savedId == null && saved['body'] == row['body']);
+        final confirmed = savedId == row['client_request_id'];
         if (!confirmed) {
           offline.notice('Message saved on this phone. Waiting for the server to confirm it.');
           return;
@@ -404,14 +436,22 @@ class ErpApi {
         cached.add(saved);
         await offline.saveCache(account, path, cached);
         await offline.acknowledgeMessage(account, '${row['client_request_id']}');
+        } on ErpException catch (error) {
+          failed++;
+          await offline.recordFailure(account, 'messages', '${row['client_request_id']}', _syncError(error));
+          if (error.code == 'unreachable' || error.code == 'invalidLogin') rethrow;
+        } on TimeoutException {
+          await offline.recordFailure(account, 'messages', '${row['client_request_id']}', 'Server did not respond. Message retained for retry.');
+          rethrow;
+        }
       }
-      offline.notice(offline.pendingExpenses > 0 ? 'Messages synced' : 'All saved items synced');
+      offline.notice(failed > 0 ? '$failed messages need attention. Tap to view the reason.' : '');
     } on TimeoutException {
       offline.markOffline();
       offline.notice('Messages saved on this phone. They will send when the connection returns.');
     } on ErpException catch (error) {
       if (error.code == 'unreachable') offline.markOffline();
-      offline.notice('Messages saved on this phone. They will send when the connection returns.');
+      offline.notice(_syncError(error));
     } on StateError {
       offline.notice('Phone storage is unavailable. Pending messages have not been removed.');
     }
@@ -616,12 +656,12 @@ class ErpApi {
       throw const ErpException('invalidLogin');
     }
     if (response.statusCode == 403) {
-      final detail = decoded is Map ? '${decoded['detail']}' : '';
-      if (detail.contains('access is required')) throw const ErpException('denied');
-      throw const ErpException('invalidLogin');
+      final detail = decoded is Map && decoded['detail'] is String ? decoded['detail'] as String : 'Access denied by the server.';
+      throw ErpException('denied', detail: detail, statusCode: 403);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw const ErpException('server');
+      final detail = decoded is Map && decoded['detail'] is String ? decoded['detail'] as String : 'Server returned HTTP ${response.statusCode}.';
+      throw ErpException('server', detail: detail, statusCode: response.statusCode);
     }
     return decoded;
   }

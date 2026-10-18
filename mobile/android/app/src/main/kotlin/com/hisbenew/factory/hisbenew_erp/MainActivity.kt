@@ -41,7 +41,7 @@ class MainActivity : FlutterActivity() {
                     return@setMethodCallHandler
                 }
                 previewRingtone?.stop()
-                val ringtone = RingtoneManager.getRingtone(this, Uri.parse("android.resource://$packageName/${R.raw.hisbenew_ring}"))
+                val ringtone = RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
                 ringtone.audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) ringtone.volume = 1f
                 previewRingtone = ringtone

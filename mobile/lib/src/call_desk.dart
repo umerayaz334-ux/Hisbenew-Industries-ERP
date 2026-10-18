@@ -63,7 +63,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   final List<RTCIceCandidate> _queuedIce = [];
   final List<Map<String, dynamic>> _localIce = [];
   var _localPosted = false;
-  var _iceRestarted = false;
+  bool _sendingIce = false;
   List<Map<String, dynamic>> _ice = relayIceServers();
 
   void startWatch() {
@@ -128,9 +128,11 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     final session = model.session;
     if (session == null) return;
     try {
-      final servers = await model.api.callIceServers(session);
+      final servers = await model.api.callIceServers(session).timeout(const Duration(seconds: 8));
       _ice = withRelay(servers);
     } on ErpException {
+      return;
+    } on TimeoutException {
       return;
     }
   }
@@ -194,6 +196,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     }
     if (_disposed || generation != _generation) return;
     try {
+      await _loadIce();
       await _openMedia();
       if (_disposed || generation != _generation) return;
       final call = await model.api.startCall(session: session, userId: userId);
@@ -296,6 +299,8 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
       phase = 'connecting';
       notice = '';
       notifyListeners();
+      await FlutterCallkitIncoming.hideCallkitIncoming(incomingCallParams(callId: id, name: otherName));
+      await _loadIce();
       if (_pc == null) await _openMedia();
       if (_disposed || generation != _generation) return;
       _armSignals();
@@ -359,6 +364,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _createMedia() async {
     await PhonePermissions.startVoiceService();
+    await WebRTC.initialize(options: {'androidUseHardwareAudioProcessing': false});
     await Helper.setAndroidAudioConfiguration(
       AndroidAudioConfiguration(
         manageAudioFocus: true,
@@ -368,9 +374,6 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         androidAudioAttributesUsageType: AndroidAudioAttributesUsageType.voiceCommunication,
         androidAudioAttributesContentType: AndroidAudioAttributesContentType.speech,
       ),
-    );
-    await WebRTC.initialize(
-      options: {'androidUseHardwareAudioProcessing': false},
     );
     _local = await navigator.mediaDevices.getUserMedia({
       'audio': true,
@@ -389,6 +392,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
       await _pc!.addTrack(track, _local!);
     }
     _pc!.onIceCandidate = (candidate) {
+      if (_pc != peer || _disposed) return;
       if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
       final payload = {
         'candidate': candidate.candidate,
@@ -399,7 +403,8 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         _localIce.add(payload);
         return;
       }
-      _sendIce(payload);
+      _localIce.add(payload);
+      _flushLocalIce();
     };
     _pc!.onTrack = (event) {
       if (event.streams.isNotEmpty) _remote = event.streams.first;
@@ -440,35 +445,32 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _recoverOrEnd(RTCPeerConnection peer) {
-    if (_disposed || _pc != peer || phase == 'ended' || phase == 'idle' || phase == 'connected') return;
-    if (!_iceRestarted && _remoteReady) {
-      _iceRestarted = true;
-      peer.restartIce().catchError((Object error) {
-        debugPrint('Call ICE restart failed: ${error.runtimeType}');
-      });
-      return;
+    if (_disposed || _pc != peer || phase == 'ended' || phase == 'idle') return;
+    if (phase == 'connected') {
+      phase = 'connecting';
+      _armConnectionTimeout();
     }
-    hangUp();
-  }
-
-  void _sendIce(Map<String, dynamic> payload) {
-    final callId = _callId;
-    final session = model.session;
-    if (callId == null || session == null) {
-      _localIce.add(payload);
-      return;
-    }
-    model.api.sendCallSignal(session: session, callId: callId, type: 'ice', payload: payload).catchError((Object error) {
-      debugPrint('Call ICE send failed: ${error.runtimeType}');
-    });
+    notice = 'Audio connection failed. Check your network or contact your admin about the call relay.';
+    notifyListeners();
   }
 
   Future<void> _flushLocalIce() async {
-    final queued = List<Map<String, dynamic>>.from(_localIce);
-    _localIce.clear();
-    for (final payload in queued) {
-      _sendIce(payload);
-    }
+    if (_sendingIce || !_localPosted || _callId == null) return;
+    final callId = _callId!;
+    final generation = _generation;
+    final session = model.session;
+    if (session == null) return;
+    _sendingIce = true;
+    try {
+      while (_localIce.isNotEmpty && generation == _generation) {
+        final payload = _localIce.first;
+        await model.api.sendCallSignal(session: session, callId: callId, type: 'ice', payload: payload);
+        if (generation != _generation) return;
+        _localIce.removeAt(0);
+      }
+    } on ErpException {
+      // Keep unacknowledged candidates; the next signaling poll retries them.
+    } finally { _sendingIce = false; }
   }
 
   void _armConnectionTimeout() {
@@ -514,6 +516,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     if (session == null || callId == null || peer == null) return;
     final generation = _generation;
     try {
+      await _flushLocalIce();
       final live = await model.api.callDetails(session, callId);
       if (_pc != peer || _callId != callId || generation != _generation) return;
       final status = asText(live['status']).toLowerCase();
@@ -543,8 +546,9 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         if (type == 'answer' && !_remoteReady && peer.signalingState != RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
           break;
         }
-        if (type == 'offer' && !_remoteReady) {
-          await peer.setRemoteDescription(
+        if (type == 'offer') {
+          if (!_remoteReady) {
+            await peer.setRemoteDescription(
             RTCSessionDescription(
               asText(payload['sdp']),
               asText(payload['type']),
@@ -552,8 +556,12 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
           );
           _remoteReady = true;
           await _flushIce(peer);
-          final answer = await peer.createAnswer();
-          await peer.setLocalDescription(answer);
+          }
+          var answer = await peer.getLocalDescription();
+          if (answer == null || answer.type != 'answer') {
+            answer = await peer.createAnswer();
+            await peer.setLocalDescription(answer);
+          }
           await model.api.sendCallSignal(
             session: session,
             callId: callId,
@@ -656,7 +664,6 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         });
     _remoteReady = false;
     _localPosted = false;
-    _iceRestarted = false;
     _queuedIce.clear();
     _localIce.clear();
     _remote = null;

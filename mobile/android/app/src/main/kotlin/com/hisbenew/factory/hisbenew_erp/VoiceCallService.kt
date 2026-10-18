@@ -8,10 +8,17 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.media.AudioManager
 import androidx.core.app.NotificationCompat
 
 /** Started from the visible call screen, before opening the microphone. */
 class VoiceCallService : Service() {
+    override fun onDestroy() {
+        val audio = getSystemService(AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) audio.clearCommunicationDevice()
+        audio.mode = AudioManager.MODE_NORMAL
+        super.onDestroy()
+    }
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

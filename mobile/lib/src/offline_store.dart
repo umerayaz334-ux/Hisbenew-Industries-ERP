@@ -58,6 +58,14 @@ class OfflineStore extends ChangeNotifier {
   Future<void> acknowledge(String account, String id) => _edit(account, 'outbox', (rows) => rows.removeWhere((row) => row['client_request_id'] == id));
   Future<void> enqueueMessage(String account, Map<String, dynamic> row) => _edit(account, 'messages', (rows) => rows.add(row));
   Future<void> acknowledgeMessage(String account, String id) => _edit(account, 'messages', (rows) => rows.removeWhere((row) => row['client_request_id'] == id));
+  Future<void> recordFailure(String account, String kind, String id, String error) => _edit(account, kind, (rows) {
+    for (final row in rows) {
+      if (row['client_request_id'] == id) {
+        row['sync_error'] = error;
+        row['last_attempt_at'] = DateTime.now().toUtc().toIso8601String();
+      }
+    }
+  });
   Future<void> refresh(String account) async {
     pendingExpenses = (await expenses(account)).length;
     pendingMessages = (await messages(account)).length;

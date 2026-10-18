@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../l10n/app_localizations.dart';
 import 'app_model.dart';
 import 'app_loader.dart';
 import 'call_desk.dart';
@@ -19,6 +18,8 @@ import 'notification_inbox.dart';
 import 'notification_navigation.dart';
 import 'orders_page.dart';
 import 'products_page.dart';
+import 'workspace_menu.dart';
+import 'manufacturing_page.dart';
 
 class WorkerPortal extends StatefulWidget {
   const WorkerPortal({required this.model, super.key});
@@ -31,6 +32,7 @@ class WorkerPortal extends StatefulWidget {
 
 class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver {
   late final CallDesk _calls = CallDesk(widget.model);
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   var _index = 0;
   var _notifications = false;
   var _loading = true;
@@ -110,6 +112,23 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     if (mounted && before > 0 && widget.model.api.offline.pending == 0) _load();
   }
 
+  Future<void> _showPendingSync() async {
+    final session = widget.model.session;
+    if (session == null) return;
+    final rows = await widget.model.api.pendingSync(session);
+    if (!mounted) return;
+    await showWorkSheet(context: context, title: 'Saved on this phone', child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const Text('These entries stay saved until the server confirms them. Retrying will use the same entry IDs.'),
+      const SizedBox(height: 16),
+      for (final row in rows) ListTile(contentPadding: EdgeInsets.zero,
+        title: Text(row['kind'] == 'Spending' ? '${row['note']} · PKR ${row['amount']}' : asText(row['body'])),
+        subtitle: Text(asText(row['sync_error']).isNotEmpty ? asText(row['sync_error']) : widget.model.api.offline.syncNotice.isNotEmpty ? widget.model.api.offline.syncNotice : 'Waiting to sync'),
+        leading: Icon(row['kind'] == 'Spending' ? Icons.receipt_long_outlined : Icons.chat_bubble_outline),
+      ),
+      FilledButton.icon(onPressed: () async { Navigator.pop(context); await _syncOffline(); }, icon: const Icon(Icons.sync), label: const Text('Retry saved entries')),
+    ]));
+  }
+
   Future<void> _load() async {
     final session = widget.model.session;
     if (session == null) return;
@@ -124,12 +143,15 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       final paymentsFuture = _allow('Worker Payouts') ? widget.model.api.workerPayments(session) : Future.value(const <Map<String, dynamic>>[]);
       final expensesFuture = _allow('Worker Payouts') ? widget.model.api.workerExpenses(session) : Future.value(const <Map<String, dynamic>>[]);
       final shippedFuture = _allow('Shipping') ? widget.model.api.shipments(session) : Future.value(const <ShipmentRecord>[]);
-      final pending = await pendingFuture;
-      final tasks = await tasksFuture;
-      final orderTasks = await orderTasksFuture;
-      final payments = await paymentsFuture;
-      final expenses = await expensesFuture;
-      final shipped = await shippedFuture;
+      // Attach error handlers to every request immediately: a revoked page
+      // must not produce an unhandled error while another request is loading.
+      final results = await Future.wait<Object>([pendingFuture, tasksFuture, orderTasksFuture, paymentsFuture, expensesFuture, shippedFuture]);
+      final pending = results[0] as List<Map<String, dynamic>>;
+      final tasks = results[1] as List<Map<String, dynamic>>;
+      final orderTasks = results[2] as List<Map<String, dynamic>>;
+      final payments = results[3] as List<Map<String, dynamic>>;
+      final expenses = results[4] as List<Map<String, dynamic>>;
+      final shipped = results[5] as List<ShipmentRecord>;
       if (!mounted) return;
       setState(() {
         _pending = [for (final row in pending) PendingShip.fromJson(row)];
@@ -159,6 +181,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     if (index == 3 && !_allow('Worker Payouts')) index = 0;
     if (index == 5 && !_allow('Orders')) index = 0;
     if (index == 6 && !_allow('Products')) index = 0;
+    if (index == 8 && !_allow('Manufacturing')) index = 0;
     if (index != _index) setState(() => _index = index);
   }
 
@@ -170,6 +193,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     if (index == 3 && !_allow('Worker Payouts')) index = 0;
     if (index == 5 && !_allow('Orders')) index = 0;
     if (index == 6 && !_allow('Products')) index = 0;
+    if (index == 8 && !_allow('Manufacturing')) index = 0;
     setState(() { _index = index; _notifications = false; });
   }
 
@@ -205,28 +229,28 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
         onRetry: _load,
         onChanged: _load,
       ),
-      _WorkerSettings(model: widget.model, onProducts: () => _open(6), onOrders: () => _open(5)),
+      ProfilePage(model: widget.model),
       OrdersPage(model: widget.model),
       ProductsPage(model: widget.model),
+      PreferencesPage(model: widget.model),
+      ManufacturingPage(model: widget.model),
     ];
 
     return ListenableBuilder(
       listenable: _calls,
       builder: (context, _) {
         return Scaffold(
+      key: _scaffoldKey,
+      drawer: WorkspaceDrawer(model: widget.model, onSelect: _open, onNotifications: () => setState(() => _notifications = true)),
       backgroundColor: hisbenewCanvas,
       body: Stack(
         children: [
           SafeArea(child: Column(children: [
-            if (_index == 0 && !_notifications) Padding(padding: const EdgeInsets.fromLTRB(20, 4, 12, 0), child: Row(children: [
-              const Spacer(),
-              NotificationBell(count: _unread, onTap: () => setState(() => _notifications = !_notifications)),
-            ])),
-            if (_index > 4 && !_notifications) Row(children: [IconButton(onPressed: () => _open(0), icon: const Icon(Icons.arrow_back)), Text(_index == 5 ? 'Orders' : 'Products', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700))]),
             ListenableBuilder(listenable: widget.model.api.offline, builder: (context, _) {
               final store = widget.model.api.offline;
               if (!store.offline && store.pending == 0) return const SizedBox.shrink();
               return Material(color: const Color(0xFFFFF3D5), child: ListTile(dense: true,
+                onTap: store.pending > 0 ? _showPendingSync : null,
                 leading: Icon(store.offline ? Icons.cloud_off : Icons.cloud_upload_outlined, size: 20),
                 title: Text(store.offline
                     ? 'Offline · showing saved data'
@@ -234,7 +258,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
                 subtitle: Text(store.pending > 0
                     ? (store.syncNotice.isNotEmpty
                         ? store.syncNotice
-                        : 'Orders, products, spendings, and messages stay on this phone until the connection returns.')
+                        : 'Tap to review saved entries. Sync retries automatically.')
                     : 'Only previously downloaded information is available.'),
                 trailing: IconButton(tooltip: 'Sync now', icon: const Icon(Icons.sync), onPressed: () async { await _syncOffline(); await _load(); }),
               ));
@@ -260,7 +284,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
         backgroundColor: Colors.white,
         indicatorColor: const Color(0xFFF3E6C8),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        onDestinationSelected: (slot) => _open(nav[slot]),
+        onDestinationSelected: (slot) { if (nav[slot] == 4) { _scaffoldKey.currentState?.openDrawer(); } else { _open(nav[slot]); } },
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.space_dashboard_outlined),
@@ -357,121 +381,71 @@ class _WorkerHome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rawName = model.session?.name.trim() ?? '';
-    final name = rawName.isEmpty ? '' : rawName.split(RegExp(r'\s+')).first;
+    final name = model.session?.name.split(' ').first ?? '';
     final money = _moneyOf(tasks, payments, expenses);
-    final waiting = pending.take(4).toList();
-    final road = moving.take(4).toList();
-    return RefreshIndicator(
-      color: hisbenewForest,
-      onRefresh: onRetry,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
-        children: [
-          Text(_greeting(context, name), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: -0.7, height: 1.05, color: hisbenewInk)),
-          const SizedBox(height: 6),
-          Text(DateFormat.yMMMEd().format(DateTime.now()), style: const TextStyle(color: hisbenewMuted, fontSize: 13)),
-          const SizedBox(height: 18),
-          if (loading)
-            const AppLoader()
-          else if (error)
-            FilledButton(onPressed: onRetry, child: Text(phrase(context, 'Try again', 'دوبارہ کوشش')))
-          else ...[
-            _TodaySummary(waiting: pending.length, moving: moving.length,
-              tasks: tasks.where((row) => !['completed', 'verified'].contains(asText(row['status']).toLowerCase())).length,
-              onTap: onOpenShipping),
-            const SizedBox(height: 20),
-            const Text('YOUR WORKSPACE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.6, color: hisbenewMuted)),
-            const SizedBox(height: 12),
+    return RefreshIndicator(onRefresh: onRetry, child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
+      children: [
+        Text(DateFormat('EEEE, d MMMM').format(DateTime.now()).toUpperCase(), style: const TextStyle(fontSize: 11, letterSpacing: 1.4, fontWeight: FontWeight.w700, color: hisbenewMuted)),
+        const SizedBox(height: 8),
+        Text('Your day, $name', style: const TextStyle(fontSize: 30, height: 1.15, letterSpacing: -1, fontWeight: FontWeight.w800, color: hisbenewForest)),
+        const SizedBox(height: 8),
+        const Text('A clear view of what needs your attention.', style: TextStyle(color: hisbenewMuted)),
+        const SizedBox(height: 24),
+        if (loading) const AppLoader()
+        else if (error) OutlinedButton(onPressed: onRetry, child: const Text('Reload dashboard'))
+        else ...[
+          if (model.canAccess('Shipping')) ...[
             Row(children: [
-              if (model.canAccess('Orders')) ...[
-                Expanded(child: _HomeAction(icon: Icons.receipt_long_outlined, title: 'Orders', subtitle: 'View orders', onTap: onOpenOrders)),
-                const SizedBox(width: 10),
-              ],
-              if (model.canAccess('Products')) ...[
-                Expanded(child: _HomeAction(icon: Icons.inventory_2_outlined, title: 'Products', subtitle: 'Browse stock', onTap: onOpenProducts)),
-                const SizedBox(width: 10),
-              ],
-              if (model.canAccess('Worker Payouts'))
-                Expanded(child: _HomeAction(icon: Icons.add_card_outlined, title: 'Spending', subtitle: 'Record costs', onTap: onOpenPayouts)),
+              const Expanded(child: Text('Pending dispatch', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
+              TextButton(onPressed: onOpenShipping, child: Text('View all (${pending.length})')),
             ]),
-            if (model.canAccess('Worker Payouts')) ...[
-            const SizedBox(height: 16),
-            Material(color: Colors.white, borderRadius: BorderRadius.circular(20), child: InkWell(
-              borderRadius: BorderRadius.circular(20), onTap: onOpenPayouts,
-              child: Padding(padding: const EdgeInsets.all(18), child: Row(children: [
-                const CircleAvatar(backgroundColor: Color(0xFFEDF5EF), child: Icon(Icons.account_balance_wallet_outlined, color: hisbenewForest)),
-                const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Your balance', style: TextStyle(color: hisbenewMuted, fontSize: 12)),
-                  const SizedBox(height: 4), Text(_pkr(money.balance), style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.6)),
-                ])),
-                const Icon(Icons.arrow_forward_rounded, color: hisbenewForest),
-              ])),
+            const SizedBox(height: 10),
+            if (pending.isEmpty) const WorkCard(child: Padding(padding: EdgeInsets.all(24), child: Text('All caught up. No orders waiting to dispatch.')))
+            else SizedBox(height: 230 + (MediaQuery.textScalerOf(context).scale(16) - 16).clamp(0, 32) * 4, child: PageView.builder(
+              padEnds: false,
+              itemCount: pending.length,
+              itemBuilder: (context, index) {
+                final row = pending[index];
+                return Padding(padding: const EdgeInsets.only(right: 12), child: Material(
+                  color: const Color(0xFF163F35), borderRadius: BorderRadius.circular(22),
+                  child: InkWell(borderRadius: BorderRadius.circular(22), onTap: () => openPendingShip(context, model: model, row: row, onChanged: onRetry),
+                    child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [Expanded(child: Text('#${row.orderNo}', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600))), Text('${index + 1} / ${pending.length}', style: const TextStyle(color: Colors.white70))]),
+                      const SizedBox(height: 12),
+                      Text(row.customer.isEmpty ? 'Order ready for review' : row.customer, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                      Text('${row.units} units · ${prettyWhen(row.when)}', style: const TextStyle(color: Color(0xFFC0D7CA))),
+                      const Spacer(),
+                      Row(children: [for (final item in row.items.take(3)) Padding(padding: const EdgeInsets.only(right: 8), child: ProductThumb(path: item.image, size: 48)), const Spacer(), const Icon(Icons.arrow_forward_rounded, color: Colors.white)]),
+                    ])),
+                  ),
+                ));
+              },
             )),
-            ],
-            if (model.canAccess('Messages')) ...[
-            const SizedBox(height: 12),
-            _ChatCallBar(onTap: onOpenChat, unread: unread),
-            ],
-            if (model.canAccess('Shipping')) ...[
-            const SizedBox(height: 24),
-            _QueueBlock(
-              title: phrase(context, 'Still in the factory', 'فیکٹری میں'),
-              count: pending.length,
-              onOpen: onOpenShipping,
-              empty: phrase(context, 'Nothing waiting to go out.', 'بھیجنے کو کچھ نہیں۔'),
-              children: [
-                for (final row in waiting)
-                  _QueueLine(
-                    when: row.when,
-                    title: row.customer.isEmpty ? row.orderNo : row.customer,
-                    units: row.units,
-                    onTap: () => openPendingShip(context, model: model, row: row, onChanged: onRetry),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _QueueBlock(
-              title: phrase(context, 'Already sent', 'بھیج دیا'),
-              count: moving.length,
-              onOpen: onOpenShipping,
-              empty: phrase(context, 'Nothing is out right now.', 'ابھی راستے میں کچھ نہیں۔'),
-              children: [
-                for (final row in road)
-                  _QueueLine(
-                    when: row.when,
-                    title: row.customer.isEmpty ? row.orderNo : row.customer,
-                    units: row.units,
-                    trail: _roadLabel(context, row.status),
-                    onTap: () => openShippedShip(context, model: model, row: row, onChanged: onRetry),
-                  ),
-              ],
-            ),
-            ],
+            const SizedBox(height: 8),
+            const Text('Swipe through every pending order', style: TextStyle(fontSize: 12, color: hisbenewMuted)),
+            const SizedBox(height: 22),
           ],
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            if (model.canAccess('Orders')) ActionChip(avatar: const Icon(Icons.receipt_long_outlined, size: 18), label: const Text('Orders'), onPressed: onOpenOrders),
+            if (model.canAccess('Products')) ActionChip(avatar: const Icon(Icons.inventory_2_outlined, size: 18), label: const Text('Products'), onPressed: onOpenProducts),
+            if (model.canAccess('Worker Payouts')) ActionChip(avatar: const Icon(Icons.add, size: 18), label: const Text('Spending'), onPressed: onOpenPayouts),
+          ]),
+          const SizedBox(height: 22),
+          if (model.canAccess('Worker Payouts')) WorkCard(child: ListTile(contentPadding: const EdgeInsets.all(16), leading: const Icon(Icons.account_balance_wallet_outlined, color: hisbenewForest), title: const Text('Your balance', style: TextStyle(fontSize: 12, color: hisbenewMuted)), subtitle: Text(_pkr(money.balance), style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w800)), trailing: const Icon(Icons.arrow_forward), onTap: onOpenPayouts)),
+          if (model.canAccess('Shipping')) ...[
+            const SizedBox(height: 12),
+            Text('On the way · ${moving.length}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            for (final row in moving.take(3)) WorkCard(child: InkWell(onTap: () => openShippedShip(context, model: model, row: row, onChanged: onRetry), child: Padding(padding: const EdgeInsets.all(16), child: ShippingSummary(when: row.when, customer: row.customer, units: row.units, orderNo: row.orderNo, items: row.items)))),
+          ],
+          if (model.canAccess('Messages')) _ChatCallBar(onTap: onOpenChat, unread: unread),
         ],
-      ),
-    );
+      ],
+    ));
   }
-}
-
-String _greeting(BuildContext context, String name) {
-  final hour = DateTime.now().hour;
-  final who = name.isEmpty ? '' : ', $name';
-  if (hour < 12) return phrase(context, 'Good morning$who', 'صبح بخیر$who');
-  if (hour < 17) return phrase(context, 'Good afternoon$who', 'دوپہر بخیر$who');
-  return phrase(context, 'Good evening$who', 'شام بخیر$who');
-}
-
-String _roadLabel(BuildContext context, String status) {
-  final value = status.trim().toLowerCase();
-  if (value.contains('transit')) return phrase(context, 'In transit', 'راستے میں');
-  if (value.contains('exception') || value.contains('issue')) return phrase(context, 'Issue', 'مسئلہ');
-  if (value.contains('wait')) return phrase(context, 'Waiting', 'انتظار');
-  if (value.isEmpty) return phrase(context, 'Sent', 'بھیجا');
-  return status;
 }
 
 class _PayoutPage extends StatelessWidget {
@@ -666,114 +640,6 @@ class _Mini extends StatelessWidget {
   }
 }
 
-
-class _QueueBlock extends StatelessWidget {
-  const _QueueBlock({
-    required this.title,
-    required this.count,
-    required this.onOpen,
-    required this.empty,
-    required this.children,
-  });
-
-  final String title;
-  final int count;
-  final VoidCallback onOpen;
-  final String empty;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: hisbenewInk))),
-            if (count > 0)
-              TextButton(
-                onPressed: onOpen,
-                child: Text(phrase(context, 'All $count', 'سب $count')),
-              ),
-          ],
-        ),
-        if (children.isEmpty)
-          Text(empty, style: const TextStyle(color: hisbenewMuted))
-        else
-          Container(
-            decoration: BoxDecoration(
-              color: hisbenewCard,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: hisbenewLine),
-            ),
-            child: Column(
-              children: [
-                for (var i = 0; i < children.length; i++) ...[
-                  if (i > 0) const Divider(height: 1, color: hisbenewLine),
-                  children[i],
-                ],
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _QueueLine extends StatelessWidget {
-  const _QueueLine({required this.when, required this.title, required this.units, required this.onTap, this.trail});
-
-  final String when;
-  final String title;
-  final int units;
-  final VoidCallback onTap;
-  final String? trail;
-
-  @override
-  Widget build(BuildContext context) {
-    final date = prettyWhen(when);
-    final unitLabel = units == 1 ? phrase(context, '1 unit', '1 یونٹ') : phrase(context, '$units units', '$units یونٹس');
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            if (date.isNotEmpty)
-              SizedBox(
-                width: 52,
-                child: Text(date, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: hisbenewMuted, fontWeight: FontWeight.w700, fontSize: 12)),
-              ),
-            Expanded(
-              child: Text(
-                title.isEmpty ? '—' : title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700, color: hisbenewInk),
-              ),
-            ),
-            if (trail != null && trail!.isNotEmpty) ...[
-              const SizedBox(width: 8),
-              Text(trail!, style: const TextStyle(color: hisbenewMuted, fontSize: 12, fontWeight: FontWeight.w700)),
-            ],
-            if (units > 0) ...[
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE7F2EB),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: const Color(0xFFC5D9CC)),
-                ),
-                child: Text(unitLabel, style: const TextStyle(color: hisbenewForest, fontWeight: FontWeight.w800, fontSize: 12)),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _ChatIcon extends StatelessWidget {
   const _ChatIcon({required this.unread, required this.selected});
@@ -1087,131 +953,4 @@ class _StatementRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _WorkerSettings extends StatelessWidget {
-  const _WorkerSettings({required this.model, required this.onProducts, required this.onOrders});
-
-  final AppModel model;
-  final VoidCallback onProducts;
-  final VoidCallback onOrders;
-
-  @override
-  Widget build(BuildContext context) {
-    final copy = AppLocalizations.of(context);
-    final session = model.session;
-    final name = session?.name.trim().isNotEmpty == true ? session!.name.trim() : session?.username ?? '';
-    final company = session == null ? '' : (session.tenantName.isNotEmpty ? session.tenantName : session.tenantSlug);
-    final initial = name.isEmpty ? 'H' : name.characters.first.toUpperCase();
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 22, 16, 28),
-      children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-          decoration: BoxDecoration(
-            color: hisbenewCard,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: hisbenewLine),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(color: hisbenewForest, shape: BoxShape.circle),
-                child: Text(initial, style: const TextStyle(color: Color(0xFFF3E6C8), fontSize: 22, fontWeight: FontWeight.w800)),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: hisbenewInk)),
-                    const SizedBox(height: 2),
-                    Text(session?.username ?? '', style: const TextStyle(color: hisbenewMuted, fontWeight: FontWeight.w600)),
-                    if (company.isNotEmpty) Text(company, style: const TextStyle(color: hisbenewMuted, fontSize: 13)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-        WorkCard(child: Column(children: [
-          if (model.canAccess('Products')) ...[
-            ListTile(leading: const Icon(Icons.inventory_2_outlined), title: const Text('Products'), subtitle: const Text('Browse the product catalog'), trailing: const Icon(Icons.chevron_right), onTap: onProducts),
-            const Divider(height: 1),
-          ],
-          if (model.canAccess('Orders'))
-            ListTile(leading: const Icon(Icons.receipt_long_outlined), title: const Text('Orders'), trailing: const Icon(Icons.chevron_right), onTap: onOrders),
-        ])),
-        const CallPermissionTile(),
-        Text(copy.switchLanguage, style: const TextStyle(fontWeight: FontWeight.w800, color: hisbenewInk)),
-        const SizedBox(height: 8),
-        SegmentedButton<String>(
-          style: SegmentedButton.styleFrom(
-            selectedBackgroundColor: hisbenewForest,
-            selectedForegroundColor: Colors.white,
-          ),
-          segments: [
-            ButtonSegment(value: 'en', label: Text(copy.english)),
-            ButtonSegment(value: 'ur', label: Text(copy.urdu)),
-          ],
-          selected: {model.locale.languageCode},
-          onSelectionChanged: (value) => model.setLocale(Locale(value.first)),
-        ),
-        const SizedBox(height: 28),
-        OutlinedButton.icon(
-          onPressed: model.signOut,
-          icon: const Icon(Icons.logout_rounded, size: 18),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(52),
-            foregroundColor: const Color(0xFFA43A2D),
-            side: const BorderSide(color: Color(0xFFE7C8C2)),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-          label: Text(copy.signOut),
-        ),
-      ],
-    );
-  }
-}
-
-class _TodaySummary extends StatelessWidget {
-  const _TodaySummary({required this.waiting, required this.moving, required this.tasks, required this.onTap});
-  final int waiting, moving, tasks;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF123F35), Color(0xFF236451)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(26)),
-    child: Material(color: Colors.transparent, child: InkWell(borderRadius: BorderRadius.circular(26), onTap: onTap,
-      child: Padding(padding: const EdgeInsets.all(22), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Row(children: [Expanded(child: Text('TODAY AT A GLANCE', style: TextStyle(color: Color(0xFFA9D3BF), fontSize: 11, letterSpacing: 1.5, fontWeight: FontWeight.w700))), Icon(Icons.north_east, color: Colors.white70, size: 20)]),
-        const SizedBox(height: 20),
-        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          Text('$waiting', style: const TextStyle(color: Colors.white, fontSize: 54, fontWeight: FontWeight.w700, height: 1, letterSpacing: -2)),
-          const SizedBox(width: 16), const Expanded(child: Text('Orders ready\nto dispatch', style: TextStyle(color: Colors.white, fontSize: 17, height: 1.4))),
-        ]),
-        const SizedBox(height: 22), const Divider(color: Color(0xFF4A7968), height: 1), const SizedBox(height: 16),
-        Row(children: [Expanded(child: Text('$moving  In transit', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))), Expanded(child: Text('$tasks  Active tasks', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)))]),
-      ])),
-    )),
-  );
-}
-
-class _HomeAction extends StatelessWidget {
-  const _HomeAction({required this.icon, required this.title, required this.subtitle, required this.onTap});
-  final IconData icon;
-  final String title, subtitle;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => Material(color: Colors.white, borderRadius: BorderRadius.circular(18), child: InkWell(
-    borderRadius: BorderRadius.circular(18), onTap: onTap, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 18), child: Column(children: [
-      Icon(icon, color: hisbenewForest, size: 26), const SizedBox(height: 12),
-      Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)), const SizedBox(height: 4),
-      Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: hisbenewMuted, fontSize: 10)),
-    ])),
-  ));
 }
