@@ -58,7 +58,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Manufacturing'), findsOneWidget);
     expect(find.text('Account'), findsOneWidget);
-    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Settings'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump();

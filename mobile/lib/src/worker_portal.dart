@@ -57,16 +57,17 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     if (notificationChat.value != null) _index = 2;
     WidgetsBinding.instance.addObserver(this);
     _load();
-    _refreshUnread();
-    _unreadTimer = Timer.periodic(const Duration(seconds: 8), (_) => _refreshUnread());
-    _calls.startWatch();
-    PhonePermissions.askOnce();
-    _syncTimer = Timer.periodic(const Duration(seconds: 20), (_) => _syncOffline());
-    _syncOffline();
-    final session = widget.model.session;
-    if (session != null && widget.model.canAccess('Products')) {
-      widget.model.api.products(session).catchError((_) => <Map<String, dynamic>>[]);
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _calls.startWatch();
+      PhonePermissions.askOnce();
+      _refreshUnread();
+      _unreadTimer = Timer.periodic(const Duration(seconds: 8), (_) => _refreshUnread());
+      _syncTimer = Timer.periodic(const Duration(seconds: 20), (_) => _syncOffline());
+      Future<void>.delayed(const Duration(seconds: 3), () {
+        if (mounted) _syncOffline();
+      });
+    });
   }
 
   @override
@@ -132,10 +133,42 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     ]));
   }
 
+  Future<void> _paintSaved() async {
+    final session = widget.model.session;
+    if (session == null || _hasData) return;
+    final api = widget.model.api;
+    final worker = session.workerId;
+    final saved = await Future.wait([
+      api.savedList(session, '/shipping/pending'),
+      api.savedList(session, '/shipping'),
+      api.savedList(session, '/orders'),
+      api.savedList(session, '/production/tasks?worker_id=$worker'),
+      api.savedList(session, '/order-workflow/tasks?worker_id=$worker'),
+      api.savedList(session, '/worker-payments?worker_id=$worker'),
+      api.savedList(session, '/worker-expenses?worker_id=$worker'),
+    ]);
+    if (!mounted || _hasData || saved.every((rows) => rows == null)) return;
+    final pending = saved[0] ?? const <Map<String, dynamic>>[];
+    final records = saved[1] ?? const <Map<String, dynamic>>[];
+    final orders = saved[2] ?? const <Map<String, dynamic>>[];
+    final tasks = saved[3] ?? const <Map<String, dynamic>>[];
+    final orderTasks = saved[4] ?? const <Map<String, dynamic>>[];
+    setState(() {
+      _pending = [for (final row in pending) PendingShip.fromJson(row)];
+      _moving = [for (final row in api.shipmentRecords(records, orders)) if (_stillMoving(row.status)) row];
+      _tasks = [...tasks, ...orderTasks];
+      _payments = saved[5] ?? const [];
+      _expenses = saved[6] ?? const [];
+      _loading = false;
+      _hasData = true;
+    });
+  }
+
   Future<void> _load() async {
     final session = widget.model.session;
     if (session == null || _fetching) return;
     _fetching = true;
+    await _paintSaved();
     if (!mounted) { _fetching = false; return; }
     setState(() {
       _loading = !_hasData;
@@ -296,7 +329,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       bottomNavigationBar: _calls.phase != 'idle' ? null : Builder(builder: (context) {
         final nav = <int>[
           0,
-          if (_allow('Shipping')) 1,
+          1,
           if (_allow('Messages')) 2,
           if (_allow('Worker Payouts')) 3,
           4,
@@ -315,10 +348,10 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
             selectedIcon: const Icon(Icons.space_dashboard_rounded),
             label: phrase(context, 'Today', 'آج'),
           ),
-          if (_allow('Shipping')) NavigationDestination(
+          NavigationDestination(
             icon: const Icon(Icons.local_shipping_outlined),
             selectedIcon: const Icon(Icons.local_shipping_rounded),
-            label: phrase(context, 'Queue', 'قطار'),
+            label: phrase(context, 'Shipping', 'شپنگ'),
           ),
           if (_allow('Messages')) NavigationDestination(
             icon: _ChatIcon(unread: _unread, selected: false),

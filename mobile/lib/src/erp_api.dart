@@ -100,7 +100,7 @@ class ErpApi {
     try {
       final rows = await _sendList(url: '${session.baseUrl}$path', token: session.token).timeout(const Duration(seconds: 8));
       await offline.saveCache(_account(session), path, rows);
-      unawaited(ProductImageCache.instance.prefetch(rows));
+      unawaited(ProductImageCache.instance.prefetch(rows, limit: 6));
       return rows;
     } on TimeoutException {
       offline.markOffline();
@@ -187,9 +187,17 @@ class ErpApi {
     );
   }
 
+  Future<List<Map<String, dynamic>>?> savedList(ErpSession session, String path) {
+    return offline.cache(_account(session), path);
+  }
+
   Future<List<ShipmentRecord>> shipments(ErpSession session) async {
     final data = await Future.wait([_cachedList(session, '/shipping'), _cachedList(session, '/orders')]);
     return _shipmentRows(data[0], data[1]);
+  }
+
+  List<ShipmentRecord> shipmentRecords(List<Map<String, dynamic>> records, List<Map<String, dynamic>> orders) {
+    return _shipmentRows(records, orders);
   }
 
   List<ShipmentRecord> _shipmentRows(List<Map<String, dynamic>> records, List<Map<String, dynamic>> orders) {

@@ -24,7 +24,6 @@ class WorkspaceDrawer extends StatelessWidget {
     const Divider(height: 32),
     ListTile(leading: const Icon(Icons.notifications_outlined), title: const Text('Notifications'), onTap: () { Navigator.pop(context); onNotifications(); }),
     ListTile(leading: const Icon(Icons.person_outline), title: const Text('Account'), onTap: () { Navigator.pop(context); onSelect(4); }),
-    ListTile(leading: const Icon(Icons.settings_outlined), title: const Text('Settings'), onTap: () { Navigator.pop(context); onSelect(7); }),
   ])));
 }
 
@@ -41,6 +40,13 @@ class ProfilePage extends StatelessWidget {
     DetailLine('Username', model.session?.username ?? ''),
     DetailLine('Company', model.session?.tenantName ?? ''),
     DetailLine('Role', model.session?.role ?? ''),
+    const SizedBox(height: 8),
+    const CallPermissionTile(),
+    const PhotoStorageTile(),
+    const SizedBox(height: 16),
+    const Text('Language', style: TextStyle(fontWeight: FontWeight.w700)),
+    const SizedBox(height: 12),
+    SegmentedButton<String>(segments: const [ButtonSegment(value: 'en', label: Text('English')), ButtonSegment(value: 'ur', label: Text('اردو'))], selected: {model.locale.languageCode}, onSelectionChanged: (value) => model.setLocale(Locale(value.first))),
     const SizedBox(height: 24),
     OutlinedButton.icon(onPressed: model.signOut, icon: const Icon(Icons.logout), label: const Text('Sign out')),
   ]);
@@ -50,16 +56,7 @@ class PreferencesPage extends StatelessWidget {
   const PreferencesPage({required this.model, super.key});
   final AppModel model;
   @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(24), children: [
-    const Text('Settings', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
-    const SizedBox(height: 20),
-    const CallPermissionTile(),
-    const PhotoStorageTile(),
-    const SizedBox(height: 24),
-    const Text('Language', style: TextStyle(fontWeight: FontWeight.w700)),
-    const SizedBox(height: 12),
-    SegmentedButton<String>(segments: const [ButtonSegment(value: 'en', label: Text('English')), ButtonSegment(value: 'ur', label: Text('اردو'))], selected: {model.locale.languageCode}, onSelectionChanged: (value) => model.setLocale(Locale(value.first))),
-  ]);
+  Widget build(BuildContext context) => ProfilePage(model: model);
 }
 
 class PhotoStorageTile extends StatefulWidget {

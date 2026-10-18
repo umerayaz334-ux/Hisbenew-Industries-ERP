@@ -106,8 +106,8 @@ Future<void> showIncomingIfNeeded(int callId, String name) async {
   final active = await FlutterCallkitIncoming.activeCalls();
   if (active.any((call) => call.id == callScreenId(callId))) return;
   await prefs.setString('erp.ringingName', name);
-  await PhonePermissions.startIncomingRing();
   await FlutterCallkitIncoming.showCallkitIncoming(incomingCallParams(callId: callId, name: name));
+  await PhonePermissions.startIncomingRing();
 }
 
 Future<void> watchIncomingCall(String token) async {

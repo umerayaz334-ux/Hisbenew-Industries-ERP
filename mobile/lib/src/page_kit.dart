@@ -51,7 +51,11 @@ class ProductThumb extends StatelessWidget {
         height: size,
         child: url == null
             ? const ColoredBox(color: Color(0xFFEEF2FF), child: Icon(Icons.image_outlined, size: 18, color: hisbenewMuted))
-            : OfflineProductImage(path: path, decodeWidth: (size * MediaQuery.devicePixelRatioOf(context)).ceil()),
+            : OfflineProductImage(
+                path: path,
+                decodeWidth: (size * MediaQuery.devicePixelRatioOf(context)).ceil(),
+                requestWidth: (size * MediaQuery.devicePixelRatioOf(context)).ceil().clamp(48, 240),
+              ),
       ),
     );
   }
@@ -107,7 +111,7 @@ void openProductPhoto(BuildContext context, {required String path, String title 
               child: InteractiveViewer(
                 minScale: 1,
                 maxScale: 4,
-                child: OfflineProductImage(path: path, fit: BoxFit.contain),
+                child: OfflineProductImage(path: path, fit: BoxFit.contain, requestWidth: 720, decodeWidth: 720),
               ),
             ),
           ),

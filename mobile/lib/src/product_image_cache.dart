@@ -36,18 +36,18 @@ class ProductImageCache {
     return root;
   }();
 
-  static String? url(String raw) {
+  static String? url(String raw, {int width = 160}) {
     if (raw.trim().isEmpty) return null;
     final uri = Uri.tryParse(raw.startsWith('http') ? raw : 'https://api.hisbenew.com/${raw.replaceFirst(RegExp(r'^/'), '')}');
     if (uri == null || !['http', 'https'].contains(uri.scheme)) return null;
     if (const {'api.hisbenew.com', 'app.hisbenew.com', 'hisbenew.com', 'www.hisbenew.com'}.contains(uri.host)) {
-      return uri.replace(scheme: 'https', host: 'api.hisbenew.com', queryParameters: {...uri.queryParameters, 'w': '640'}).toString();
+      return uri.replace(scheme: 'https', host: 'api.hisbenew.com', queryParameters: {...uri.queryParameters, 'w': '$width'}).toString();
     }
     return uri.toString();
   }
 
-  Future<File?> get(String raw) {
-    final source = url(raw);
+  Future<File?> get(String raw, {int width = 160}) {
+    final source = url(raw, width: width.clamp(48, 960));
     if (source == null) return Future.value();
     return _pending.putIfAbsent(source, () => _load(source).whenComplete(() { _pending.remove(source); }));
   }
@@ -69,7 +69,7 @@ class ProductImageCache {
     }
   }
 
-  Future<void> prefetch(Object? data) async {
+  Future<void> prefetch(Object? data, {int limit = 8}) async {
     final generation = _generation;
     final paths = <String>{};
     void collect(Object? value) {
@@ -83,30 +83,32 @@ class ProductImageCache {
       }
     }
     collect(data);
-    final queue = paths.toList();
-    var next = 0;
-    Future<void> worker() async {
-      while (next < queue.length && generation == _generation) { await get(queue[next++]); }
+    final queue = paths.take(limit).toList();
+    for (final path in queue) {
+      if (generation != _generation) return;
+      await get(path, width: 160);
     }
-    await Future.wait([worker(), worker()]);
   }
 }
 
 class OfflineProductImage extends StatefulWidget {
-  const OfflineProductImage({required this.path, this.fit = BoxFit.cover, this.decodeWidth, super.key});
+  const OfflineProductImage({required this.path, this.fit = BoxFit.cover, this.decodeWidth, this.requestWidth = 160, super.key});
   final String path;
   final BoxFit fit;
   final int? decodeWidth;
+  final int requestWidth;
   @override
   State<OfflineProductImage> createState() => _OfflineProductImageState();
 }
 
 class _OfflineProductImageState extends State<OfflineProductImage> {
-  late Future<File?> _image = ProductImageCache.instance.get(widget.path);
+  late Future<File?> _image = ProductImageCache.instance.get(widget.path, width: widget.requestWidth);
   @override
   void didUpdateWidget(OfflineProductImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.path != widget.path) _image = ProductImageCache.instance.get(widget.path);
+    if (oldWidget.path != widget.path || oldWidget.requestWidth != widget.requestWidth) {
+      _image = ProductImageCache.instance.get(widget.path, width: widget.requestWidth);
+    }
   }
   @override
   Widget build(BuildContext context) => FutureBuilder<File?>(future: _image, builder: (context, snapshot) {

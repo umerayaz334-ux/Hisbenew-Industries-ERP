@@ -63,7 +63,7 @@ class _ShippingPageState extends State<ShippingPage> {
   final _search = TextEditingController();
   var _loading = true;
   var _error = false;
-  var _historyTab = true;
+  var _historyTab = false;
   List<PendingShip> _pending = const [];
   List<ShipmentRecord> _shipped = const [];
 
@@ -139,8 +139,8 @@ class _ShippingPageState extends State<ShippingPage> {
               selectedForegroundColor: Colors.white,
             ),
             segments: [
+              ButtonSegment(value: false, label: Text('${phrase(context, 'Pending', 'باقی')} ${_pending.length}')),
               ButtonSegment(value: true, label: Text('${phrase(context, 'History', 'تاریخ')} ${_shipped.length}')),
-              ButtonSegment(value: false, label: Text('${phrase(context, 'To ship', 'بھیجنا')} ${_pending.length}')),
             ],
             selected: {_historyTab},
             onSelectionChanged: (value) => setState(() => _historyTab = value.first),

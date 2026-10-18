@@ -346,7 +346,7 @@ class _SideMenu extends StatelessWidget {
               const SizedBox(height: 6),
               Container(width: 28, height: 1.5, color: hisbenewBrass),
               const SizedBox(height: 28),
-              for (var i = 0; i < labels.length; i++)
+              for (var i = 0; i < labels.length; i++) if (labels[i] != 'Settings')
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: InkWell(
