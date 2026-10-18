@@ -128,18 +128,18 @@ function Restart-Backend {
         $connections = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
         if ($connections) {
             $owningPids = $connections.OwningProcess | Select-Object -Unique
-            foreach ($pId in $owningPids) {
-                $process = Get-CimInstance Win32_Process -Filter "ProcessId=$pId"
+            foreach ($backendProcessId in $owningPids) {
+                $process = Get-CimInstance Win32_Process -Filter "ProcessId=$backendProcessId"
                 $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($process.ParentProcessId)"
                 $expectedPython = [regex]::Escape($pythonPath)
-                if ($pId -le 4 -or $process.CommandLine -notmatch 'uvicorn\s+app\.main:app' -or
+                if ($backendProcessId -le 4 -or $process.CommandLine -notmatch 'uvicorn\s+app\.main:app' -or
                     ($process.CommandLine -notmatch $expectedPython -and $parent.CommandLine -notmatch $expectedPython)) {
-                    throw "Port 8000 belongs to an unverified process; refusing to stop PID $pId."
+                    throw "Port 8000 belongs to an unverified process; refusing to stop PID $backendProcessId."
                 }
             }
-            foreach ($pId in $owningPids) {
-                    Write-Host "Stopping process PID $pId currently listening on port 8000..."
-                    Stop-Process -Id $pId -Force
+            foreach ($backendProcessId in $owningPids) {
+                    Write-Host "Stopping process PID $backendProcessId currently listening on port 8000..."
+                    Stop-Process -Id $backendProcessId -Force
             }
             Start-Sleep -Seconds 2
         }
