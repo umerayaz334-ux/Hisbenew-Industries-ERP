@@ -28,6 +28,17 @@ class MobileDataTests(unittest.TestCase):
         self.db.close()
         self.engine.dispose()
 
+    def test_order_push_only_wakes_active_workers_with_orders_access_in_same_company(self):
+        self.db.add_all([
+            User(id=4, tenant_id=2, username='other-worker', name='Other', role='worker'),
+            User(id=5, tenant_id=1, username='revoked', name='Revoked', role='worker', allowed_pages='["Messages"]'),
+            User(id=6, tenant_id=1, username='disabled', name='Disabled', role='worker', is_active=False),
+        ])
+        self.db.commit()
+        with patch.object(main, 'wake_phone') as wake, patch.object(main, 'tenant_filtered_allowed_pages', side_effect=lambda db, tenant, pages: pages):
+            main.publish_worker_order_alert(self.db, 1)
+        wake.assert_called_once_with(1, 'order')
+
     def test_notification_preview_only_returns_incoming_unread_messages(self):
         self.db.add_all([
             InternalMessage(id=1, tenant_id=1, sender_user_id=2, recipient_user_id=1, body='Unread preview'),

@@ -1250,6 +1250,21 @@ def publish_internal_message(message: InternalMessage) -> None:
         )
 
 
+def publish_worker_order_alert(db: Session, tenant_id: int | None) -> None:
+    """Wake eligible workers after the complete order has committed."""
+    workers = db.query(User).filter(
+        User.tenant_id == tenant_id, User.role == 'worker', User.is_active == True,
+    ).all()
+    for worker in workers:
+        try:
+            stored = json.loads(worker.allowed_pages) if worker.allowed_pages else None
+        except (TypeError, json.JSONDecodeError):
+            stored = None
+        pages = tenant_filtered_allowed_pages(db, tenant_id, normalize_allowed_pages('worker', stored))
+        if 'Orders' in pages:
+            wake_phone(worker.id, 'order')
+
+
 def publish_internal_call(call: InternalCall) -> None:
     wake_phone(call.recipient_user_id, 'call')
     if call.status != 'ringing':
@@ -17440,6 +17455,13 @@ def create_order_record(
     sync_order_payout_accounting(db, new_order)
     db.commit()
     db.refresh(new_order)
+    try:
+        publish_worker_order_alert(db, new_order.tenant_id)
+    except Exception:
+        # Notification failures must never turn a saved order into a failed
+        # submission that the user might duplicate. Polling can still catch up.
+        import logging
+        logging.getLogger(__name__).warning('Order push wake-up failed')
     return new_order
 
 
@@ -19535,11 +19557,12 @@ def worker_order_alerts(
     db: Session = Depends(get_db),
 ):
     """Orders added after the worker's phone last checked. Used for the phone alert."""
-    user = get_authenticated_user(request, db)
+    user = require_page_access(request, db, 'Orders')
     if (user.role or "").strip().lower() != "worker":
         raise HTTPException(status_code=403, detail="Workers only")
 
-    latest = db.query(Order.id).order_by(Order.id.desc()).first()
+    tenant_id = tenant_scope_id_for_request(request, user)
+    latest = db.query(Order.id).filter(Order.tenant_id == tenant_id).order_by(Order.id.desc()).first()
     latest_id = int(latest[0]) if latest else 0
     if seed:
         return {"latest_id": latest_id, "orders": []}
@@ -19547,7 +19570,7 @@ def worker_order_alerts(
     rows = (
         db.query(Order)
         .options(selectinload(Order.items))
-        .filter(Order.id > after_id)
+        .filter(Order.tenant_id == tenant_id, Order.id > after_id)
         .order_by(Order.id.asc())
         .limit(20)
         .all()
