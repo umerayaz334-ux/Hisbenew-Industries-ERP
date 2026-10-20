@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import JsBarcode from "jsbarcode";
 import api, { API_BASE_URL, apiFetch, getApiBaseUrl, getAuthHeaders, getStaticUrl } from "../api/api";
@@ -4695,6 +4695,8 @@ function Shipping({ userRole }) {
 
                   <th>Note</th>
 
+                  <th>Label</th>
+
                   <th aria-label="Actions" />
 
                 </tr>
@@ -4730,8 +4732,7 @@ function Shipping({ userRole }) {
 
 
                   return (
-                    <Fragment key={record.id}>
-                    <tr className={isEditing ? "is-editing" : ""}>
+                    <tr key={record.id} className={isEditing ? "is-editing" : ""}>
 
                       <td data-label="Order">
 
@@ -5614,6 +5615,15 @@ function Shipping({ userRole }) {
 
                       </td>
 
+                      <td data-label="Label">
+                        {renderShippingLabelControl(
+                          record.order_id,
+                          record.label_file_url,
+                          record.label_file_name,
+                          "history"
+                        )}
+                      </td>
+
                       <td data-label="Actions">
 
                         <div className="shipping-row-actions">
@@ -5703,18 +5713,6 @@ function Shipping({ userRole }) {
                       </td>
 
                     </tr>
-                    <tr className="shipping-label-history-row">
-                      <td colSpan={13}>
-                        <span className="shipping-label-history-caption">Shipping label</span>
-                        {renderShippingLabelControl(
-                          record.order_id,
-                          record.label_file_url,
-                          record.label_file_name,
-                          "history"
-                        )}
-                      </td>
-                    </tr>
-                    </Fragment>
                   );
 
                 })}

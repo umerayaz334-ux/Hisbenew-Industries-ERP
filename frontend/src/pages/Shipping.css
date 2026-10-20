@@ -580,26 +580,10 @@
   white-space: nowrap;
 }
 
-.shipping-label-history-row td {
-  padding: 9px 14px 12px;
-  border-bottom: 1px solid #e7ebe8;
-  background: #f8faf9;
-}
-
-.shipping-label-history-row:last-child td {
-  border-bottom-color: #d8d8d8;
-}
-
-.shipping-label-history-row td,
-.shipping-label-history-caption {
-  color: #64756b;
-  font-size: 11.5px;
-}
-
-.shipping-label-history-caption {
-  display: inline-block;
-  margin-right: 10px;
-  font-weight: 700;
+.shipping-label-control.is-history {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
 }
 
 .shipping-items-heading {
@@ -1391,7 +1375,7 @@
 
 .shipping-history-table {
   width: 100%;
-  min-width: 1040px;
+  min-width: 1160px;
   border-collapse: collapse;
 }
 

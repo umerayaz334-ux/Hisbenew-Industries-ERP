@@ -269,20 +269,6 @@
     box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
   }
 
-  .shipping-page .shipping-history-table tbody tr.shipping-label-history-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-    margin-top: -12px;
-    padding: 0 14px 12px;
-    border-top: 0;
-    border-radius: 0 0 12px 12px;
-    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
-  }
-
-  .shipping-page .shipping-history-table .shipping-label-history-row td::before {
-    display: none;
-  }
-
   .shipping-page .shipping-history-table td {
     height: auto;
     min-height: 0;
@@ -408,6 +394,26 @@
   .shipping-page .shipping-history-table td:last-child {
     grid-column: 1 / -1;
     padding-top: 2px;
+  }
+
+  .shipping-page .shipping-history-table td[data-label="Label"] {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 10px;
+    border-radius: 9px;
+    background: #f6f8fa;
+  }
+
+  .shipping-page .shipping-history-table td[data-label="Label"]::before {
+    margin-bottom: 0;
+  }
+
+  .shipping-page .shipping-label-control.is-history {
+    flex-direction: row;
+    justify-content: flex-end;
   }
 
   .shipping-page .shipping-row-actions {
@@ -550,19 +556,26 @@
     border-radius: 12px !important;
   }
 
-  .app-layout > .main-content:not(.login-page) .shipping-history-table tbody tr.shipping-label-history-row {
-    grid-template-columns: minmax(0, 1fr) !important;
-    gap: 6px !important;
-    margin-top: -12px !important;
-    padding: 0 14px 12px !important;
-    border-top: 0 !important;
-    border-radius: 0 0 12px 12px !important;
-  }
-
   .app-layout > .main-content:not(.login-page) .shipping-history-table td {
     height: auto !important;
     min-height: 0 !important;
     padding: 0 !important;
+  }
+
+  .app-layout > .main-content:not(.login-page) .shipping-history-table td[data-label="Label"] {
+    grid-column: 1 / -1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+    padding: 9px 10px !important;
+    border-radius: 9px !important;
+    background: #f6f8fa !important;
+  }
+
+  .app-layout > .main-content:not(.login-page) .shipping-label-control.is-history {
+    flex-direction: row !important;
+    justify-content: flex-end !important;
   }
 
   .app-layout > .main-content:not(.login-page) .shipping-history-table td:nth-child(5),
