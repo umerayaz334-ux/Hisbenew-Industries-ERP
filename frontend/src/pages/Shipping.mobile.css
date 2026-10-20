@@ -269,6 +269,20 @@
     box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
   }
 
+  .shipping-page .shipping-history-table tbody tr.shipping-label-history-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    margin-top: -12px;
+    padding: 0 14px 12px;
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+  }
+
+  .shipping-page .shipping-history-table .shipping-label-history-row td::before {
+    display: none;
+  }
+
   .shipping-page .shipping-history-table td {
     height: auto;
     min-height: 0;
@@ -534,6 +548,15 @@
     gap: 9px 12px !important;
     padding: 14px !important;
     border-radius: 12px !important;
+  }
+
+  .app-layout > .main-content:not(.login-page) .shipping-history-table tbody tr.shipping-label-history-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 6px !important;
+    margin-top: -12px !important;
+    padding: 0 14px 12px !important;
+    border-top: 0 !important;
+    border-radius: 0 0 12px 12px !important;
   }
 
   .app-layout > .main-content:not(.login-page) .shipping-history-table td {

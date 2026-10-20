@@ -7514,6 +7514,8 @@ def shipping_response(shipping: Shipping, privacy: dict | None = None):
         "package_weight_kg": shipping.package_weight_kg,
         "shipping_cost": shipping.shipping_cost,
         "shipping_note": shipping.shipping_note,
+        "label_file_url": order.label_file_url if order else None,
+        "label_file_name": order.label_file_name if order else None,
         "shipping_service": shipping.shipping_service,
         "destination_zip_prefix": shipping.destination_zip_prefix,
         "shipping_zone": shipping.shipping_zone,
@@ -18503,6 +18505,8 @@ def get_pending_shipping_orders(request: Request, db: Session = Depends(get_db))
             "order_total_usd": order.order_total_usd,
             "payment_status": order.payment_status,
             "shipping_status": order.shipping_status,
+            "label_file_url": order.label_file_url,
+            "label_file_name": order.label_file_name,
             "shipping_weight_override_kg": order.shipping_weight_override_kg,
             "usa_shipping": duty_paid_estimate,
             "usa_shipping_estimates": {
@@ -18533,6 +18537,38 @@ def get_pending_shipping_orders(request: Request, db: Session = Depends(get_db))
             ],
         })
     return pending_orders
+
+
+@app.post("/shipping/orders/{order_id}/label")
+async def upload_shipping_order_label(
+    order_id: int,
+    request: Request,
+    label_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    user = require_admin_user(request, db)
+    tenant_id = tenant_scope_id_for_request(request, user)
+    query = db.query(Order).filter(Order.id == order_id)
+    if tenant_id is not None:
+        query = query.filter(Order.tenant_id == tenant_id)
+    order = query.first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    label_bytes = await label_file.read(25 * 1024 * 1024 + 1)
+    if len(label_bytes) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Shipping labels must be 25 MB or smaller.")
+    label_file.file.seek(0)
+    label_url, label_name = save_fulfillment_document(label_file)
+    order.label_file_url = label_url
+    order.label_file_name = label_name
+    db.add(order)
+    db.commit()
+    return {
+        "order_id": order.id,
+        "label_file_url": order.label_file_url,
+        "label_file_name": order.label_file_name,
+    }
 
 
 @app.post("/shipping/exports/easyship")

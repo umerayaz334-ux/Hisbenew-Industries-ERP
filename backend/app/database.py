@@ -1281,6 +1281,8 @@ def migrate_database():
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS raw_pin VARCHAR"))
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_privacy_settings TEXT"))
             connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_expiry_minutes INTEGER DEFAULT 0"))
+            connection.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS label_file_url VARCHAR"))
+            connection.execute(text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS label_file_name VARCHAR"))
             connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_url TEXT"))
             connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR"))
             connection.execute(text("ALTER TABLE internal_messages ADD COLUMN IF NOT EXISTS attachment_type VARCHAR"))
@@ -1440,7 +1442,9 @@ def migrate_database():
                 'import_shipping_address': "TEXT",
                 'import_ship_date': "DATETIME",
                 'import_batch_key': "VARCHAR",
-                'shipping_weight_override_kg': "FLOAT"
+                'shipping_weight_override_kg': "FLOAT",
+                'label_file_url': "VARCHAR",
+                'label_file_name': "VARCHAR",
             }
             for column_name, column_def in payout_columns.items():
                 if column_name not in order_columns:

@@ -1000,6 +1000,8 @@ class ShippingOut(BaseModel):
     package_weight_kg: float | None = None
     shipping_cost: float | None = None
     shipping_note: str | None = None
+    label_file_url: str | None = None
+    label_file_name: str | None = None
     shipping_service: str | None = None
     destination_zip_prefix: str | None = None
     shipping_zone: str | None = None

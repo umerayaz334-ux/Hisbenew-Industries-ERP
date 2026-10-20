@@ -1359,6 +1359,8 @@ class Order(Base):
     payment_status = Column(String, default="Pending")
     shipping_status = Column(String, default="Pending")
     shipping_weight_override_kg = Column(Float, nullable=True)
+    label_file_url = Column(String, nullable=True)
+    label_file_name = Column(String, nullable=True)
 
     total_amount = Column(Float, default=0)
     order_total_usd = Column(Float, default=0)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import JsBarcode from "jsbarcode";
 import api, { API_BASE_URL, apiFetch, getApiBaseUrl, getAuthHeaders, getStaticUrl } from "../api/api";
@@ -657,6 +657,8 @@ function Shipping({ userRole }) {
   const [editData, setEditData] = useState({});
 
   const [processingOrderId, setProcessingOrderId] = useState(null);
+
+  const [uploadingLabelOrderId, setUploadingLabelOrderId] = useState(null);
 
   const [updatingShippingId, setUpdatingShippingId] = useState(null);
 
@@ -1913,6 +1915,30 @@ function Shipping({ userRole }) {
     }
   };
 
+  const handleShippingLabelUpload = async (orderId, event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const body = new FormData();
+    body.append("label_file", file);
+    setUploadingLabelOrderId(orderId);
+    setNotice("");
+    try {
+      await api.post(`/shipping/orders/${orderId}/label`, body);
+      setNotice(`Shipping label saved for order ${orderId}.`);
+      await loadShippingData({ quiet: true });
+    } catch (error) {
+      setNotice(
+        error?.response?.data?.detail ||
+          error?.message ||
+          "Shipping label could not be uploaded. Try again."
+      );
+    } finally {
+      setUploadingLabelOrderId(null);
+    }
+  };
+
   const printWorkerPackingSheet = (order) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -3064,6 +3090,38 @@ function Shipping({ userRole }) {
 
   }, [filteredShippingRecords, visibleHistoryCount]);
 
+  const renderShippingLabelControl = (orderId, fileUrl, fileName, context) => (
+    <div className={`shipping-label-control is-${context}`}>
+      <label className="shipping-label-upload-compact">
+        <input
+          accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.txt,.csv,.xls,.xlsx,.doc,.docx,.zip,.btw"
+          disabled={uploadingLabelOrderId === orderId}
+          onChange={(event) => handleShippingLabelUpload(orderId, event)}
+          type="file"
+        />
+        <Icon name="upload" size={14} />
+        <span>
+          {uploadingLabelOrderId === orderId
+            ? "Uploading…"
+            : fileUrl
+              ? "Replace label"
+              : "Upload label"}
+        </span>
+      </label>
+      {fileUrl && (
+        <a
+          className="shipping-label-file-link"
+          href={getStaticUrl(fileUrl)}
+          rel="noreferrer"
+          target="_blank"
+          title={fileName || "Open shipping label"}
+        >
+          {fileName || "View saved label"}
+        </a>
+      )}
+    </div>
+  );
+
 
 
   useEffect(() => {
@@ -3712,6 +3770,13 @@ function Shipping({ userRole }) {
 
                           </p>
 
+                        )}
+
+                        {renderShippingLabelControl(
+                          order.order_id,
+                          order.label_file_url,
+                          order.label_file_name,
+                          "dispatch"
                         )}
 
                       </div>
@@ -4665,8 +4730,8 @@ function Shipping({ userRole }) {
 
 
                   return (
-
-                    <tr className={isEditing ? "is-editing" : ""} key={record.id}>
+                    <Fragment key={record.id}>
+                    <tr className={isEditing ? "is-editing" : ""}>
 
                       <td data-label="Order">
 
@@ -5638,7 +5703,18 @@ function Shipping({ userRole }) {
                       </td>
 
                     </tr>
-
+                    <tr className="shipping-label-history-row">
+                      <td colSpan={13}>
+                        <span className="shipping-label-history-caption">Shipping label</span>
+                        {renderShippingLabelControl(
+                          record.order_id,
+                          record.label_file_url,
+                          record.label_file_name,
+                          "history"
+                        )}
+                      </td>
+                    </tr>
+                    </Fragment>
                   );
 
                 })}
