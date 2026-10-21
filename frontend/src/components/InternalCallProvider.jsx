@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import api from "../api/api";
+import { openVoiceRelay } from "../api/voiceRelay";
 import {
   isRealtimeConnected,
   sendRealtime,
@@ -294,6 +295,10 @@ export function InternalCallProvider({ children, user }) {
   const phaseRef = useRef("idle");
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
+  const voiceRelayRef = useRef(null);
+  const voiceRelayCallIdRef = useRef(null);
+  const voiceRelayRetriesRef = useRef(0);
+  const voiceRelayRetryTimerRef = useRef(null);
   const screenStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -326,6 +331,12 @@ export function InternalCallProvider({ children, user }) {
   }, []);
 
   const cleanupMedia = useCallback(() => {
+    if (voiceRelayRetryTimerRef.current) window.clearTimeout(voiceRelayRetryTimerRef.current);
+    voiceRelayRetryTimerRef.current = null;
+    voiceRelayRetriesRef.current = 0;
+    voiceRelayRef.current?.stop();
+    voiceRelayRef.current = null;
+    voiceRelayCallIdRef.current = null;
     const peer = peerRef.current;
     if (peer) {
       peer.onicecandidate = null;
@@ -371,6 +382,51 @@ export function InternalCallProvider({ children, user }) {
     setConnectionQuality("good");
     setDurationSeconds(0);
   }, []);
+
+  const startVoiceRelay = useCallback((callId, stream) => {
+    if (!stream || voiceRelayCallIdRef.current === callId) return;
+    voiceRelayCallIdRef.current = callId;
+    try {
+      voiceRelayRef.current = openVoiceRelay({
+        callId,
+        stream,
+        onPeer: () => {
+          if (callRef.current?.id !== callId || phaseRef.current === "connected") return;
+          voiceRelayRetriesRef.current = 0;
+          if (phaseRef.current !== "connected") setDurationSeconds(0);
+          updatePhase("connected");
+          setConnectionQuality("good");
+          setNotice("");
+          setNeedsAudioTap(false);
+        },
+        onEnded: () => {
+          if (callRef.current?.id === callId && phaseRef.current === "connected") {
+            updatePhase("connecting");
+            setNotice("The other person reconnected. Restoring audio...");
+          }
+        },
+        onError: (message) => {
+          if (callRef.current?.id !== callId || voiceRelayRetryTimerRef.current) return;
+          voiceRelayRef.current?.stop();
+          voiceRelayRef.current = null;
+          voiceRelayCallIdRef.current = null;
+          if (voiceRelayRetriesRef.current < 3) {
+            voiceRelayRetriesRef.current += 1;
+            setNotice("Voice connection interrupted. Reconnecting...");
+            voiceRelayRetryTimerRef.current = window.setTimeout(() => {
+              voiceRelayRetryTimerRef.current = null;
+              startVoiceRelay(callId, localStreamRef.current);
+            }, 1200);
+          } else {
+            setNotice(message || "The voice connection could not be restored.");
+          }
+        },
+      });
+    } catch (error) {
+      voiceRelayCallIdRef.current = null;
+      setNotice(error?.message || "The voice connection could not start.");
+    }
+  }, [updatePhase]);
 
   const hideRemoteVideo = useCallback(() => {
     const video = remoteVideoRef.current;
@@ -540,7 +596,8 @@ export function InternalCallProvider({ children, user }) {
       stream.getVideoTracks().forEach((track) => {
         if ("contentHint" in track) track.contentHint = "motion";
       });
-      stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+      // Audio is relayed through the same authenticated voice channel as mobile.
+      stream.getVideoTracks().forEach((track) => peer.addTrack(track, stream));
 
       const audioTransceiver = peer
         .getTransceivers()
@@ -886,12 +943,7 @@ export function InternalCallProvider({ children, user }) {
         }
         updateCall(call);
         updatePhase("outgoing");
-        const peer = createPeer(call.id, stream);
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(enhanceOpusDescription(offer));
-        if (callOperationRef.current !== operationId) return;
-        await sendSignal(call.id, "offer", peer.localDescription.toJSON(), true);
-        await sendMediaState(call.id, stream.getVideoTracks().length > 0, false);
+        await sendMediaState(call.id, false, false);
       } catch (error) {
         if (createdCallId) {
           try {
@@ -914,7 +966,7 @@ export function InternalCallProvider({ children, user }) {
         dismissTimerRef.current = window.setTimeout(clearCall, 4200);
       }
     },
-    [clearCall, cleanupMedia, createPeer, requireMedia, sendMediaState, sendSignal, updateCall, updatePhase]
+    [clearCall, cleanupMedia, requireMedia, sendMediaState, updateCall, updatePhase]
   );
 
   const startVideoCall = useCallback(
@@ -940,15 +992,14 @@ export function InternalCallProvider({ children, user }) {
       }
       localStreamRef.current = stream;
       setIsCameraEnabled(stream.getVideoTracks().length > 0);
-      createPeer(call.id, stream);
       const response = await api.post(`/internal-calls/${call.id}/respond`, {
         action: "accept",
       });
       if (callOperationRef.current !== operationId) return;
       updateCall(response.data);
       updatePhase("connecting");
-      await processSignals(call.id);
-      await sendMediaState(call.id, stream.getVideoTracks().length > 0, false);
+      startVoiceRelay(call.id, stream);
+      await sendMediaState(call.id, false, false);
     } catch (error) {
       try {
         await api.post(`/internal-calls/${call.id}/respond`, { action: "decline" });
@@ -965,7 +1016,7 @@ export function InternalCallProvider({ children, user }) {
       );
       dismissTimerRef.current = window.setTimeout(clearCall, 4200);
     }
-  }, [clearCall, cleanupMedia, createPeer, ensureRingtoneAudio, processSignals, requireMedia, sendMediaState, stopRingtone, updateCall, updatePhase]);
+  }, [clearCall, cleanupMedia, ensureRingtoneAudio, requireMedia, sendMediaState, startVoiceRelay, stopRingtone, updateCall, updatePhase]);
 
   const declineCall = useCallback(async () => {
     stopRingtone();
@@ -982,6 +1033,7 @@ export function InternalCallProvider({ children, user }) {
 
   const toggleMute = useCallback(() => {
     const nextMuted = !isMuted;
+    voiceRelayRef.current?.setMuted(nextMuted);
     localStreamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = !nextMuted;
     });
@@ -1224,9 +1276,10 @@ export function InternalCallProvider({ children, user }) {
         finishLocally(callFinishedMessage(call, user.id));
       } else if (call.status === "accepted" && phaseRef.current === "outgoing") {
         updatePhase("connecting");
+        startVoiceRelay(call.id, localStreamRef.current);
       }
     });
-  }, [finishLocally, processSignals, updateCall, updatePhase, user?.id]);
+  }, [finishLocally, processSignals, startVoiceRelay, updateCall, updatePhase, user?.id]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -1284,6 +1337,7 @@ export function InternalCallProvider({ children, user }) {
           finishLocally(callFinishedMessage(call, user?.id));
         } else if (call.status === "accepted" && phaseRef.current === "outgoing") {
           updatePhase("connecting");
+          startVoiceRelay(call.id, localStreamRef.current);
         }
       } catch (error) {
         if (error.response?.status === 404) finishLocally("Call ended");
@@ -1294,7 +1348,7 @@ export function InternalCallProvider({ children, user }) {
       disposed = true;
       window.clearInterval(intervalId);
     };
-  }, [activeCall?.id, finishLocally, phase, updateCall, updatePhase, user?.id]);
+  }, [activeCall?.id, finishLocally, phase, startVoiceRelay, updateCall, updatePhase, user?.id]);
 
   useEffect(() => {
     if (!activeCall?.id || phase === "ended" || phase === "incoming") return undefined;

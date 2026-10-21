@@ -46,6 +46,7 @@ export function openVoiceRelay({ callId, stream, onPeer, onEnded, onError }) {
   let stopped = false;
   let muted = false;
   let socket = null;
+  let pingTimer = null;
   let playAt = 0;
   let pending = new Float32Array(0);
   const audioContext = new AudioContext();
@@ -104,6 +105,11 @@ export function openVoiceRelay({ callId, stream, onPeer, onEnded, onError }) {
     socket.binaryType = "arraybuffer";
     socket.addEventListener("open", () => {
       socket?.send(JSON.stringify({ type: "join", token, call_id: callId }));
+      pingTimer = window.setInterval(() => {
+        if (socket?.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "ping", call_id: callId }));
+        }
+      }, 15000);
     });
     socket.addEventListener("message", (message) => {
       if (stopped) return;
@@ -145,6 +151,8 @@ export function openVoiceRelay({ callId, stream, onPeer, onEnded, onError }) {
     stop() {
       if (stopped) return;
       stopped = true;
+      if (pingTimer) window.clearInterval(pingTimer);
+      pingTimer = null;
       processor.onaudioprocess = null;
       processor.disconnect();
       source.disconnect();
