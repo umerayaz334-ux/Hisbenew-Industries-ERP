@@ -633,6 +633,23 @@ class ErpApi {
     unawaited(syncExpenses(session));
   }
 
+  Future<Map<String, dynamic>> fulfillmentDesk(ErpSession session) {
+    return _send(method: 'GET', url: '${session.baseUrl}/fulfillment/dashboard', token: session.token);
+  }
+
+  Future<void> receiveFulfillmentShipment(ErpSession session, int shipmentId) async {
+    await _send(
+      method: 'POST',
+      url: '${session.baseUrl}/fulfillment/shipments/$shipmentId/receive',
+      token: session.token,
+      body: {'party': 'fulfillment'},
+    );
+  }
+
+  Future<void> shipFulfillmentOrder(ErpSession session, int orderId) async {
+    await _send(method: 'PATCH', url: '${session.baseUrl}/fulfillment/orders/$orderId/ship', token: session.token);
+  }
+
   Future<DashboardData> dashboard(ErpSession session) async {
     final body = await _send(
       method: 'GET',

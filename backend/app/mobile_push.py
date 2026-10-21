@@ -57,7 +57,7 @@ _lock = threading.Lock()
 _started = False
 
 
-def wake_phone(user_id: int, kind: str) -> None:
+def wake_phone(user_id: int, kind: str, event_id: int | None = None) -> None:
     """Never delay sending a message or answering a call for Google's network."""
     global _started
     if not os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
@@ -67,20 +67,20 @@ def wake_phone(user_id: int, kind: str) -> None:
             threading.Thread(target=_worker, name='mobile-push', daemon=True).start()
             _started = True
     try:
-        _pending.put_nowait((user_id, kind, datetime.utcnow()))
+        _pending.put_nowait((user_id, kind, event_id, datetime.utcnow()))
     except queue.Full:
         log.warning('Mobile push queue full; phone polling remains available')
 
 
 def _worker():
     while True:
-        user_id, kind, created = _pending.get()
+        user_id, kind, event_id, created = _pending.get()
         try:
             for attempt in range(3):
                 if datetime.utcnow() - created > timedelta(seconds=40):
                     break
                 try:
-                    _send(user_id, kind)
+                    _send(user_id, kind, event_id)
                     break
                 except Exception:
                     # Never log tokens, message content or service credentials.
@@ -90,7 +90,7 @@ def _worker():
             _pending.task_done()
 
 
-def _send(user_id, kind):
+def _send(user_id, kind, event_id=None):
     import firebase_admin
     from firebase_admin import messaging
     try:
@@ -103,7 +103,11 @@ def _send(user_id, kind):
             try:
                 messaging.send(messaging.Message(
                     token=device.token,
-                    data={'kind': kind, 'binding': device.binding},
+                    data={
+                        'kind': kind,
+                        'binding': device.binding,
+                        **({'event_id': str(event_id)} if event_id is not None else {}),
+                    },
                     android=messaging.AndroidConfig(priority='high', ttl=timedelta(seconds=45 if kind == 'call' else 3600)),
                 ), app=app)
             except messaging.UnregisteredError:

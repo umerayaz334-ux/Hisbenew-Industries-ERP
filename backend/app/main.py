@@ -72,6 +72,7 @@ from .security import (
     verify_pin,
 )
 from .services.realtime import realtime_hub
+from .services.call_voice import call_voice_hub
 from .services.printing.label_printing import LabelPrintError, list_label_printers, print_tspl_labels
 from .services.catalog.product_catalog import (
     CATALOG_DOWNLOAD_TOKEN_TTL_SECONDS,
@@ -1237,7 +1238,7 @@ def internal_call_signal_response(signal: InternalCallSignal) -> dict:
 
 
 def publish_internal_message(message: InternalMessage) -> None:
-    wake_phone(message.recipient_user_id, 'message')
+    wake_phone(message.recipient_user_id, 'message', message.id)
     for user_id in {message.sender_user_id, message.recipient_user_id}:
         if user_id is None:
             continue
@@ -1250,7 +1251,7 @@ def publish_internal_message(message: InternalMessage) -> None:
         )
 
 
-def publish_worker_order_alert(db: Session, tenant_id: int | None) -> None:
+def publish_worker_order_alert(db: Session, tenant_id: int | None, order_id: int) -> None:
     """Wake eligible workers after the complete order has committed."""
     workers = db.query(User).filter(
         User.tenant_id == tenant_id, User.role == 'worker', User.is_active == True,
@@ -1262,7 +1263,7 @@ def publish_worker_order_alert(db: Session, tenant_id: int | None) -> None:
             stored = None
         pages = tenant_filtered_allowed_pages(db, tenant_id, normalize_allowed_pages('worker', stored))
         if 'Orders' in pages:
-            wake_phone(worker.id, 'order')
+            wake_phone(worker.id, 'order', order_id)
 
 
 def publish_internal_call(call: InternalCall) -> None:
@@ -6300,6 +6301,67 @@ async def realtime_websocket(websocket: WebSocket):
     finally:
         if connected and user_id is not None:
             await realtime_hub.disconnect(user_id, websocket)
+
+
+@app.websocket("/ws/call-voice")
+async def call_voice_websocket(websocket: WebSocket):
+    """Authenticated, encrypted-in-transit audio relay for internal calls."""
+    await websocket.accept()
+    user_id: int | None = None
+    call_id: int | None = None
+    joined = False
+    try:
+        try:
+            auth = await asyncio.wait_for(websocket.receive_json(), timeout=10)
+            user_id = int(decode_access_token(str(auth.get("token") or "")).get("sub", "0"))
+            call_id = int(auth.get("call_id") or 0)
+        except (asyncio.TimeoutError, ValueError, TypeError, AttributeError, HTTPException):
+            await websocket.close(code=4401, reason="Authentication required")
+            return
+        if user_id <= 0 or call_id <= 0:
+            await websocket.close(code=4401, reason="Authentication required")
+            return
+
+        with SessionLocal() as db:
+            user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
+            if not user:
+                await websocket.close(code=4401, reason="Account unavailable")
+                return
+            try:
+                call = get_internal_call_for_user(db, call_id, user_id)
+            except HTTPException:
+                await websocket.close(code=4404, reason="Call not found")
+                return
+            if call.status != "accepted":
+                await websocket.close(code=4409, reason="Call is not accepted")
+                return
+
+        await call_voice_hub.join(call_id, user_id, websocket)
+        joined = True
+        while True:
+            packet = await websocket.receive()
+            if packet.get("type") == "websocket.disconnect":
+                break
+            frame = packet.get("bytes")
+            if frame is not None:
+                await call_voice_hub.forward(call_id, user_id, frame)
+                continue
+            raw = packet.get("text")
+            if raw:
+                try:
+                    message = json.loads(raw)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                if message.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        with contextlib.suppress(Exception):
+            await websocket.close(code=1011)
+    finally:
+        if joined and user_id is not None and call_id is not None:
+            await call_voice_hub.leave(call_id, user_id, websocket)
 
 
 @app.get("/users/{user_id}/activity-logs", response_model=list[ActivityLogOut])
@@ -17458,7 +17520,7 @@ def create_order_record(
     db.commit()
     db.refresh(new_order)
     try:
-        publish_worker_order_alert(db, new_order.tenant_id)
+        publish_worker_order_alert(db, new_order.tenant_id, new_order.id)
     except Exception:
         # Notification failures must never turn a saved order into a failed
         # submission that the user might duplicate. Polling can still catch up.

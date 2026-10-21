@@ -36,8 +36,8 @@ class MobileDataTests(unittest.TestCase):
         ])
         self.db.commit()
         with patch.object(main, 'wake_phone') as wake, patch.object(main, 'tenant_filtered_allowed_pages', side_effect=lambda db, tenant, pages: pages):
-            main.publish_worker_order_alert(self.db, 1)
-        wake.assert_called_once_with(1, 'order')
+            main.publish_worker_order_alert(self.db, 1, 99)
+        wake.assert_called_once_with(1, 'order', 99)
 
     def test_notification_preview_only_returns_incoming_unread_messages(self):
         self.db.add_all([

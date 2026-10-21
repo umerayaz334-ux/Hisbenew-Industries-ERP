@@ -480,6 +480,14 @@ function Icon({ name, size = 18 }) {
         <path d="M7 14h10v7H7z" />
       </>
     ),
+    share: (
+      <>
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <path d="m8.7 10.6 6.6-4.2m-6.6 7 6.6 4.2" />
+      </>
+    ),
     plus: <path d="M12 5v14M5 12h14" />,
     close: <path d="M6 6l12 12M18 6 6 18" />,
     check: <path d="m5 12 4 4L19 6" />,
@@ -508,7 +516,7 @@ function Icon({ name, size = 18 }) {
 function Fulfillment({
   userRole = "admin",
   initialTab = "orders",
-  onWarehouseTabChange = null,
+  onWarehouseTabChange: _onWarehouseTabChange = null,
 }) {
   const isWarehouseUser = userRole === "warehouse";
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -531,7 +539,6 @@ function Fulfillment({
   const [receivingShipmentKey, setReceivingShipmentKey] = useState(null);
   const [isShipmentModalOpen, setIsShipmentModalOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-  const [showSummary, setShowSummary] = useState(false);
   const [notice, setNotice] = useState(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("unfulfilled");
@@ -649,37 +656,6 @@ function Fulfillment({
   const getProductSourceStock = (product) =>
     Number(product?.[shipmentSourceStockField] || 0);
 
-  const fulfillmentTabs = useMemo(
-    () => [
-      {
-        key: "orders",
-        label: isWarehouseUser ? "Dispatch orders" : "Order queue",
-        hint: isWarehouseUser ? "Pick, pack, and dispatch" : "Review fulfillment readiness",
-        icon: "order",
-      },
-      {
-        key: "shipments",
-        label: isWarehouseUser ? "Inbound shipments" : "Shipments",
-        hint: isWarehouseUser ? "Confirm warehouse receipts" : "Send and reconcile stock",
-        icon: "truck",
-      },
-      {
-        key: "inventory",
-        label: "Warehouse stock",
-        hint: "Boxes, locations, and exceptions",
-        icon: "warehouse",
-      },
-    ],
-    [isWarehouseUser]
-  );
-
-  const selectTab = (tab) => {
-    setActiveTab(tab);
-    if (isWarehouseUser && onWarehouseTabChange) {
-      onWarehouseTabChange(tab);
-    }
-  };
-
   const filteredOrders = useMemo(() => {
     const query = orderSearch.trim().toLowerCase();
     return dashboard.orders.filter((order) => {
@@ -696,17 +672,6 @@ function Fulfillment({
     });
   }, [dashboard.orders, orderSearch, orderStatusFilter]);
 
-  const dispatchedHistoryOrders = useMemo(() => {
-    const query = orderSearch.trim().toLowerCase();
-    return [...(dashboard.orders || [])]
-      .filter((order) => isOrderShipped(order) && orderMatchesSearch(order, query))
-      .sort(
-        (a, b) =>
-          new Date(b.shipped_at || b.updated_at || b.created_at || 0).getTime() -
-          new Date(a.shipped_at || a.updated_at || a.created_at || 0).getTime()
-      );
-  }, [dashboard.orders, orderSearch]);
-
   const queueStats = useMemo(() => {
     const orders = dashboard.orders || [];
     const unfulfilled = orders.filter((order) => !isOrderShipped(order));
@@ -722,15 +687,6 @@ function Fulfillment({
       unfulfilled: unfulfilled.length,
     };
   }, [dashboard.orders]);
-
-  const queueFilters = useMemo(
-    () => [
-      ["ready", "Ready", queueStats.ready],
-      ["label", "Need label", queueStats.label],
-      ["shortage", "Short stock", queueStats.shortage],
-    ],
-    [queueStats.label, queueStats.ready, queueStats.shortage]
-  );
 
   const inventoryByProduct = useMemo(() => {
     const grouped = new Map();
@@ -790,15 +746,6 @@ function Fulfillment({
       );
   }, [dashboard.shipments]);
 
-  const boxStockUnits = useMemo(
-    () =>
-      boxStockRows.reduce(
-        (total, box) => total + Number(box.available_units || 0),
-        0
-      ),
-    [boxStockRows]
-  );
-
   const shipmentRows = useMemo(() => {
     return [...(dashboard.shipments || [])].sort(
       (a, b) =>
@@ -815,76 +762,44 @@ function Fulfillment({
     };
   }, [dashboard.shipments]);
 
-  const commandMetrics = useMemo(() => {
-    if (isWarehouseUser) {
-      return [
-        {
-          label: "Active orders",
-          value: queueStats.unfulfilled,
-          help: "Waiting for dispatch",
-          icon: "order",
-          tone: "blue",
-        },
-        {
-          label: "In transit",
-          value: shipmentStats.inTransit,
-          help: "Awaiting receipt",
-          icon: "truck",
-          tone: "amber",
-        },
-        {
-          label: "Stock boxes",
-          value: boxStockRows.length,
-          help: "Active warehouse boxes",
-          icon: "box",
-          tone: "violet",
-        },
-        {
-          label: "Box units",
-          value: boxStockUnits,
-          help: "Available to fulfill",
-          icon: "warehouse",
-          tone: "green",
-        },
-      ];
-    }
+  const activeView = activeTab === "shipments" || activeTab === "inventory" ? activeTab : "orders";
 
-    return [
-      {
-        label: "Ready",
-        value: queueStats.ready,
-        help: "Orders ready to ship",
-        icon: "check",
-        tone: "green",
-      },
-      {
-        label: "In transit",
-        value: shipmentStats.inTransit,
-        help: "Shipments en route",
+  const viewMeta = useMemo(() => {
+    if (activeView === "shipments") {
+      return {
+        title: "Shipments",
+        subtitle: isWarehouseUser
+          ? "Confirm inbound receipts and review cartons"
+          : "Send stock and reconcile inbound receipts",
+        countLabel: `${formatNumber(shipmentStats.inTransit)} in transit`,
         icon: "truck",
-        tone: "amber",
-      },
-      {
-        label: "Dispatched",
-        value: dispatchedHistoryOrders.length,
-        help: "Completed orders",
-        icon: "order",
-        tone: "blue",
-      },
-      {
-        label: "Box units",
-        value: boxStockUnits,
-        help: "Available to fulfill",
+      };
+    }
+    if (activeView === "inventory") {
+      return {
+        title: isWarehouseUser ? "Stock / Boxes" : "Warehouse stock",
+        subtitle: isWarehouseUser
+          ? "Update locations, merge boxes, and check contents"
+          : "Box stock by SKU, locations, and discrepancies",
+        countLabel: isWarehouseUser
+          ? `${formatNumber(boxStockRows.length)} active boxes`
+          : `${formatNumber(inventoryByProduct.length)} SKUs`,
         icon: "warehouse",
-        tone: "violet",
-      },
-    ];
+      };
+    }
+    return {
+      title: isWarehouseUser ? "Dispatch" : "Dispatch queue",
+      subtitle: isWarehouseUser
+        ? "Pick, pack, and mark orders shipped"
+        : "Review readiness, labels, and dispatch",
+      countLabel: `${formatNumber(queueStats.unfulfilled)} open`,
+      icon: "order",
+    };
   }, [
+    activeView,
     boxStockRows.length,
-    boxStockUnits,
-    dispatchedHistoryOrders.length,
+    inventoryByProduct.length,
     isWarehouseUser,
-    queueStats.ready,
     queueStats.unfulfilled,
     shipmentStats.inTransit,
   ]);
@@ -1298,6 +1213,58 @@ function Fulfillment({
         type: "error",
         text: errorText(error, "Label file could not be uploaded."),
       });
+    }
+  };
+
+  const shareOrderToWarehouse = async (order) => {
+    const itemLines = order.picks?.length
+      ? order.picks.map((item) =>
+          `- ${item.article_no || "Item"}: ${item.product_name || ""} x ${formatNumber(item.quantity)}`.trim()
+        )
+      : (order.pick_plan || []).map((item) =>
+          `- ${item.article_no || "Item"}: ${item.product_name || ""} x ${formatNumber(item.required_quantity)}`.trim()
+        );
+    const note = String(order.notes || "").trim();
+    const text = [
+      `Warehouse dispatch: ${order.fulfillment_order_no || "Order"}`,
+      `Customer: ${order.customer_name || order.platform || "Not listed"}`,
+      "Items:",
+      ...(itemLines.length ? itemLines : ["- Item details are available in the portal."]),
+      ...(note ? [`Customer / packing note: ${note}`] : []),
+      ...(order.label_file_url ? [`Shipping label: ${getStaticUrl(order.label_file_url)}`] : ["Shipping label: not uploaded"]),
+    ].join("\n");
+    const labelUrl = order.label_file_url ? getStaticUrl(order.label_file_url) : null;
+
+    try {
+      if (navigator.share) {
+        let files = [];
+        if (labelUrl && navigator.canShare) {
+          try {
+            const response = await api.get(labelUrl, { responseType: "blob" });
+            const file = new File(
+              [response.data],
+              String(order.label_file_name || "shipping-label.pdf").replace(/[\\/:*?"<>|]/g, "_")
+            );
+            if (navigator.canShare({ files: [file] })) files = [file];
+          } catch {
+            // If file attachment is unavailable, share the secure label link with the order details.
+          }
+        }
+        await navigator.share({
+          title: `Warehouse dispatch ${order.fulfillment_order_no || "order"}`,
+          text,
+          ...(files.length ? { files } : {}),
+        });
+        return;
+      }
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(text)}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      setNotice({ type: "error", text: "Could not open the share sheet. Try again." });
     }
   };
 
@@ -2011,9 +1978,9 @@ function Fulfillment({
     if (!selectedOrder) {
       return (
         <div className="fulfillment-detail-empty">
-          <Icon name="order" size={24} />
-          <strong>No order selected</strong>
-          <span>Select an order.</span>
+          <Icon name="order" size={28} />
+          <strong>Select an order</strong>
+          <span>Choose a row to pick, pack, and ship.</span>
         </div>
       );
     }
@@ -2059,11 +2026,30 @@ function Fulfillment({
           </span>
         </div>
 
-        <section className="fulfillment-detail-section">
+        <section className="fulfillment-detail-section fulfillment-primary-actions">
           <div className="fulfillment-detail-section-head">
             <h3>Dispatch</h3>
           </div>
           <div className="fulfillment-action-row">
+            <button
+              className="fulfillment-secondary-action"
+              onClick={() => shareOrderToWarehouse(selectedOrder)}
+              type="button"
+            >
+              <Icon name="share" />
+              Share to warehouse
+            </button>
+            {!isShipped && (
+              <button
+                className="fulfillment-primary-button"
+                disabled={shippingOrderId === selectedOrder.id || !canShip}
+                onClick={() => shipOrder(selectedOrder)}
+                type="button"
+              >
+                <Icon name="check" />
+                {shippingOrderId === selectedOrder.id ? "Shipping..." : "Mark shipped"}
+              </button>
+            )}
             {selectedOrder.label_file_url ? (
               <a
                 className="fulfillment-file-link"
@@ -2081,7 +2067,7 @@ function Fulfillment({
             )}
             {!isWarehouseUser && (
               <label className="fulfillment-upload-button">
-                Upload
+                Upload label
                 <input
                   accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.txt,.csv,.xls,.xlsx,.doc,.docx,.zip,.btw"
                   onChange={(event) =>
@@ -2090,17 +2076,6 @@ function Fulfillment({
                   type="file"
                 />
               </label>
-            )}
-            {!isShipped && (
-              <button
-                className="fulfillment-primary-button"
-                disabled={shippingOrderId === selectedOrder.id || !canShip}
-                onClick={() => shipOrder(selectedOrder)}
-                type="button"
-              >
-                <Icon name="check" />
-                {shippingOrderId === selectedOrder.id ? "Shipping..." : "Mark shipped"}
-              </button>
             )}
           </div>
           {!isShipped && !canShip && (
@@ -2192,9 +2167,9 @@ function Fulfillment({
     if (!selectedShipment) {
       return (
         <div className="fulfillment-detail-empty">
-          <Icon name="truck" size={24} />
-          <strong>No shipment selected</strong>
-          <span>Select a shipment.</span>
+          <Icon name="truck" size={28} />
+          <strong>Select a shipment</strong>
+          <span>Choose a row to review boxes and confirm receipt.</span>
         </div>
       );
     }
@@ -2233,10 +2208,29 @@ function Fulfillment({
           </span>
         </div>
 
-        <section className="fulfillment-detail-section">
+        <section className="fulfillment-detail-section fulfillment-primary-actions">
           <div className="fulfillment-detail-section-head">
-            <h3>Delivery confirmation</h3>
+            <h3>Receive shipment</h3>
           </div>
+          <button
+            className="fulfillment-primary-button is-wide"
+            disabled={isReceiving || partyReceived || receiptState.received}
+            onClick={() => receiveShipment(selectedShipment, receiptParty)}
+            type="button"
+          >
+            <Icon name="check" />
+            {isReceiving
+              ? isWarehouseUser
+                ? "Confirming..."
+                : "Marking delivered..."
+              : partyReceived || receiptState.received
+                ? isWarehouseUser
+                  ? "Confirmed"
+                  : "Delivered"
+                : isWarehouseUser
+                  ? "Confirm fulfillment received"
+                  : "Mark as delivered"}
+          </button>
           <div className="fulfillment-receipt-steps">
             <span className={receiptState.adminReceived ? "is-done" : ""}>
               <Icon name="check" size={14} />
@@ -2261,25 +2255,6 @@ function Fulfillment({
               </small>
             </span>
           </div>
-          <button
-            className="fulfillment-primary-button is-wide"
-            disabled={isReceiving || partyReceived || receiptState.received}
-            onClick={() => receiveShipment(selectedShipment, receiptParty)}
-            type="button"
-          >
-            <Icon name="check" />
-            {isReceiving
-              ? isWarehouseUser
-                ? "Confirming..."
-                : "Marking delivered..."
-              : partyReceived || receiptState.received
-                ? isWarehouseUser
-                  ? "Confirmed"
-                  : "Delivered"
-                : isWarehouseUser
-                  ? "Confirm fulfillment received"
-                  : "Mark as delivered"}
-          </button>
         </section>
 
         <section className="fulfillment-detail-section">
@@ -2331,9 +2306,9 @@ function Fulfillment({
       if (!selectedBox) {
         return (
           <div className="fulfillment-detail-empty">
-            <Icon name="box" size={24} />
-            <strong>No box selected</strong>
-            <span>Select a box.</span>
+            <Icon name="box" size={28} />
+            <strong>Select a box</strong>
+            <span>Update location, merge boxes, or review contents.</span>
           </div>
         );
       }
@@ -2367,9 +2342,9 @@ function Fulfillment({
             </span>
           </div>
 
-          <section className="fulfillment-detail-section">
+          <section className="fulfillment-detail-section fulfillment-primary-actions">
             <div className="fulfillment-detail-section-head">
-              <h3>Location</h3>
+              <h3>Update location</h3>
             </div>
             <div className="fulfillment-inline-form">
               <label className="fulfillment-location-field">
@@ -2384,7 +2359,7 @@ function Fulfillment({
                 />
               </label>
               <button
-                className="fulfillment-secondary-action"
+                className="fulfillment-primary-button"
                 disabled={savingLocationId === selectedBox.id}
                 onClick={() => saveBoxLocation(selectedBox)}
                 type="button"
@@ -2461,9 +2436,9 @@ function Fulfillment({
     if (!selectedInventoryGroup) {
       return (
         <div className="fulfillment-detail-empty">
-          <Icon name="inventory" size={24} />
-          <strong>No stock selected</strong>
-          <span>Select stock.</span>
+          <Icon name="warehouse" size={28} />
+          <strong>Select stock</strong>
+          <span>Choose a SKU to see boxes and locations.</span>
         </div>
       );
     }
@@ -2518,42 +2493,22 @@ function Fulfillment({
   };
 
   return (
-    <div className={`fulfillment-page ${isWarehouseUser ? "is-warehouse-view" : ""}`}>
+    <div
+      className={`fulfillment-page ${isWarehouseUser ? "is-warehouse-view" : ""}`}
+      data-view={activeView}
+    >
       <header className="fulfillment-page-header">
-        <nav aria-label="Fulfillment status" className="fulfillment-tabs">
-          {fulfillmentTabs.map(({ key: tab, label, hint, icon }) => {
-            const tabCount =
-              tab === "orders"
-                ? queueStats.unfulfilled
-                : tab === "shipments"
-                  ? shipmentStats.inTransit
-                  : isWarehouseUser
-                    ? boxStockRows.length
-                    : inventoryByProduct.length;
-
-            return (
-              <button
-                aria-current={activeTab === tab ? "page" : undefined}
-                className={activeTab === tab ? "is-active" : ""}
-                key={tab}
-                onClick={() => selectTab(tab)}
-                type="button"
-              >
-                <span className="fulfillment-tab-icon">
-                  <Icon name={icon} size={18} />
-                </span>
-                <span className="fulfillment-tab-copy">
-                  <b>{label}</b>
-                  <small>{hint}</small>
-                </span>
-                <strong>{formatNumber(tabCount)}</strong>
-              </button>
-            );
-          })}
-        </nav>
-
+        <div className="fulfillment-title-block">
+          <span className="fulfillment-eyebrow">
+            <Icon name={viewMeta.icon} size={14} />
+            Warehouse
+          </span>
+          <h1>{viewMeta.title}</h1>
+          <p>{viewMeta.subtitle}</p>
+        </div>
         <div className="fulfillment-header-actions">
-          {!isWarehouseUser && activeTab === "orders" && (
+          <span className="fulfillment-view-count">{viewMeta.countLabel}</span>
+          {!isWarehouseUser && activeView === "orders" && (
             <button
               className="fulfillment-primary-button"
               onClick={() => setIsOrderModalOpen(true)}
@@ -2563,7 +2518,7 @@ function Fulfillment({
               Add order
             </button>
           )}
-          {!isWarehouseUser && activeTab === "shipments" && (
+          {!isWarehouseUser && activeView === "shipments" && (
             <button
               className="fulfillment-primary-button"
               onClick={() => setIsShipmentModalOpen(true)}
@@ -2573,7 +2528,7 @@ function Fulfillment({
               Send shipment
             </button>
           )}
-          {activeTab === "inventory" && dashboard.inventoryLocations.length > 0 && (
+          {activeView === "inventory" && dashboard.inventoryLocations.length > 0 && (
             <button
               className="fulfillment-primary-button"
               onClick={() => {
@@ -2593,59 +2548,7 @@ function Fulfillment({
               Record discrepancy
             </button>
           )}
-          <button
-            aria-controls="fulfillment-header-summary"
-            aria-expanded={showSummary}
-            className="fulfillment-summary-toggle"
-            onClick={() => setShowSummary((current) => !current)}
-            type="button"
-          >
-            {showSummary ? "Hide overview" : "Overview"}
-            <span aria-hidden="true" className="fulfillment-toggle-chevron" />
-          </button>
         </div>
-
-        {showSummary && (
-          <section
-            aria-label="Fulfillment overview"
-            className="fulfillment-summary-strip"
-            id="fulfillment-header-summary"
-          >
-            {commandMetrics.map((metric) => (
-              <button
-                className={`fulfillment-summary-card is-${metric.tone}`}
-                key={metric.label}
-                onClick={() => {
-                  if (metric.label === "Ready") {
-                    selectTab("orders");
-                    setOrderStatusFilter("ready");
-                  } else if (metric.label === "In transit") {
-                    selectTab("shipments");
-                    setShipmentStatusFilter("in-transit");
-                  } else if (metric.label === "Dispatched") {
-                    selectTab("orders");
-                    setOrderStatusFilter("shipped");
-                  } else if (
-                    metric.label.includes("Box") ||
-                    metric.label.includes("Stock")
-                  ) {
-                    selectTab("inventory");
-                  }
-                }}
-                type="button"
-              >
-                <span className="fulfillment-summary-icon">
-                  <Icon name={metric.icon} size={18} />
-                </span>
-                <span className="fulfillment-summary-copy">
-                  <small>{metric.label}</small>
-                  <strong>{formatNumber(metric.value)}</strong>
-                  <em>{metric.help}</em>
-                </span>
-              </button>
-            ))}
-          </section>
-        )}
       </header>
 
       {notice && (
@@ -2656,101 +2559,80 @@ function Fulfillment({
         >
           <span>{notice.text}</span>
           <button onClick={() => setNotice(null)} type="button">
-            Close
+            Dismiss
           </button>
         </div>
       )}
 
-      {!isWarehouseUser && isOrderModalOpen &&
-        renderModal(
-          "order-modal-title",
-          renderOrderForm(),
-          () => setIsOrderModalOpen(false)
+      {!isWarehouseUser &&
+        isOrderModalOpen &&
+        renderModal("order-modal-title", renderOrderForm(), () =>
+          setIsOrderModalOpen(false)
         )}
-      {!isWarehouseUser && isShipmentModalOpen &&
-        renderModal(
-          "shipment-modal-title",
-          renderShipmentForm(),
-          () => setIsShipmentModalOpen(false)
+      {!isWarehouseUser &&
+        isShipmentModalOpen &&
+        renderModal("shipment-modal-title", renderShipmentForm(), () =>
+          setIsShipmentModalOpen(false)
         )}
       {isDiscrepancyModalOpen &&
-        renderModal(
-          "discrepancy-modal-title",
-          renderDiscrepancyForm(),
-          () => setIsDiscrepancyModalOpen(false)
+        renderModal("discrepancy-modal-title", renderDiscrepancyForm(), () =>
+          setIsDiscrepancyModalOpen(false)
         )}
 
       {loading ? (
         <section className="fulfillment-shell">
-          <div className="fulfillment-empty">Loading fulfillment workspace...</div>
+          <div className="fulfillment-empty">
+            <strong>Loading workspace</strong>
+            <span>Fetching orders, shipments, and stock…</span>
+          </div>
         </section>
       ) : (
         <section className="fulfillment-shell">
-          {activeTab === "orders" && (
+          {activeView === "orders" && (
             <div className="fulfillment-workbench">
               <section className="fulfillment-list-pane">
-                <div className="fulfillment-pane-head">
-                  <div className="fulfillment-pane-intro">
-                    <h2>Order queue</h2>
-                  </div>
-                  <div className="fulfillment-pane-controls">
-                    <label className="fulfillment-search">
-                      <Icon name="search" />
-                      <input
-                        aria-label="Search fulfillment orders"
-                        onChange={(event) => setOrderSearch(event.target.value)}
-                        placeholder="Search order, customer, or SKU"
-                        value={orderSearch}
-                      />
-                    </label>
-                    <div className="fulfillment-tools">
-                      <span className="fulfillment-result-count">
-                        {formatNumber(filteredOrders.length)}{" "}
-                        {filteredOrders.length === 1 ? "order" : "orders"}
-                      </span>
-                      <select
-                        aria-label="Filter fulfillment orders"
-                        onChange={(event) => setOrderStatusFilter(event.target.value)}
-                        value={orderStatusFilter}
-                      >
-                        <option value="unfulfilled">Unfulfilled</option>
-                        <option value="ready">Ready to ship</option>
-                        <option value="label">Need label</option>
-                        <option value="shortage">Short stock</option>
-                        <option value="shipped">Shipped</option>
-                        <option value="all">All orders</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="fulfillment-filter-row" aria-label="Order queue">
-                  {queueFilters.map(([filter, label, value]) => (
-                    <button
-                      className={`fulfillment-filter-chip is-${filter} ${
-                        orderStatusFilter === filter ? "is-active" : ""
-                      }`.trim()}
-                      key={filter}
-                      onClick={() => setOrderStatusFilter(filter)}
-                      type="button"
-                    >
-                      <strong>{formatNumber(value)}</strong>
-                      <span>{label}</span>
-                    </button>
-                  ))}
+                <div className="fulfillment-toolbar">
+                  <label className="fulfillment-search">
+                    <Icon name="search" />
+                    <input
+                      aria-label="Search fulfillment orders"
+                      onChange={(event) => setOrderSearch(event.target.value)}
+                      placeholder="Search order, customer, or SKU"
+                      value={orderSearch}
+                    />
+                  </label>
+                  <select
+                    aria-label="Filter fulfillment orders"
+                    onChange={(event) => setOrderStatusFilter(event.target.value)}
+                    value={orderStatusFilter}
+                  >
+                    <option value="unfulfilled">
+                      Unfulfilled ({formatNumber(queueStats.unfulfilled)})
+                    </option>
+                    <option value="ready">
+                      Ready to ship ({formatNumber(queueStats.ready)})
+                    </option>
+                    <option value="label">
+                      Need label ({formatNumber(queueStats.label)})
+                    </option>
+                    <option value="shortage">
+                      Short stock ({formatNumber(queueStats.shortage)})
+                    </option>
+                    <option value="shipped">
+                      Shipped ({formatNumber(queueStats.shipped)})
+                    </option>
+                    <option value="all">All orders</option>
+                  </select>
                 </div>
 
                 {filteredOrders.length === 0 ? (
-                  <div className="fulfillment-empty">No orders match this view.</div>
+                  <div className="fulfillment-empty">
+                    <Icon name="order" size={28} />
+                    <strong>No orders in this view</strong>
+                    <span>Try another filter or clear the search.</span>
+                  </div>
                 ) : (
-                  <div className="fulfillment-data-table is-orders">
-                    <div className="fulfillment-table-head">
-                      <span>Status</span>
-                      <span>Order</span>
-                      <span>Units</span>
-                      <span>Boxes</span>
-                      <span>Label</span>
-                    </div>
+                  <div className="fulfillment-list" role="list">
                     {filteredOrders.map((order) => {
                       const shipped = isOrderShipped(order);
                       const readiness = getOrderReadiness(order);
@@ -2758,33 +2640,33 @@ function Fulfillment({
                       const boxCount = getOrderBoxCount(order);
                       return (
                         <button
-                          className={`fulfillment-table-row ${
+                          className={`fulfillment-list-item ${
                             selectedOrder?.id === order.id ? "is-selected" : ""
                           }`}
                           key={order.id}
                           onClick={() => setSelectedOrderId(order.id)}
+                          role="listitem"
                           type="button"
                         >
                           <span className={`fulfillment-status is-${state}`}>
                             {readinessLabel[state]}
                           </span>
-                          <span>
+                          <span className="fulfillment-list-main">
                             <strong>{order.fulfillment_order_no}</strong>
                             <small>
-                              {order.customer_name || order.platform || "Fulfillment order"}
+                              {order.customer_name ||
+                                order.platform ||
+                                "Fulfillment order"}
                             </small>
                           </span>
-                          <span>
+                          <span className="fulfillment-list-meta">
                             <strong>{formatNumber(order.total_units)}</strong>
-                            <small>{formatNumber(getOrderSkuCount(order))} SKUs</small>
+                            <small>
+                              units · {boxCount ? formatNumber(boxCount) : "—"} boxes
+                            </small>
                           </span>
-                          <span>
-                            <strong>{boxCount ? formatNumber(boxCount) : "Pending"}</strong>
-                            <small>{shipped ? "Picked" : "Planned"}</small>
-                          </span>
-                          <span>
-                            <strong>{order.label_file_url ? "Ready" : "Missing"}</strong>
-                            <small>{order.platform || "-"}</small>
+                          <span className="fulfillment-list-flag">
+                            {order.label_file_url ? "Label ready" : "No label"}
                           </span>
                         </button>
                       );
@@ -2799,108 +2681,110 @@ function Fulfillment({
             </div>
           )}
 
-          {activeTab === "shipments" && (
+          {activeView === "shipments" && (
             <div className="fulfillment-workbench">
               <section className="fulfillment-list-pane">
-                <div className="fulfillment-pane-head">
-                  <div className="fulfillment-pane-intro">
-                    <h2>Shipments</h2>
-                  </div>
-                  <div className="fulfillment-pane-controls">
-                    <label className="fulfillment-search">
-                      <Icon name="search" />
-                      <input
-                        aria-label="Search fulfillment shipments"
-                        onChange={(event) => setShipmentSearch(event.target.value)}
-                        placeholder="Search shipment, box, or SKU"
-                        value={shipmentSearch}
-                      />
-                    </label>
-                    <div className="fulfillment-tools">
-                      <span className="fulfillment-filter-label">Filter</span>
-                      <div
-                        className="fulfillment-segmented"
-                        aria-label="Filter shipments by status"
-                        role="group"
-                      >
-                        <button
-                          className={shipmentStatusFilter === "in-transit" ? "is-active" : ""}
-                          onClick={() => setShipmentStatusFilter("in-transit")}
-                          type="button"
-                        >
-                          In transit
-                          <strong>{formatNumber(shipmentStats.inTransit)}</strong>
-                        </button>
-                        <button
-                          className={shipmentStatusFilter === "received" ? "is-active" : ""}
-                          onClick={() => setShipmentStatusFilter("received")}
-                          type="button"
-                        >
-                          Received
-                          <strong>{formatNumber(shipmentStats.received)}</strong>
-                        </button>
-                        <button
-                          className={shipmentStatusFilter === "all" ? "is-active" : ""}
-                          onClick={() => setShipmentStatusFilter("all")}
-                          type="button"
-                        >
-                          All
-                          <strong>{formatNumber(shipmentRows.length)}</strong>
-                        </button>
-                      </div>
-                    </div>
+                <div className="fulfillment-toolbar">
+                  <label className="fulfillment-search">
+                    <Icon name="search" />
+                    <input
+                      aria-label="Search fulfillment shipments"
+                      onChange={(event) => setShipmentSearch(event.target.value)}
+                      placeholder="Search shipment, box, or SKU"
+                      value={shipmentSearch}
+                    />
+                  </label>
+                  <div
+                    className="fulfillment-segmented"
+                    aria-label="Filter shipments by status"
+                    role="group"
+                  >
+                    <button
+                      className={
+                        shipmentStatusFilter === "in-transit" ? "is-active" : ""
+                      }
+                      onClick={() => setShipmentStatusFilter("in-transit")}
+                      type="button"
+                    >
+                      In transit
+                      <strong>{formatNumber(shipmentStats.inTransit)}</strong>
+                    </button>
+                    <button
+                      className={
+                        shipmentStatusFilter === "received" ? "is-active" : ""
+                      }
+                      onClick={() => setShipmentStatusFilter("received")}
+                      type="button"
+                    >
+                      Received
+                      <strong>{formatNumber(shipmentStats.received)}</strong>
+                    </button>
+                    <button
+                      className={shipmentStatusFilter === "all" ? "is-active" : ""}
+                      onClick={() => setShipmentStatusFilter("all")}
+                      type="button"
+                    >
+                      All
+                      <strong>{formatNumber(shipmentRows.length)}</strong>
+                    </button>
                   </div>
                 </div>
 
                 {shipmentViewRows.length === 0 ? (
-                  <div className="fulfillment-empty">No shipments in this view.</div>
+                  <div className="fulfillment-empty">
+                    <Icon name="truck" size={28} />
+                    <strong>No shipments here</strong>
+                    <span>Nothing matches this filter.</span>
+                  </div>
                 ) : (
-                  <div className="fulfillment-data-table is-shipments">
-                    <div className="fulfillment-table-head">
-                      <span>Status</span>
-                      <span>Shipment</span>
-                      <span>Units</span>
-                      <span>Boxes</span>
-                      <span>Sent</span>
-                    </div>
+                  <div className="fulfillment-list" role="list">
                     {shipmentDateGroups.map((group) => (
-                      <section className="fulfillment-shipment-date-group" key={group.key}>
-                        <div className="fulfillment-shipment-date-heading">
+                      <section className="fulfillment-date-group" key={group.key}>
+                        <div className="fulfillment-date-heading">
                           <strong>{group.label}</strong>
                           <span>
                             {formatNumber(group.shipments.length)}{" "}
-                            {group.shipments.length === 1 ? "shipment" : "shipments"}
+                            {group.shipments.length === 1
+                              ? "shipment"
+                              : "shipments"}
                           </span>
                         </div>
                         {group.shipments.map((shipment) => (
                           <button
-                            className={`fulfillment-table-row ${
-                              selectedShipment?.id === shipment.id ? "is-selected" : ""
+                            className={`fulfillment-list-item ${
+                              selectedShipment?.id === shipment.id
+                                ? "is-selected"
+                                : ""
                             }`}
                             key={shipment.id}
                             onClick={() => setSelectedShipmentId(shipment.id)}
+                            role="listitem"
                             type="button"
                           >
                             <span
-                              className={`fulfillment-status is-${getShipmentStatusKey(shipment)}`}
+                              className={`fulfillment-status is-${getShipmentStatusKey(
+                                shipment
+                              )}`}
                             >
                               {shipment.status}
                             </span>
-                            <span>
+                            <span className="fulfillment-list-main">
                               <strong>{shipment.shipment_no}</strong>
-                              <small>{shipment.destination_name || "Fulfillment center"}</small>
+                              <small>
+                                {shipment.destination_name || "Fulfillment center"}
+                              </small>
                             </span>
-                            <span>
-                              <strong>{formatNumber(shipment.total_units)}</strong>
-                              <small>{shipment.source_stock}</small>
+                            <span className="fulfillment-list-meta">
+                              <strong>
+                                {formatNumber(shipment.total_units)}
+                              </strong>
+                              <small>
+                                {formatNumber(shipment.carton_count)} cartons ·{" "}
+                                {shipment.source_stock}
+                              </small>
                             </span>
-                            <span>
-                              <strong>{formatNumber(shipment.carton_count)}</strong>
-                              <small>cartons</small>
-                            </span>
-                            <span>
-                              <strong>{formatUtcLocal(shipment.sent_at)}</strong>
-                              <small>{isShipmentReceived(shipment) ? "Received" : "Waiting"}</small>
+                            <span className="fulfillment-list-flag">
+                              {formatUtcLocal(shipment.sent_at)}
                             </span>
                           </button>
                         ))}
@@ -2910,21 +2794,20 @@ function Fulfillment({
                 )}
               </section>
 
-              <aside className="fulfillment-detail-pane" aria-label="Shipment detail">
+              <aside
+                className="fulfillment-detail-pane"
+                aria-label="Shipment detail"
+              >
                 {renderShipmentDetail()}
               </aside>
             </div>
           )}
 
-          {activeTab === "inventory" && (
+          {activeView === "inventory" && (
             <>
               <div className="fulfillment-workbench">
-              <section className="fulfillment-list-pane">
-                <div className="fulfillment-pane-head">
-                  <div className="fulfillment-pane-intro">
-                    <h2>{isWarehouseUser ? "Active boxes" : "Inventory"}</h2>
-                  </div>
-                  <div className="fulfillment-pane-controls">
+                <section className="fulfillment-list-pane">
+                  <div className="fulfillment-toolbar">
                     <label className="fulfillment-search">
                       <Icon name="search" />
                       <input
@@ -2940,95 +2823,92 @@ function Fulfillment({
                         : `${formatNumber(filteredInventoryGroups.length)} SKUs`}
                     </span>
                   </div>
-                </div>
 
-                {isWarehouseUser ? (
-                  filteredBoxStockRows.length === 0 ? (
-                    <div className="fulfillment-empty">No active box stock found.</div>
-                  ) : (
-                    <div className="fulfillment-data-table is-boxes">
-                      <div className="fulfillment-table-head">
-                        <span>Box ID</span>
-                        <span>Units</span>
-                        <span>Location</span>
-                        <span>Shipment</span>
+                  {isWarehouseUser ? (
+                    filteredBoxStockRows.length === 0 ? (
+                      <div className="fulfillment-empty">
+                        <Icon name="box" size={28} />
+                        <strong>No active boxes</strong>
+                        <span>Received box stock will appear here.</span>
                       </div>
-                      {filteredBoxStockRows.map((box) => (
-                        <button
-                          className={`fulfillment-table-row ${
-                            selectedBox?.id === box.id ? "is-selected" : ""
-                          }`}
-                          key={box.id}
-                          onClick={() => setSelectedBoxId(box.id)}
-                          type="button"
-                        >
-                          <span>
-                            <strong>{getBoxTrackingId(box)}</strong>
-                            <small>Carton {box.box_number} · {box.source_stock}</small>
-                          </span>
-                          <span>
-                            <strong>{formatNumber(box.available_units)}</strong>
-                            <small>available</small>
-                          </span>
-                          <span>
-                            <strong>{box.location || "No location"}</strong>
-                            <small>warehouse shelf</small>
-                          </span>
-                          <span>
-                            <strong>{box.shipment_no}</strong>
-                            <small>{formatUtcLocal(box.sent_at)}</small>
-                          </span>
-                        </button>
-                      ))}
+                    ) : (
+                      <div className="fulfillment-list" role="list">
+                        {filteredBoxStockRows.map((box) => (
+                          <button
+                            className={`fulfillment-list-item ${
+                              selectedBox?.id === box.id ? "is-selected" : ""
+                            }`}
+                            key={box.id}
+                            onClick={() => setSelectedBoxId(box.id)}
+                            role="listitem"
+                            type="button"
+                          >
+                            <span className="fulfillment-list-main">
+                              <strong>{getBoxTrackingId(box)}</strong>
+                              <small>
+                                Carton {box.box_number} · {box.source_stock}
+                              </small>
+                            </span>
+                            <span className="fulfillment-list-meta">
+                              <strong>
+                                {formatNumber(box.available_units)}
+                              </strong>
+                              <small>available</small>
+                            </span>
+                            <span className="fulfillment-list-flag">
+                              {box.location || "No location"}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  ) : filteredInventoryGroups.length === 0 ? (
+                    <div className="fulfillment-empty">
+                      <Icon name="warehouse" size={28} />
+                      <strong>No box stock</strong>
+                      <span>Fulfillment inventory will show after receipts.</span>
                     </div>
-                  )
-                ) : filteredInventoryGroups.length === 0 ? (
-                  <div className="fulfillment-empty">No fulfillment box stock available.</div>
-                ) : (
-                  <div className="fulfillment-data-table is-stock">
-                    <div className="fulfillment-table-head">
-                      <span>SKU</span>
-                      <span>Fulfillment</span>
-                      <span>Boxes</span>
-                      <span>ERP stock</span>
+                  ) : (
+                    <div className="fulfillment-list" role="list">
+                      {filteredInventoryGroups.map((group) => {
+                        const product = productsById.get(group.product_id);
+                        return (
+                          <button
+                            className={`fulfillment-list-item ${
+                              selectedInventoryGroup?.product_id ===
+                              group.product_id
+                                ? "is-selected"
+                                : ""
+                            }`}
+                            key={group.product_id}
+                            onClick={() =>
+                              setSelectedInventoryProductId(group.product_id)
+                            }
+                            role="listitem"
+                            type="button"
+                          >
+                            <span className="fulfillment-list-main">
+                              <strong>{group.article_no}</strong>
+                              <small>{group.product_name}</small>
+                            </span>
+                            <span className="fulfillment-list-meta">
+                              <strong>
+                                {formatNumber(group.available_quantity)}
+                              </strong>
+                              <small>
+                                {formatNumber(group.boxes.length)} boxes
+                              </small>
+                            </span>
+                            <span className="fulfillment-list-flag">
+                              F {formatNumber(product?.factory_stock)} / USA{" "}
+                              {formatNumber(product?.usa_stock)}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
-                    {filteredInventoryGroups.map((group) => {
-                      const product = productsById.get(group.product_id);
-                      return (
-                        <button
-                          className={`fulfillment-table-row ${
-                            selectedInventoryGroup?.product_id === group.product_id
-                              ? "is-selected"
-                              : ""
-                          }`}
-                          key={group.product_id}
-                          onClick={() => setSelectedInventoryProductId(group.product_id)}
-                          type="button"
-                        >
-                          <span>
-                            <strong>{group.article_no}</strong>
-                            <small>{group.product_name}</small>
-                          </span>
-                          <span>
-                            <strong>{formatNumber(group.available_quantity)}</strong>
-                            <small>units</small>
-                          </span>
-                          <span>
-                            <strong>{formatNumber(group.boxes.length)}</strong>
-                            <small>boxes</small>
-                          </span>
-                          <span>
-                            <strong>
-                              {formatNumber(product?.factory_stock)} / {formatNumber(product?.usa_stock)}
-                            </strong>
-                            <small>factory / USA</small>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
+                  )}
+                </section>
 
                 <aside className="fulfillment-detail-pane" aria-label="Stock detail">
                   {renderInventoryDetail()}
@@ -3042,12 +2922,19 @@ function Fulfillment({
                 <div className="fulfillment-discrepancy-history-head">
                   <div>
                     <h2>Discrepancy history</h2>
-                    <p>Damage, missing units, returns, recoveries, and count corrections</p>
+                    <p>
+                      Damage, missing units, returns, recoveries, and count
+                      corrections
+                    </p>
                   </div>
-                  <span>{formatNumber(dashboard.discrepancies.length)} entries</span>
+                  <span>
+                    {formatNumber(dashboard.discrepancies.length)} entries
+                  </span>
                 </div>
                 {dashboard.discrepancies.length === 0 ? (
-                  <div className="fulfillment-empty">No fulfillment discrepancies recorded.</div>
+                  <div className="fulfillment-empty is-compact">
+                    No discrepancies recorded yet.
+                  </div>
                 ) : (
                   <div className="fulfillment-discrepancy-table">
                     {dashboard.discrepancies.slice(0, 20).map((entry) => {
@@ -3056,17 +2943,27 @@ function Fulfillment({
                         <div className="fulfillment-discrepancy-row" key={entry.id}>
                           <span>
                             <strong>{entry.reason}</strong>
-                            <small>{entry.article_no} / {getBoxTrackingId(entry)}</small>
+                            <small>
+                              {entry.article_no} / {getBoxTrackingId(entry)}
+                            </small>
                           </span>
-                          <strong className={delta >= 0 ? "is-add" : "is-remove"}>
-                            {delta > 0 ? "+" : ""}{formatNumber(delta)}
+                          <strong
+                            className={delta >= 0 ? "is-add" : "is-remove"}
+                          >
+                            {delta > 0 ? "+" : ""}
+                            {formatNumber(delta)}
                           </strong>
                           <span>
-                            <strong>{formatNumber(entry.available_before)} -&gt; {formatNumber(entry.available_after)}</strong>
-                            <small>available before / after</small>
+                            <strong>
+                              {formatNumber(entry.available_before)} →{" "}
+                              {formatNumber(entry.available_after)}
+                            </strong>
+                            <small>before / after</small>
                           </span>
                           <span>
-                            <strong>{entry.reference || entry.shipment_no}</strong>
+                            <strong>
+                              {entry.reference || entry.shipment_no || "—"}
+                            </strong>
                             <small>{entry.notes || "No note"}</small>
                           </span>
                           <span>
@@ -3086,5 +2983,6 @@ function Fulfillment({
     </div>
   );
 }
+
 
 export default Fulfillment;

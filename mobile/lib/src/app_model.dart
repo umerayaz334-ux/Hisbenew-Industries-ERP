@@ -87,11 +87,12 @@ class AppModel extends ChangeNotifier {
     if (session != null) {
       unawaited(_startPhoneServices());
       api.warmLists(session!);
-      if (!isWorker) unawaited(refreshDashboard());
+      if (!isWorker && !isWarehouse) unawaited(refreshDashboard());
     }
   }
 
   bool get isWorker => (session?.role ?? '').trim().toLowerCase() == 'worker';
+  bool get isWarehouse => (session?.role ?? '').trim().toLowerCase() == 'warehouse';
 
   Future<void> setLocale(Locale next) async {
     locale = next;
@@ -133,7 +134,7 @@ class AppModel extends ChangeNotifier {
       final worker = next.role.trim().toLowerCase() == 'worker';
       unawaited(_startPhoneServices());
       api.warmLists(next);
-      if (!worker) unawaited(refreshDashboard());
+      if (!worker && next.role.trim().toLowerCase() != 'warehouse') unawaited(refreshDashboard());
       return true;
     } on ErpException catch (error) {
       loginError = error.code;

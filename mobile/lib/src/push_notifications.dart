@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,9 +22,20 @@ Future<void> receiveMobilePush(RemoteMessage message) async {
   final token = prefs.getString('erp.token') ?? '';
   if (token.isEmpty) return;
   if (message.data['kind'] == 'call') {
-    await watchIncomingCall(token);
+    final service = FlutterBackgroundService();
+    if (await service.isRunning()) {
+      service.invoke('checkIncoming');
+    } else {
+      await watchIncomingCall(token);
+    }
   } else if (message.data['kind'] == 'message') {
-    await refreshMessageNotifications();
+    await refreshMessageNotifications(
+      eventId: int.tryParse('${message.data['event_id'] ?? ''}'),
+    );
+  } else if (message.data['kind'] == 'order') {
+    await refreshOrderNotifications(
+      eventId: int.tryParse('${message.data['event_id'] ?? ''}'),
+    );
   }
 }
 
@@ -43,7 +55,9 @@ class MobilePush {
       await FirebaseMessaging.instance.requestPermission();
       // Python Admin SDK sends to FCM registration tokens, not installation IDs.
       // ignore: deprecated_member_use
-      _tokens ??= FirebaseMessaging.instance.onTokenRefresh.listen((token) => _register(token));
+      _tokens ??= FirebaseMessaging.instance.onTokenRefresh.listen(
+        (token) => _register(token),
+      );
       _messages ??= FirebaseMessaging.onMessage.listen(receiveMobilePush);
       // ignore: deprecated_member_use
       final token = await FirebaseMessaging.instance.getToken();
@@ -63,13 +77,23 @@ class MobilePush {
     final binding = prefs.getString('erp.pushBinding');
     if (token.isEmpty || binding == null) return;
     try {
-      final response = await http.post(Uri.parse('$erpApiBase/mobile-push/device'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({'token': deviceToken, 'binding': binding}),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            Uri.parse('$erpApiBase/mobile-push/device'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'token': deviceToken, 'binding': binding}),
+          )
+          .timeout(const Duration(seconds: 10));
       await prefs.reload();
       await prefs.setString('erp.pushToken', deviceToken);
-      await prefs.setBool('erp.pushReady', response.statusCode == 200 && jsonDecode(response.body)['enabled'] == true);
+      await prefs.setBool(
+        'erp.pushReady',
+        response.statusCode == 200 &&
+            jsonDecode(response.body)['enabled'] == true,
+      );
     } catch (_) {
       await prefs.reload();
       await prefs.setBool('erp.pushReady', false);
@@ -92,10 +116,18 @@ class MobilePush {
     _messages = null;
     if (binding == null || deviceToken == null || token == null) return;
     try {
-      await http.delete(Uri.parse('$erpApiBase/mobile-push/device'),
-        headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-        body: jsonEncode({'token': deviceToken, 'binding': binding}),
-      ).timeout(const Duration(seconds: 5));
-    } catch (_) { /* The old binding is rejected on this phone. */ }
+      await http
+          .delete(
+            Uri.parse('$erpApiBase/mobile-push/device'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'token': deviceToken, 'binding': binding}),
+          )
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      /* The old binding is rejected on this phone. */
+    }
   }
 }

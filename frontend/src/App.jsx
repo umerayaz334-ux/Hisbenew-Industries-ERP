@@ -268,7 +268,9 @@ const rolePages = {
     "Accounting",
     "Shipping",
     "Shipping Balance",
-    "Warehouse / Fulfillment",
+    "Warehouse Dispatch",
+    "Warehouse Shipments",
+    "Warehouse Stock",
     "Service Takers",
     "Follow Ups",
     "Products",
@@ -309,7 +311,9 @@ const rolePages = {
     "Accounting",
     "Shipping",
     "Shipping Balance",
-    "Warehouse / Fulfillment",
+    "Warehouse Dispatch",
+    "Warehouse Shipments",
+    "Warehouse Stock",
     "Follow Ups",
     "Products",
     "Inventory",
@@ -423,6 +427,14 @@ const normalizeClientAllowedPages = (pages = [], role = "", impersonatedBySuperA
   pages.forEach((page) => {
     if (page === "Payments") page = "Billings";
     if (page === "Amazon FBA Inventory") page = "Products";
+    if (page === "Warehouse / Fulfillment") {
+      ["Warehouse Dispatch", "Warehouse Shipments", "Warehouse Stock"].forEach(
+        (warehousePage) => {
+          if (!normalized.includes(warehousePage)) normalized.push(warehousePage);
+        }
+      );
+      return;
+    }
     if (!normalized.includes(page)) normalized.push(page);
   });
 
@@ -444,6 +456,9 @@ const TENANT_MODULE_ALWAYS_VISIBLE_PAGES = new Set(["Dashboard"]);
 const TENANT_MODULE_PAGE_ALIASES = {
   "Printer Settings": "Label Printer",
   "Worker Accounts": "Workers",
+  "Warehouse Dispatch": "Warehouse / Fulfillment",
+  "Warehouse Shipments": "Warehouse / Fulfillment",
+  "Warehouse Stock": "Warehouse / Fulfillment",
 };
 
 const tenantModuleControllerPage = (page) => TENANT_MODULE_PAGE_ALIASES[page] || page;

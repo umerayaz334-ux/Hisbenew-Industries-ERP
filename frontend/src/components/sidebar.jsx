@@ -74,7 +74,9 @@ const roleAllowedPages = {
     "Accounting",
     "Shipping",
     "Shipping Balance",
-    "Warehouse / Fulfillment",
+    "Warehouse Dispatch",
+    "Warehouse Shipments",
+    "Warehouse Stock",
     "Service Takers",
     "Follow Ups",
     "Products",
@@ -114,7 +116,9 @@ const roleAllowedPages = {
     "Accounting",
     "Shipping",
     "Shipping Balance",
-    "Warehouse / Fulfillment",
+    "Warehouse Dispatch",
+    "Warehouse Shipments",
+    "Warehouse Stock",
     "Follow Ups",
     "Products",
     "Inventory",
@@ -221,12 +225,6 @@ const schoolMenuItems = [
 
 const menuItemByName = new Map(menuItems.map((item) => [item.name, item]));
 roleAllowedPages.super_admin = platformSuperAdminPages;
-
-const warehouseRoleOnlyPages = new Set([
-  "Warehouse Dispatch",
-  "Warehouse Shipments",
-  "Warehouse Stock",
-]);
 
 const getMenuInitials = (label) =>
   String(label)
@@ -530,10 +528,7 @@ function Sidebar({
     : menuOrder
         .map((page) => menuItemByName.get(page))
         .filter(
-          (item) =>
-            item &&
-            normalizedVisibleAllowedPages.includes(item.name) &&
-            (userRole === "warehouse" || !warehouseRoleOnlyPages.has(item.name))
+          (item) => item && normalizedVisibleAllowedPages.includes(item.name)
         );
   const visibleMenuCount = visibleMenuItems.length;
   const mobilePrimaryPageOrder =

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.7+4006
+version: 1.0.8+4007
 
 environment:
   sdk: ^3.13.2
@@ -38,7 +38,6 @@ dependencies:
   shared_preferences: ^2.5.3
   flutter_local_notifications: ^22.3.2
   flutter_background_service: ^5.1.0
-  flutter_webrtc: ^1.6.2+hotfix.4
   flutter_callkit_incoming: ^3.1.6
   share_plus: ^10.1.4
   firebase_core: ^5.0.0
@@ -56,6 +55,12 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+
+dependency_overrides:
+  flutter_callkit_incoming:
+    path: packages/flutter_callkit_incoming
+  share_plus:
+    path: packages/share_plus
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -153,16 +153,19 @@ object PhoneRing {
         currentContext = app
         releasePlayer()
         val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        previousMode = audio.mode
-        previousSpeaker = audio.isSpeakerphoneOn
-        audio.isSpeakerphoneOn = speaker
-        audio.mode = mode
+        val preserveCallAudio = kind == "outgoing" && callOwnsAudio
+        if (!preserveCallAudio) {
+            previousMode = audio.mode
+            previousSpeaker = audio.isSpeakerphoneOn
+            audio.isSpeakerphoneOn = speaker
+            audio.mode = mode
+        }
         val attributes = AudioAttributes.Builder()
             .setUsage(usage)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .setLegacyStreamType(stream)
             .build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (!preserveCallAudio && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
                 .setAudioAttributes(attributes)
                 .build()

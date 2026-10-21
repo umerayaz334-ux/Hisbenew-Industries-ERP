@@ -1,0 +1,14 @@
+{
+  "defaultFile": "hisbenew-erp-1.0.8-4007-universal.apk",
+  "build": 4007,
+  "version": "1.0.8",
+  "assets": [
+    {
+      "label": "Android install",
+      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.8-4007/hisbenew-erp-1.0.8-4007-universal.apk",
+      "file": "hisbenew-erp-1.0.8-4007-universal.apk",
+      "bytes": 61203877,
+      "sha256": "01d628abc6a5988382f2dcca6019328939d791a65aa40d467e706599acca2988"
+    }
+  ]
+}

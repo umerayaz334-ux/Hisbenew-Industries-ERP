@@ -8,6 +8,7 @@ import 'package:hisbenew_erp/src/app_model.dart';
 import 'package:hisbenew_erp/src/call_desk.dart';
 import 'package:hisbenew_erp/src/erp_api.dart';
 import 'package:hisbenew_erp/src/phone_permissions.dart';
+import 'package:hisbenew_erp/src/incoming_call.dart';
 
 class CallApi extends ErpApi {
   final actions = <String>[];
@@ -48,22 +49,56 @@ void main() {
     messenger.setMockMethodCallHandler(phone, null);
   });
 
-  testWidgets('call controls fit small phones and large text without overflow', (tester) async {
-    tester.view.physicalSize = const Size(320, 568);
+  testWidgets(
+    'call controls fit small phones and large text without overflow',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final desk = CallDesk(AppModel())
+        ..phase = 'connecting'
+        ..otherName = 'Factory administrator';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
+            child: Scaffold(body: CallCover(desk: desk)),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('Mute'), findsOneWidget);
+      expect(find.text('Speaker on'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      desk.dispose();
+      await tester.pump();
+    },
+  );
+
+  testWidgets('connected call shows duration and compact audio controls', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final desk = CallDesk(AppModel())..phase = 'connecting'..otherName = 'Factory administrator';
-    await tester.pumpWidget(MaterialApp(home: MediaQuery(
-      data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
-      child: Scaffold(body: CallCover(desk: desk)),
-    )));
-    expect(tester.takeException(), isNull);
+    final desk = CallDesk(AppModel())
+      ..phase = 'connected'
+      ..otherName = 'Warehouse Admin';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: CallCover(desk: desk)),
+      ),
+    );
+    expect(find.text('Warehouse Admin'), findsOneWidget);
+    expect(find.text('CALL IN PROGRESS'), findsOneWidget);
     expect(find.text('Mute'), findsOneWidget);
-    expect(find.text('Speaker'), findsOneWidget);
+    expect(find.text('Speaker on'), findsOneWidget);
+    expect(find.text('End'), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     desk.dispose();
-    await tester.pump();
   });
 
   AppModel model(CallApi api) => AppModel(api: api)
@@ -114,6 +149,72 @@ void main() {
     expect(await Future.wait([first, second]), [true, true]);
     expect(requests, 1);
   });
+
+  test('configured authenticated relays survive filtering', () {
+    final servers = withRelay([
+      {
+        'urls': 'turn:company.metered.ca:443',
+        'username': 'company',
+        'credential': 'temporary',
+      },
+      {
+        'urls': 'turn:retired.invalid:80',
+        'username': 'openrelayproject',
+        'credential': 'old',
+      },
+    ]);
+    expect(hasCallRelay(servers), true);
+    expect(servers.any((server) => server['username'] == 'company'), true);
+    expect(
+      servers.any((server) => server['username'] == 'openrelayproject'),
+      false,
+    );
+    expect(hasCallRelay(relayIceServers()), false);
+  });
+
+  test('incoming call uses native lock screen notification once with one ringtone owner', () async {
+    final methods = <String>[];
+    messenger.setMockMethodCallHandler(
+      const MethodChannel('flutter_callkit_incoming'),
+      (call) async {
+        methods.add(call.method);
+        if (call.method == 'activeCalls') return <dynamic>[];
+        return null;
+      },
+    );
+    messenger.setMockMethodCallHandler(phone, (call) async {
+      methods.add(call.method);
+      return null;
+    });
+    final params = incomingCallParams(callId: 991, name: 'Admin');
+    expect(params.android?.isFullScreen, false);
+    expect(params.android?.isShowFullLockedScreen, true);
+    await showIncomingIfNeeded(991, 'Admin');
+    await showIncomingIfNeeded(991, 'Admin');
+    expect(
+      methods.where((method) => method == 'showCallkitIncoming').length,
+      1,
+    );
+    expect(methods, isNot(contains('startIncomingRing')));
+    forgetIncomingScreen(991);
+  });
+
+  test(
+    'duplicate answer event cannot change audio of an active outgoing call',
+    () async {
+      final methods = <String>[];
+      messenger.setMockMethodCallHandler(phone, (call) async {
+        methods.add(call.method);
+        return null;
+      });
+      final desk = CallDesk(model(CallApi()))..phase = 'outgoing';
+      await desk.accept(callId: 42);
+      expect(desk.phase, 'outgoing');
+      expect(methods, isEmpty);
+      desk.dispose();
+      await Future<void>.delayed(Duration.zero);
+    },
+  );
 
   test(
     'native decline updates the server even before the app discovers the call',

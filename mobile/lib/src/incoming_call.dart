@@ -29,11 +29,18 @@ List<Map<String, dynamic>> withRelay(List<Map<String, dynamic>> servers) {
     final urls = '${server['urls']}';
     if (urls.isEmpty || !seen.add(urls)) continue;
     // Retired public relays answer slowly and never carry the call.
-    if ('${server['username']}' == 'openrelayproject' || urls.contains('metered.ca')) continue;
+    if ('${server['username']}' == 'openrelayproject') continue;
     merged.add(server);
   }
   return merged;
 }
+
+bool hasCallRelay(List<Map<String, dynamic>> servers) => servers.any((server) {
+  final raw = server['urls'];
+  final urls = raw is List ? raw : [raw];
+  return urls.any((url) => '$url'.startsWith('turn:') || '$url'.startsWith('turns:')) &&
+      '${server['username'] ?? ''}'.isNotEmpty && '${server['credential'] ?? ''}'.isNotEmpty;
+});
 
 String callScreenId(int callId) {
   final tail = callId.toRadixString(16).padLeft(12, '0');
@@ -56,7 +63,9 @@ CallKitParams incomingCallParams({required int callId, required String name}) {
     android: const AndroidParams(
       isCustomNotification: true,
       isShowFullLockedScreen: true,
-      isFullScreen: true,
+      // Use Android's call notification/full-screen intent. Forcing a direct
+      // Activity launch skips the plugin's notification and active-call record.
+      isFullScreen: false,
       isImportant: true,
       ringtonePath: 'hisbenew_ring',
       backgroundColor: '#141210',
@@ -86,9 +95,12 @@ Future<void> showIncomingIfNeeded(int callId, String name) async {
         prefs.getInt('erp.pendingAcceptCall') == callId) {
       return;
     }
+    final active = await FlutterCallkitIncoming.activeCalls();
+    if (active.any((call) => call.id == callScreenId(callId))) return;
     await prefs.setString('erp.ringingName', name);
     await FlutterCallkitIncoming.showCallkitIncoming(incomingCallParams(callId: callId, name: name));
-    await PhonePermissions.startIncomingRing();
+    // The native call notification owns incoming audio, including when no
+    // Flutter Activity exists. A second player would compete for audio focus.
   } catch (error) {
     _presentedIncoming.remove(callId);
     rethrow;

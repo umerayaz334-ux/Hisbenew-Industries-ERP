@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.ResultReceiver
 import androidx.core.app.NotificationCompat
 
 /** Started from the visible call screen, before opening the microphone. */
@@ -15,6 +16,8 @@ class VoiceCallService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        @Suppress("DEPRECATION")
+        val ready = intent?.getParcelableExtra<ResultReceiver>("ready")
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(NotificationChannel("hisbenew_voice", "Ongoing calls", NotificationManager.IMPORTANCE_LOW))
@@ -37,7 +40,9 @@ class VoiceCallService : Service() {
             } else {
                 startForeground(7012, notification)
             }
-        } catch (error: SecurityException) {
+            ready?.send(1, null)
+        } catch (error: RuntimeException) {
+            ready?.send(0, null)
             stopSelf()
         }
         return START_NOT_STICKY

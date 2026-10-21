@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class PhonePermissions {
   static const _channel = MethodChannel('hisbenew/phone');
+  static const _voiceFramesChannel = EventChannel('hisbenew/voice_frames');
   static const _askedKey = 'erp.micAsked';
   static Future<bool>? _request;
 
@@ -23,29 +24,81 @@ class PhonePermissions {
       _channel.invokeMethod('openSettings');
   static Future<void> soundSettings() async =>
       _channel.invokeMethod('soundSettings');
-  static Future<bool> testRingtone() async => await _channel.invokeMethod<bool>('testRingtone') == true;
+  static Future<bool> testRingtone() async =>
+      await _channel.invokeMethod<bool>('testRingtone') == true;
   static Future<void> startIncomingRing() async {
-    try { await _channel.invokeMethod('startIncomingRing'); } on PlatformException { return; }
+    try {
+      await _channel.invokeMethod('startIncomingRing');
+    } on PlatformException {
+      return;
+    }
   }
+
   static Future<void> stopIncomingRing() async {
-    try { await _channel.invokeMethod('stopIncomingRing'); } on PlatformException { return; }
+    try {
+      await _channel.invokeMethod('stopIncomingRing');
+    } on PlatformException {
+      return;
+    } on MissingPluginException {
+      return;
+    }
   }
+
   static Future<void> startOutgoingRing() async {
-    try { await _channel.invokeMethod('startOutgoingRing'); } on PlatformException { return; }
+    try {
+      await _channel.invokeMethod('startOutgoingRing');
+    } on PlatformException {
+      return;
+    }
   }
+
   static Future<void> stopOutgoingRing() async {
-    try { await _channel.invokeMethod('stopOutgoingRing'); } on PlatformException { return; }
+    try {
+      await _channel.invokeMethod('stopOutgoingRing');
+    } on PlatformException {
+      return;
+    }
   }
+
   /// Stops the ringtone without putting the speaker back to normal mode.
   static Future<void> releaseCallTone() async {
-    try { await _channel.invokeMethod('releaseCallTone'); } on PlatformException { return; }
+    try {
+      await _channel.invokeMethod('releaseCallTone');
+    } on PlatformException {
+      return;
+    } on MissingPluginException {
+      return;
+    }
   }
+
   static Future<void> notificationSettings() async =>
       _channel.invokeMethod('notificationSettings');
   static Future<void> startVoiceService() async =>
       _channel.invokeMethod('startVoiceService');
   static Future<void> stopVoiceService() async =>
       _channel.invokeMethod('stopVoiceService');
+  static Future<bool> startVoiceRelay() async =>
+      await _channel.invokeMethod<bool>('startVoiceRelay') == true;
+  static Future<void> stopVoiceRelay() async {
+    try {
+      await _channel.invokeMethod('stopVoiceRelay');
+    } on PlatformException {
+      return;
+    } on MissingPluginException {
+      return;
+    }
+  }
+
+  static Stream<Uint8List> voiceFrames() =>
+      _voiceFramesChannel.receiveBroadcastStream().map((event) {
+        if (event is Uint8List) return event;
+        if (event is List<int>) return Uint8List.fromList(event);
+        throw StateError('Invalid microphone frame');
+      });
+  static Future<void> playVoice(Uint8List frame) =>
+      _channel.invokeMethod('playVoice', frame);
+  static Future<void> setVoiceSpeaker(bool enabled) =>
+      _channel.invokeMethod('setVoiceSpeaker', enabled);
 
   static Future<bool> granted() async {
     try {
@@ -138,17 +191,27 @@ class _CallPermissionTileState extends State<CallPermissionTile>
         trailing: const Icon(Icons.chevron_right),
         onTap: PhonePermissions.soundSettings,
       ),
-    Align(alignment: Alignment.centerLeft, child: TextButton.icon(
-      icon: const Icon(Icons.play_circle_outline), label: const Text('Test ringtone'),
-      onPressed: () async {
-        final playing = await PhonePermissions.testRingtone();
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
-          playing ? 'Playing a 4-second preview. If silent, check Do Not Disturb and phone sound settings.' : 'Turn off silent/vibrate mode and increase ringtone volume in phone settings.',
-          )));
-        }
-      },
-    )),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          icon: const Icon(Icons.play_circle_outline),
+          label: const Text('Test ringtone'),
+          onPressed: () async {
+            final playing = await PhonePermissions.testRingtone();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    playing
+                        ? 'Playing a 4-second preview. If silent, check Do Not Disturb and phone sound settings.'
+                        : 'Turn off silent/vibrate mode and increase ringtone volume in phone settings.',
+                  ),
+                ),
+              );
+            }
+          },
+        ),
+      ),
     ],
   );
 }

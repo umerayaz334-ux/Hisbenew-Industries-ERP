@@ -15,7 +15,7 @@ import 'incoming_call.dart';
 import 'notification_navigation.dart';
 
 const _watchChannelId = 'hisbenew_watch';
-const _alertChannelId = 'hisbenew_orders';
+const _alertChannelId = 'hisbenew_orders_lock_v2';
 
 final _notifications = FlutterLocalNotificationsPlugin();
 
@@ -63,22 +63,41 @@ Future<void> stopOrderWatch() async {
   await _notifications.cancelAll();
 }
 
-Future<void> refreshMessageNotifications() async {
+Future<void> refreshMessageNotifications({int? eventId}) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
   final token = prefs.getString('erp.token') ?? '';
   if (token.isEmpty) return;
-  await _notifications.initialize(settings: const InitializationSettings(
-    android: AndroidInitializationSettings('@drawable/ic_stat_hisbenew')),
-    onDidReceiveNotificationResponse: (response) => openNotificationPayload(response.payload));
-  await _watchMessages(prefs, token, _notifications);
+  await _notifications.initialize(
+    settings: const InitializationSettings(
+      android: AndroidInitializationSettings('@drawable/ic_stat_hisbenew'),
+    ),
+    onDidReceiveNotificationResponse: (response) =>
+        openNotificationPayload(response.payload),
+  );
+  await _watchMessages(prefs, token, _notifications, eventId: eventId);
+}
+
+Future<void> refreshOrderNotifications({int? eventId}) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final token = prefs.getString('erp.token') ?? '';
+  if (token.isEmpty || prefs.getString('erp.role')?.toLowerCase() != 'worker')
+    return;
+  await _notifications.initialize(
+    settings: const InitializationSettings(
+      android: AndroidInitializationSettings('@drawable/ic_stat_hisbenew'),
+    ),
+  );
+  await _watchOrders(prefs, token, _notifications, eventId: eventId);
 }
 
 Future<void> _prepareNotifications() async {
   const android = AndroidInitializationSettings('@drawable/ic_stat_hisbenew');
   await _notifications.initialize(
     settings: const InitializationSettings(android: android),
-    onDidReceiveNotificationResponse: (response) => openNotificationPayload(response.payload),
+    onDidReceiveNotificationResponse: (response) =>
+        openNotificationPayload(response.payload),
   );
   final launch = await _notifications.getNotificationAppLaunchDetails();
   if (launch?.didNotificationLaunchApp == true) {
@@ -152,6 +171,7 @@ Future<void> orderWatchStart(ServiceInstance service) async {
     const Duration(seconds: 2),
     (_) => tickCalls(),
   );
+  service.on('checkIncoming').listen((_) => tickCalls());
   tickCalls();
   if (service is AndroidServiceInstance) {
     service.on('stop').listen((_) {
@@ -202,15 +222,21 @@ Future<void> orderWatchStart(ServiceInstance service) async {
 Future<void> _watchOrders(
   SharedPreferences prefs,
   String token,
-  FlutterLocalNotificationsPlugin notes,
-) async {
+  FlutterLocalNotificationsPlugin notes, {
+  int? eventId,
+}) async {
   final known = prefs.containsKey('erp.orderAlertAfter');
-  final afterId = prefs.getInt('erp.orderAlertAfter') ?? 0;
+  final storedAfterId = prefs.getInt('erp.orderAlertAfter') ?? 0;
+  final afterId = !known && eventId != null && eventId > 0
+      ? eventId - 1
+      : storedAfterId;
   try {
     final uri = Uri.parse(
       known
           ? '$erpApiBase/worker-order-alerts?after_id=$afterId'
-          : '$erpApiBase/worker-order-alerts?seed=true',
+          : !known && (eventId == null || eventId <= 0)
+          ? '$erpApiBase/worker-order-alerts?seed=true'
+          : '$erpApiBase/worker-order-alerts?after_id=$afterId',
     );
     final response = await http
         .get(
@@ -223,6 +249,8 @@ Future<void> _watchOrders(
         .timeout(const Duration(seconds: 20));
     if (response.statusCode == 401 || response.statusCode == 403) return;
     if (response.statusCode == 200 && response.body.isNotEmpty) {
+      await prefs.reload();
+      if (prefs.getString('erp.token') != token) return;
       final body = jsonDecode(response.body);
       if (body is Map) {
         final latest = int.tryParse('${body['latest_id']}') ?? afterId;
@@ -233,7 +261,7 @@ Future<void> _watchOrders(
                   if (row is Map) row,
               ]
             : const <Map>[];
-        if (!known) {
+        if (!known && (eventId == null || eventId <= 0)) {
           await prefs.setInt('erp.orderAlertAfter', latest);
         } else if (orders.isNotEmpty) {
           await _notify(notes, orders);
@@ -247,8 +275,9 @@ Future<void> _watchOrders(
 Future<void> _watchMessages(
   SharedPreferences prefs,
   String token,
-  FlutterLocalNotificationsPlugin notes,
-) async {
+  FlutterLocalNotificationsPlugin notes, {
+  int? eventId,
+}) async {
   try {
     final response = await http
         .get(
@@ -265,7 +294,10 @@ Future<void> _watchMessages(
     final body = jsonDecode(response.body);
     if (body is! List) return;
     var unread = 0;
-    final account = '${prefs.getString('erp.tenantSlug')}|${prefs.getString('erp.username')}';
+    final account =
+        '${prefs.getString('erp.tenantSlug')}|${prefs.getString('erp.username')}';
+    final seededKey = 'erp.messageAlertSeeded.$account';
+    final seeded = prefs.getBool(seededKey) == true;
     for (final row in body) {
       if (row is! Map) continue;
       final count = int.tryParse('${row['unread_count']}') ?? 0;
@@ -284,12 +316,20 @@ Future<void> _watchMessages(
       final marker = messageId > 0 ? '$messageId' : '${row['last_message_at']}';
       await prefs.reload();
       if (prefs.getString(cursor) == marker) continue;
+      if (!seeded &&
+          (eventId == null || eventId <= 0 || messageId != eventId)) {
+        await prefs.setString(cursor, marker);
+        continue;
+      }
       final name = '${row['name'] ?? ''}'.trim();
       final who = name.isEmpty ? 'New message' : name;
       final preview = '${row['unread_message_preview'] ?? ''}'.trim();
       final text = preview.isEmpty ? 'Sent you a message' : preview;
-      final timestamp = DateTime.tryParse('${row['unread_message_at']}') ?? DateTime.now();
-      final recent = row['unread_messages'] is List ? row['unread_messages'] as List : const [];
+      final timestamp =
+          DateTime.tryParse('${row['unread_message_at']}') ?? DateTime.now();
+      final recent = row['unread_messages'] is List
+          ? row['unread_messages'] as List
+          : const [];
       await notes.show(
         id: notificationId,
         title: who,
@@ -297,7 +337,8 @@ Future<void> _watchMessages(
         payload: 'chat:$senderId',
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
-            messageChannel, 'Messages',
+            messageChannel,
+            'Messages',
             channelDescription: 'Chat messages on the lock screen',
             importance: Importance.max,
             priority: Priority.max,
@@ -313,9 +354,23 @@ Future<void> _watchMessages(
             styleInformation: MessagingStyleInformation(
               const Person(name: 'You'),
               groupConversation: false,
-              messages: recent.isEmpty ? [Message(text, timestamp, Person(name: who, key: '$senderId'))] : [
-                for (final entry in recent.whereType<Map>()) Message('${entry['body'] ?? ''}', DateTime.tryParse('${entry['created_at']}') ?? timestamp, Person(name: who, key: '$senderId')),
-              ],
+              messages: recent.isEmpty
+                  ? [
+                      Message(
+                        text,
+                        timestamp,
+                        Person(name: who, key: '$senderId'),
+                      ),
+                    ]
+                  : [
+                      for (final entry in recent.whereType<Map>())
+                        Message(
+                          '${entry['body'] ?? ''}',
+                          DateTime.tryParse('${entry['created_at']}') ??
+                              timestamp,
+                          Person(name: who, key: '$senderId'),
+                        ),
+                    ],
             ),
           ),
         ),
@@ -325,6 +380,7 @@ Future<void> _watchMessages(
       await prefs.setString(cursor, marker);
     }
     await prefs.reload();
+    if (!seeded) await prefs.setBool(seededKey, true);
     await prefs.setInt('erp.chatUnread', unread);
   } catch (_) {}
 }
@@ -356,7 +412,12 @@ Future<void> _notify(
         'New orders',
         channelDescription: 'When the office or Muse adds an order',
         importance: Importance.max,
-        priority: Priority.high,
+        priority: Priority.max,
+        visibility: NotificationVisibility.public,
+        playSound: true,
+        enableVibration: true,
+        autoCancel: true,
+        category: AndroidNotificationCategory.status,
         icon: '@drawable/ic_stat_hisbenew',
         styleInformation: BigTextStyleInformation(body),
       ),
