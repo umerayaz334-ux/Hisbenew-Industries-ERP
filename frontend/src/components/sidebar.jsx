@@ -509,6 +509,10 @@ function Sidebar({
     ? allowedPages
     : roleAllowedPages[userRole] || roleAllowedPages.worker;
   const normalizedVisibleAllowedPages = effectiveAllowedPages;
+  const manufacturingOnlyServiceTaker = userRole === "service_taker" &&
+    normalizedVisibleAllowedPages.includes("Service Manufacturing") &&
+    !normalizedVisibleAllowedPages.includes("Service Inbound") &&
+    !normalizedVisibleAllowedPages.includes("Service Shipments");
   const visibleMenuItems = isSchoolWorkspace
     ? schoolMenuItems
         .filter(
@@ -528,11 +532,14 @@ function Sidebar({
     : menuOrder
         .map((page) => menuItemByName.get(page))
         .filter(
-          (item) => item && normalizedVisibleAllowedPages.includes(item.name)
+          (item) => item && normalizedVisibleAllowedPages.includes(item.name) &&
+            (!manufacturingOnlyServiceTaker || ["Service Dashboard", "Service Manufacturing", "Service Charges"].includes(item.name))
         );
   const visibleMenuCount = visibleMenuItems.length;
   const mobilePrimaryPageOrder =
-    userRole === "service_taker"
+    manufacturingOnlyServiceTaker
+      ? ["Service Dashboard", "Service Manufacturing", "Service Charges"]
+      : userRole === "service_taker"
       ? [
           "Service Dashboard",
           "Service Products",
@@ -619,10 +626,18 @@ function Sidebar({
   const schoolLogoSource = schoolSettings?.logo_data_url || defaultSchoolLogo;
   const showWorkspaceSwitch = Boolean(onSwitchWorkspace) && (!isSchoolWorkspace || canSwitchToFactory) && (isSchoolWorkspace || canSwitchToSchool);
 
-  const getItemLabel = (item) =>
-    userRole === "worker" && item.workerLabel
-      ? item.workerLabel
-      : item.label || item.name;
+  const getItemLabel = (item) => {
+    if (userRole === "worker" && item.workerLabel) return item.workerLabel;
+    if (manufacturingOnlyServiceTaker) {
+      const serviceLabels = {
+        "Service Dashboard": "Home",
+        "Service Manufacturing": "Orders",
+        "Service Charges": "Payments",
+      };
+      if (serviceLabels[item.name]) return serviceLabels[item.name];
+    }
+    return item.label || item.name;
+  };
 
   const mobileLabel = (item) =>
     item.name === "Dashboard" ? "Home" : getItemLabel(item);
@@ -637,7 +652,7 @@ function Sidebar({
     <aside
       className={`sidebar ${collapsed ? "is-collapsed" : ""} ${
         mobileMenuOpen ? "has-mobile-menu" : ""
-      } ${isSchoolWorkspace ? "school-workspace-sidebar" : ""}`.trim()}
+      } ${isSchoolWorkspace ? "school-workspace-sidebar" : ""} ${manufacturingOnlyServiceTaker ? "is-manufacturing-service-sidebar" : ""}`.trim()}
     >
       <div className="brand-box">
         <div className="brand-mark">

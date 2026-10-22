@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
+import ManufacturingServicePortal from "./ManufacturingServicePortal";
 import "./ServiceTakerWorkspace.css";
 import "./LocalOrders.css";
 
@@ -604,8 +605,9 @@ export default function ServiceTakerWorkspace({
   const portalAccountType = portalFulfillmentEnabled && portalManufacturingEnabled
     ? "Fulfillment and local orders"
     : portalManufacturingEnabled
-      ? "Local orders"
+      ? "Manufacturing"
       : "Fulfillment";
+  const isManufacturingOnlyPortal = !isAdmin && !portalFulfillmentEnabled && portalManufacturingEnabled;
 
   const filterClientId =
     clientFilter === "all" || !clientFilter ? null : Number(clientFilter);
@@ -1290,7 +1292,10 @@ const visibleProducts = useMemo(
       packaging: order.packaging || "",
       quoted_unit_price: order.quoted_unit_price || "",
       tooling_cost: order.tooling_cost || "",
+      other_cost: order.other_cost || "",
       deposit_required: order.deposit_required || "",
+      courier: order.courier || "",
+      tracking_number: order.tracking_number || "",
       estimated_ready_at: order.estimated_ready_at
         ? String(order.estimated_ready_at).slice(0, 10)
         : "",
@@ -1313,6 +1318,10 @@ const visibleProducts = useMemo(
     try {
       await api.patch(`/service-takers/admin/local-orders/${order.id}`, {
         status: targetStage,
+        ...(targetStage === "Completed" ? {
+          courier: manufacturingAdminForm.courier || order.courier || null,
+          tracking_number: manufacturingAdminForm.tracking_number || order.tracking_number || null,
+        } : {}),
         update_message: `Workflow advanced to ${targetStage} from company console.`,
       });
       showSuccess(`Order status updated to ${targetStage}.`);
@@ -1350,6 +1359,7 @@ const visibleProducts = useMemo(
           ...manufacturingAdminForm,
           quoted_unit_price: Number(manufacturingAdminForm.quoted_unit_price || 0),
           tooling_cost: Number(manufacturingAdminForm.tooling_cost || 0),
+          other_cost: Number(manufacturingAdminForm.other_cost || 0),
           deposit_required: Number(manufacturingAdminForm.deposit_required || 0),
           blade_thickness_mm: optionalNumber(manufacturingAdminForm.blade_thickness_mm),
           blade_length_in: optionalNumber(manufacturingAdminForm.blade_length_in),
@@ -1886,9 +1896,21 @@ const tabs = [
     return <div className="service-page-loading">Loading service portal...</div>;
   }
 
+  if (isManufacturingOnlyPortal) {
+    return (
+      <ManufacturingServicePortal
+        data={data}
+        error={error}
+        load={load}
+        onError={setError}
+        section={activeTab}
+      />
+    );
+  }
+
   return (
     <div
-      className={`service-workspace ${isAdmin ? "is-admin" : "is-portal"} ${
+      className={`service-workspace ${isAdmin ? "is-admin" : "is-portal"} ${isManufacturingOnlyPortal ? "is-manufacturing-only" : ""} ${
         activeTab === "dashboard" && !isAdmin ? "is-dashboard-view" : ""
       }`.trim()}
     >
@@ -1898,11 +1920,13 @@ const tabs = [
             <span className="service-eyebrow">
               {isAdmin ? "Third-party fulfillment" : portalPageTitle}
             </span>
-            <h1>{isAdmin ? adminPageTitle : data.client?.company_name || "Service Portal"}</h1>
+            <h1>{isAdmin ? adminPageTitle : isManufacturingOnlyPortal ? "Manufacturing workspace" : data.client?.company_name || "Service Portal"}</h1>
             <p>
               {isAdmin
                 ? adminPageDetail
-                : `${portalAccountType} portal account ${data.client?.contact_name || ""}`}
+                : isManufacturingOnlyPortal
+                  ? `Production quotes, progress and payments${data.client?.company_name ? ` for ${data.client.company_name}` : ""}`
+                  : `${portalAccountType} portal account ${data.client?.contact_name || ""}`}
             </p>
           </div>
           <div className="service-header-actions">
@@ -3194,9 +3218,20 @@ const tabs = [
         
 
         {activeTab === "manufacturing" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: !isAdmin ? "20px 24px" : "0", background: !isAdmin ? "#f8fafc" : "transparent", minHeight: !isAdmin ? "calc(100vh - 64px)" : "auto", width: "100%", boxSizing: "border-box" }}>
+          <div className={!isAdmin ? "service-manufacturing-portal" : undefined} style={{ display: "flex", flexDirection: "column", gap: 16, padding: !isAdmin ? "20px 24px" : "0", background: !isAdmin ? "#f8fafc" : "transparent", minHeight: !isAdmin ? "calc(100vh - 64px)" : "auto", width: "100%", boxSizing: "border-box" }}>
             {!isAdmin ? (
               <>
+                <div className="service-manufacturing-welcome">
+                  <div>
+                    <span>MANUFACTURING OVERVIEW</span>
+                    <h2>Keep every production request moving.</h2>
+                    <p>Track quotes, production progress, delivery readiness and payments in one place.</p>
+                  </div>
+                  <button className="service-primary-button" onClick={() => openManufacturingModal()} type="button">
+                    <span>＋</span> Request a quote
+                  </button>
+                </div>
+
                 {/* Top Metrics Cards */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
                   <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 6, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
@@ -4693,6 +4728,20 @@ const tabs = [
                   />
                 </label>
                 <label>
+                  Other Cost ({isRupeeCurrency(selectedManufacturing.currency) ? "Rs" : selectedManufacturing.currency || 'USD'})
+                  <input
+                    inputMode={isRupeeCurrency(selectedManufacturing.currency) ? "numeric" : "decimal"}
+                    min="0"
+                    onChange={(event) => setManufacturingAdminForm((current) => ({
+                      ...current,
+                      other_cost: sanitizeAmountInput(event.target.value, selectedManufacturing.currency),
+                    }))}
+                    step={isRupeeCurrency(selectedManufacturing.currency) ? "1" : "0.01"}
+                    type="number"
+                    value={manufacturingAdminForm.other_cost ?? ""}
+                  />
+                </label>
+                <label>
                   Deposit Required ({isRupeeCurrency(selectedManufacturing.currency) ? "Rs" : selectedManufacturing.currency || 'USD'})
                   <input
                   inputMode={isRupeeCurrency(selectedManufacturing.currency) ? "numeric" : "decimal"}
@@ -4719,6 +4768,22 @@ const tabs = [
                     }
                     type="date"
                     value={manufacturingAdminForm.estimated_ready_at || ""}
+                  />
+                </label>
+                <label>
+                  Courier / Delivery Company
+                  <input
+                    onChange={(event) => setManufacturingAdminForm((current) => ({ ...current, courier: event.target.value }))}
+                    placeholder="TCS, DHL, etc."
+                    value={manufacturingAdminForm.courier || ""}
+                  />
+                </label>
+                <label>
+                  Tracking Number
+                  <input
+                    onChange={(event) => setManufacturingAdminForm((current) => ({ ...current, tracking_number: event.target.value }))}
+                    placeholder="Add dispatch tracking"
+                    value={manufacturingAdminForm.tracking_number || ""}
                   />
                 </label>
                 <label className="service-wide-field">

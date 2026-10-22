@@ -250,6 +250,59 @@
   color: #ffffff;
 }
 
+.sidebar.is-manufacturing-service-sidebar {
+  border-color: #dce8df;
+  background: #fbfdfb;
+  color: #203128;
+}
+
+.sidebar.is-manufacturing-service-sidebar .brand-mark {
+  border: 0;
+  border-radius: 12px;
+  background: #176b4d;
+}
+
+.sidebar.is-manufacturing-service-sidebar .brand-box {
+  min-height: 66px;
+  padding-inline: 8px;
+  border-bottom-color: #e5ede7;
+}
+
+.sidebar.is-manufacturing-service-sidebar .sidebar-menu {
+  gap: 5px;
+  padding: 14px 5px;
+}
+
+.sidebar.is-manufacturing-service-sidebar .menu-button {
+  min-height: 48px;
+  gap: 12px;
+  padding-inline: 12px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: #65736a;
+  font-size: 12px;
+}
+
+.sidebar.is-manufacturing-service-sidebar .menu-button:hover {
+  border-color: #e4ece6;
+  background: #f3f8f4;
+  color: #176b4d;
+}
+
+.sidebar.is-manufacturing-service-sidebar .menu-button.active {
+  border-color: #d8eade;
+  background: #eaf5ed;
+  color: #176b4d;
+  box-shadow: none;
+}
+
+.sidebar.is-manufacturing-service-sidebar .menu-button.active .menu-icon {
+  border-color: #176b4d;
+  border-radius: 8px;
+  background: #176b4d;
+  color: #fff;
+}
+
 .menu-initial {
   display: none;
 }
@@ -1046,6 +1099,41 @@
   .menu-initial,
   .sidebar.is-collapsed .menu-initial {
     display: none;
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .sidebar-menu,
+  .sidebar.is-manufacturing-service-sidebar.sidebar.is-collapsed .sidebar-menu {
+    min-height: calc(72px + env(safe-area-inset-bottom, 0px));
+    max-height: calc(72px + env(safe-area-inset-bottom, 0px));
+    justify-content: space-around;
+    padding: 7px 14px calc(7px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid #e2eae4;
+    border-radius: 17px 17px 0 0;
+    background: rgba(252, 254, 252, .98);
+    box-shadow: 0 -7px 24px rgba(28, 66, 42, .09);
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .menu-button,
+  .sidebar.is-manufacturing-service-sidebar.sidebar.is-collapsed .menu-button {
+    width: min(31vw, 132px);
+    min-width: 0;
+    max-width: 132px;
+    min-height: 57px;
+    border-radius: 13px;
+    color: #738078;
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .menu-button.active,
+  .sidebar.is-manufacturing-service-sidebar.sidebar.is-collapsed .menu-button.active {
+    background: #eaf5ed;
+    color: #176b4d;
+    box-shadow: none;
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .menu-button.active .menu-icon {
+    border-color: transparent;
+    background: transparent;
+    color: #176b4d;
   }
 }
 

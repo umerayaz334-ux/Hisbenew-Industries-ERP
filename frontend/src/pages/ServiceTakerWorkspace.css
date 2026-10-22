@@ -4700,6 +4700,118 @@
   padding: 0;
 }
 
+.service-workspace.is-manufacturing-only .service-workbench {
+  margin: 0 !important;
+}
+
+.service-workspace.is-manufacturing-only {
+  --service-green: #176b4d;
+  background: #f4f7f5;
+}
+
+.service-workspace.is-manufacturing-only .service-page-header {
+  min-height: 132px;
+  padding-block: 24px;
+  border-bottom-color: #dfe7e2;
+}
+
+.service-workspace.is-manufacturing-only .service-page-header h1 {
+  font-size: clamp(26px, 3vw, 34px);
+  letter-spacing: -0.035em;
+}
+
+.service-workspace.is-manufacturing-only .service-page-header p {
+  font-size: 14px;
+}
+
+.service-manufacturing-portal {
+  gap: 20px !important;
+  padding: 24px clamp(16px, 3vw, 40px) 40px !important;
+  background: #f4f7f5 !important;
+}
+
+.service-manufacturing-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 25px 28px;
+  border: 1px solid #d9e8df;
+  border-radius: 16px;
+  background: linear-gradient(120deg, #e8f4ed 0%, #f7fbf8 72%);
+}
+
+.service-manufacturing-welcome > div > span {
+  color: #176b4d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+
+.service-manufacturing-welcome h2 {
+  margin: 8px 0 5px;
+  color: #17251d;
+  font-size: clamp(20px, 2.4vw, 28px);
+  letter-spacing: -.035em;
+}
+
+.service-manufacturing-welcome p {
+  margin: 0;
+  color: #627168;
+  font-size: 13px;
+}
+
+.service-manufacturing-welcome .service-primary-button {
+  min-height: 46px;
+  padding-inline: 18px;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+
+.service-workspace.is-manufacturing-only .service-manufacturing-portal > div[style*="minmax(220px"]:not(.service-manufacturing-welcome) > div {
+  min-height: 128px;
+  padding: 20px 22px !important;
+  border-color: #e2e9e5 !important;
+  border-radius: 13px !important;
+  box-shadow: 0 5px 20px rgba(24, 48, 35, .045) !important;
+}
+
+.service-workspace.is-manufacturing-only .service-manufacturing-portal > div[style*="minmax(220px"]:not(.service-manufacturing-welcome) > div strong {
+  font-size: 30px !important;
+  letter-spacing: -.04em;
+}
+
+.service-workspace.is-manufacturing-only .service-manufacturing-portal > div[style*="space-between"] {
+  border-color: #e2e9e5 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 16px rgba(24, 48, 35, .035) !important;
+}
+
+.service-workspace.is-manufacturing-only .service-manufacturing-portal > div[style*="space-between"] button {
+  border-radius: 8px !important;
+}
+
+@media (max-width: 700px) {
+  .service-workspace.is-manufacturing-only .service-page-header {
+    min-height: 112px;
+    padding: 20px 16px;
+  }
+
+  .service-workspace.is-manufacturing-only .service-page-header .service-header-actions {
+    align-self: flex-start;
+  }
+
+  .service-manufacturing-welcome {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 20px;
+  }
+
+  .service-manufacturing-welcome .service-primary-button {
+    width: 100%;
+  }
+}
+
 .service-workspace.is-portal .service-workbench {
   margin: 16px clamp(12px, 2.5vw, 32px) 32px;
   background: transparent;

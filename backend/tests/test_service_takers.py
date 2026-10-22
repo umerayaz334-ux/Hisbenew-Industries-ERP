@@ -16,6 +16,8 @@ from app.service_takers.models import (
     ServiceTakerProduct,
 )
 from app.service_takers.router import (
+    admin_confirm_manufacturing_payment,
+    admin_update_manufacturing_request,
     admin_dashboard,
     create_client,
     portal_create_inbound,
@@ -23,6 +25,8 @@ from app.service_takers.router import (
     portal_create_product,
     portal_cancel_order,
     portal_dashboard,
+    portal_create_manufacturing_payment_request,
+    portal_create_manufacturing_request,
     portal_upload_product_image,
     portal_upload_label,
     receive_inbound,
@@ -30,6 +34,8 @@ from app.service_takers.router import (
     update_order,
 )
 from app.service_takers.schemas import (
+    ServiceTakerManufacturingAdminUpdate,
+    ServiceTakerManufacturingRequestCreate,
     ServiceTakerCreate,
     ServiceTakerInboundCreate,
     ServiceTakerInboundReceive,
@@ -319,6 +325,68 @@ class ServiceTakerTests(unittest.TestCase):
         self.assertEqual(admin_cancelled["pick_pack_cost"], 0)
         self.assertEqual(admin_cancelled["label_cost"], 0)
         self.assertEqual(admin_cancelled["other_cost"], 0)
+
+    def test_manufacturing_only_order_quote_cost_tracking_and_payment_review(self):
+        client = create_client(
+            ServiceTakerCreate(
+                company_name="Manufacturing Client",
+                contact_name="Amina Shah",
+                username="manufacturing-client",
+                pin="2468",
+                currency="PKR",
+                fulfillment_enabled=False,
+                manufacturing_enabled=True,
+            ),
+            self.request(self.admin_id),
+            self.db,
+        )
+        user_id = client["user_id"]
+        order = portal_create_manufacturing_request(
+            ServiceTakerManufacturingRequestCreate(
+                product_name="Custom product",
+                quantity=5,
+                notes="Use the attached reference design.",
+            ),
+            self.request(user_id),
+            self.db,
+        )
+        self.assertEqual(order["status"], "Quote requested")
+        self.assertEqual(order["quantity"], 5)
+
+        quoted = admin_update_manufacturing_request(
+            order["id"],
+            ServiceTakerManufacturingAdminUpdate(
+                status="Completed",
+                quoted_unit_price=10,
+                tooling_cost=20,
+                other_cost=5,
+                courier="TCS",
+                tracking_number="PK-TRACK-123",
+            ),
+            self.request(self.admin_id),
+            self.db,
+        )
+        self.assertEqual(quoted["quoted_total"], 75)
+        self.assertEqual(quoted["courier"], "TCS")
+        self.assertEqual(quoted["tracking_number"], "PK-TRACK-123")
+
+        payment_order = portal_create_manufacturing_payment_request(
+            order["id"],
+            self.request(user_id),
+            amount=25,
+            payment_type="Deposit",
+            note="Bank transfer sent",
+            proof_file=None,
+            db=self.db,
+        )
+        payment = payment_order["payments"][0]
+        self.assertEqual(payment["status"], "Pending confirmation")
+        self.assertEqual(payment["amount"], 25)
+        confirmed = admin_confirm_manufacturing_payment(
+            order["id"], payment["id"], self.request(self.admin_id), self.db
+        )
+        self.assertEqual(confirmed["paid_total"], 25)
+        self.assertEqual(confirmed["payments"][0]["status"], "Confirmed")
 
 
 if __name__ == "__main__":

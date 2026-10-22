@@ -177,7 +177,10 @@ class ServiceTakerManufacturingAdminUpdate(BaseModel):
     packaging: str | None = Field(default=None, max_length=160)
     quoted_unit_price: float | None = Field(default=None, ge=0)
     tooling_cost: float | None = Field(default=None, ge=0)
+    other_cost: float | None = Field(default=None, ge=0)
     deposit_required: float | None = Field(default=None, ge=0)
+    courier: str | None = Field(default=None, max_length=160)
+    tracking_number: str | None = Field(default=None, max_length=200)
     estimated_ready_at: datetime | None = None
     admin_notes: str | None = Field(default=None, max_length=6000)
     update_message: str | None = Field(default=None, max_length=4000)

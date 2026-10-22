@@ -233,7 +233,10 @@ export default function LocalOrders() {
     status: "Quoted",
     quoted_unit_price: "",
     tooling_cost: "",
+    other_cost: "",
     deposit_required: "",
+    courier: "",
+    tracking_number: "",
     estimated_ready_at: "",
     update_message: "",
     admin_notes: "",
@@ -316,7 +319,10 @@ export default function LocalOrders() {
       status: order.status || "Quote requested",
       quoted_unit_price: order.quoted_unit_price ?? "",
       tooling_cost: order.tooling_cost ?? "",
+      other_cost: order.other_cost ?? "",
       deposit_required: order.deposit_required ?? "",
+      courier: order.courier || "",
+      tracking_number: order.tracking_number || "",
       estimated_ready_at: order.estimated_ready_at ? order.estimated_ready_at.slice(0, 10) : "",
       update_message: "",
       admin_notes: order.admin_notes || "",
@@ -340,6 +346,10 @@ export default function LocalOrders() {
     try {
       await api.patch(`/service-takers/admin/local-orders/${order.id}`, {
         status: targetStage,
+        ...(targetStage === "Completed" ? {
+          courier: quoteForm.courier || order.courier || null,
+          tracking_number: quoteForm.tracking_number || order.tracking_number || null,
+        } : {}),
         update_message: `Workflow advanced to ${targetStage} from company console.`,
       });
       setNotice(`Order status updated to ${targetStage}.`);
@@ -362,7 +372,10 @@ export default function LocalOrders() {
         status: quoteForm.status,
         quoted_unit_price: quoteForm.quoted_unit_price === "" ? null : Number(quoteForm.quoted_unit_price),
         tooling_cost: quoteForm.tooling_cost === "" ? null : Number(quoteForm.tooling_cost),
+        other_cost: quoteForm.other_cost === "" ? null : Number(quoteForm.other_cost),
         deposit_required: quoteForm.deposit_required === "" ? null : Number(quoteForm.deposit_required),
+        courier: quoteForm.courier || null,
+        tracking_number: quoteForm.tracking_number || null,
         estimated_ready_at: quoteForm.estimated_ready_at ? `${quoteForm.estimated_ready_at}T00:00:00` : null,
         update_message: quoteForm.update_message || null,
         admin_notes: quoteForm.admin_notes || null,
@@ -1089,6 +1102,22 @@ export default function LocalOrders() {
                       />
                     </label>
                     <label>
+                      Other Cost ({isRupeeCurrency(selectedOrder.currency) ? "Rs" : selectedOrder.currency || 'USD'})
+                      <input
+                        inputMode={isRupeeCurrency(selectedOrder.currency) ? "numeric" : "decimal"}
+                        min="0"
+                        onChange={(event) =>
+                          setQuoteForm((current) => ({
+                            ...current,
+                            other_cost: sanitizeAmountInput(event.target.value, selectedOrder.currency),
+                          }))
+                        }
+                        step={isRupeeCurrency(selectedOrder.currency) ? "1" : "0.01"}
+                        type="number"
+                        value={quoteForm.other_cost ?? ""}
+                      />
+                    </label>
+                    <label>
                       Deposit Required ({isRupeeCurrency(selectedOrder.currency) ? "Rs" : selectedOrder.currency || 'USD'})
                       <input
                       inputMode={isRupeeCurrency(selectedOrder.currency) ? "numeric" : "decimal"}
@@ -1115,6 +1144,22 @@ export default function LocalOrders() {
                         }
                         type="date"
                         value={quoteForm.estimated_ready_at || ""}
+                      />
+                    </label>
+                    <label>
+                      Courier / Delivery Company
+                      <input
+                        onChange={(event) => setQuoteForm((current) => ({ ...current, courier: event.target.value }))}
+                        placeholder="e.g. TCS, DHL"
+                        value={quoteForm.courier || ""}
+                      />
+                    </label>
+                    <label>
+                      Tracking Number
+                      <input
+                        onChange={(event) => setQuoteForm((current) => ({ ...current, tracking_number: event.target.value }))}
+                        placeholder="Enter after dispatch"
+                        value={quoteForm.tracking_number || ""}
                       />
                     </label>
                     <label className="service-wide-field">
