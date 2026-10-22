@@ -344,7 +344,6 @@ class ServiceTakerManufacturingOrder(Base):
     packaging = Column(String, nullable=True)
     target_unit_price = Column(Float, nullable=True)
     quoted_unit_price = Column(Float, nullable=False, default=0)
-    tooling_cost = Column(Float, nullable=False, default=0)
     other_cost = Column(Float, nullable=False, default=0)
     quoted_total = Column(Float, nullable=False, default=0)
     courier = Column(String, nullable=True)

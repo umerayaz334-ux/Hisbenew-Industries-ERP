@@ -494,7 +494,6 @@ def manufacturing_quote_total(order: ServiceTakerManufacturingOrder) -> float:
         return round(float(order.quoted_total or 0), 2)
     return round(
         (float(order.quoted_unit_price or 0) * int(order.quantity or 0))
-        + float(order.tooling_cost or 0)
         + float(order.other_cost or 0),
         2,
     )
@@ -597,7 +596,6 @@ def manufacturing_order_response(order: ServiceTakerManufacturingOrder) -> dict:
         "packaging": order.packaging,
         "target_unit_price": order.target_unit_price,
         "quoted_unit_price": float(order.quoted_unit_price or 0),
-        "tooling_cost": float(order.tooling_cost or 0),
         "other_cost": float(order.other_cost or 0),
         "quoted_total": quote_total,
         "courier": order.courier,
@@ -627,7 +625,6 @@ def manufacturing_order_response(order: ServiceTakerManufacturingOrder) -> dict:
 def refresh_manufacturing_totals(order: ServiceTakerManufacturingOrder) -> None:
     order.quoted_total = round(
         (float(order.quoted_unit_price or 0) * int(order.quantity or 0))
-        + float(order.tooling_cost or 0)
         + float(order.other_cost or 0),
         2,
     )
@@ -1219,9 +1216,6 @@ def admin_update_manufacturing_request(
     price_changed = False
     if "quoted_unit_price" in fields:
         order.quoted_unit_price = float(payload.quoted_unit_price or 0)
-        price_changed = True
-    if "tooling_cost" in fields:
-        order.tooling_cost = float(payload.tooling_cost or 0)
         price_changed = True
     if "other_cost" in fields:
         order.other_cost = float(payload.other_cost or 0)

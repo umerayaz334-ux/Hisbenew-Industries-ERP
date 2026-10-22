@@ -810,30 +810,52 @@ function Sidebar({
             role="dialog"
           >
             <div className="mobile-menu-header">
-              <div>
-                <strong>{isSchoolWorkspace ? "School workspace" : "All pages"}</strong>
-                <span>{currentWorkspaceName}</span>
-              </div>
-              <div className="mobile-menu-header-actions">
-                {showWorkspaceSwitch && (
+              {manufacturingOnlyServiceTaker ? (
+                <>
+                  <div className="manufacturing-menu-profile">
+                    <span className="manufacturing-menu-avatar">{userInitials}</span>
+                    <span className="manufacturing-menu-profile-copy">
+                      <strong>{authenticatedUser?.name || authenticatedUser?.username || "Service taker"}</strong>
+                      <small>{authenticatedUser?.email || roleLabel}</small>
+                    </span>
+                  </div>
                   <button
-                    aria-label={`Switch to ${targetWorkspaceName}`}
-                    className="workspace-switch-icon-button"
-                    onClick={handleWorkspaceSwitch}
-                    title={`Switch to ${targetWorkspaceName}`}
+                    aria-label="Close menu"
+                    className="manufacturing-menu-close"
+                    onClick={() => setMobileMenuOpen(false)}
                     type="button"
                   >
-                    <WorkspaceSwitchIcon />
+                    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14 5-7 7 7 7" /></svg>
                   </button>
-                )}
-                <button
-                  aria-label="Close menu"
-                  onClick={() => setMobileMenuOpen(false)}
-                  type="button"
-                >
-                  Close
-                </button>
-              </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <strong>{isSchoolWorkspace ? "School workspace" : "All pages"}</strong>
+                    <span>{currentWorkspaceName}</span>
+                  </div>
+                  <div className="mobile-menu-header-actions">
+                    {showWorkspaceSwitch && (
+                      <button
+                        aria-label={`Switch to ${targetWorkspaceName}`}
+                        className="workspace-switch-icon-button"
+                        onClick={handleWorkspaceSwitch}
+                        title={`Switch to ${targetWorkspaceName}`}
+                        type="button"
+                      >
+                        <WorkspaceSwitchIcon />
+                      </button>
+                    )}
+                    <button
+                      aria-label="Close menu"
+                      onClick={() => setMobileMenuOpen(false)}
+                      type="button"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="mobile-menu-grid">
@@ -864,23 +886,20 @@ function Sidebar({
               })}
             </div>
 
-            <div className="mobile-menu-footer">
-              <div className="mobile-menu-user">
-                <span className="sidebar-user-avatar">{userInitials}</span>
-                <div>
-                  <strong>
-                    {authenticatedUser?.name ||
-                      authenticatedUser?.username ||
-                      "ERP user"}
-                  </strong>
-                  <span>{roleLabel}</span>
-                </div>
-              </div>
+            <div className={`mobile-menu-footer ${manufacturingOnlyServiceTaker ? "manufacturing-menu-footer" : ""}`.trim()}>
+              {!manufacturingOnlyServiceTaker && <div className="mobile-menu-user">
+                  <span className="sidebar-user-avatar">{userInitials}</span>
+                  <div>
+                    <strong>{authenticatedUser?.name || authenticatedUser?.username || "ERP user"}</strong>
+                    <span>{roleLabel}</span>
+                  </div>
+                </div>}
               <button
                 className="mobile-menu-logout"
                 onClick={handleMobileLogout}
                 type="button"
               >
+                {manufacturingOnlyServiceTaker && <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M10 17l5-5-5-5" /><path d="M15 12H3" /><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7" /></svg>}
                 Log out
               </button>
             </div>

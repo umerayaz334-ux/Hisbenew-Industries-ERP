@@ -232,7 +232,6 @@ export default function LocalOrders() {
   const [quoteForm, setQuoteForm] = useState({
     status: "Quoted",
     quoted_unit_price: "",
-    tooling_cost: "",
     other_cost: "",
     deposit_required: "",
     courier: "",
@@ -318,7 +317,6 @@ export default function LocalOrders() {
     setQuoteForm({
       status: order.status || "Quote requested",
       quoted_unit_price: order.quoted_unit_price ?? "",
-      tooling_cost: order.tooling_cost ?? "",
       other_cost: order.other_cost ?? "",
       deposit_required: order.deposit_required ?? "",
       courier: order.courier || "",
@@ -371,7 +369,6 @@ export default function LocalOrders() {
       const payload = {
         status: quoteForm.status,
         quoted_unit_price: quoteForm.quoted_unit_price === "" ? null : Number(quoteForm.quoted_unit_price),
-        tooling_cost: quoteForm.tooling_cost === "" ? null : Number(quoteForm.tooling_cost),
         other_cost: quoteForm.other_cost === "" ? null : Number(quoteForm.other_cost),
         deposit_required: quoteForm.deposit_required === "" ? null : Number(quoteForm.deposit_required),
         courier: quoteForm.courier || null,
@@ -1083,22 +1080,6 @@ export default function LocalOrders() {
                         step={isRupeeCurrency(selectedOrder.currency) ? "1" : "0.01"}
                         type="number"
                         value={quoteForm.quoted_unit_price ?? ""}
-                      />
-                    </label>
-                    <label>
-                      Tooling Cost ({isRupeeCurrency(selectedOrder.currency) ? "Rs" : selectedOrder.currency || 'USD'})
-                      <input
-                      inputMode={isRupeeCurrency(selectedOrder.currency) ? "numeric" : "decimal"}
-                        min="0"
-                        onChange={(event) =>
-                          setQuoteForm((current) => ({
-                            ...current,
-                            tooling_cost: sanitizeAmountInput(event.target.value, selectedOrder.currency),
-                          }))
-                        }
-                        step={isRupeeCurrency(selectedOrder.currency) ? "1" : "0.01"}
-                        type="number"
-                        value={quoteForm.tooling_cost ?? ""}
                       />
                     </label>
                     <label>

@@ -358,7 +358,6 @@ class ServiceTakerTests(unittest.TestCase):
             ServiceTakerManufacturingAdminUpdate(
                 status="Completed",
                 quoted_unit_price=10,
-                tooling_cost=20,
                 other_cost=5,
                 courier="TCS",
                 tracking_number="PK-TRACK-123",
@@ -366,7 +365,7 @@ class ServiceTakerTests(unittest.TestCase):
             self.request(self.admin_id),
             self.db,
         )
-        self.assertEqual(quoted["quoted_total"], 75)
+        self.assertEqual(quoted["quoted_total"], 55)
         self.assertEqual(quoted["courier"], "TCS")
         self.assertEqual(quoted["tracking_number"], "PK-TRACK-123")
 

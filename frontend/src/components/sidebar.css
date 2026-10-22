@@ -1580,59 +1580,192 @@
   }
 
   .sidebar.is-manufacturing-service-sidebar .mobile-menu-backdrop {
-    align-items: flex-start !important;
+    align-items: stretch !important;
     justify-content: flex-start !important;
-    padding: 20px 0 calc(82px + env(safe-area-inset-bottom, 0px)) 20px !important;
-    background: rgba(17, 24, 39, 0.28) !important;
+    padding: 0 0 calc(82px + env(safe-area-inset-bottom, 0px)) 0 !important;
+    background: rgba(12, 19, 48, 0.44) !important;
   }
 
   .sidebar.is-manufacturing-service-sidebar .mobile-menu-sheet {
     display: flex !important;
-    width: min(400px, calc(100vw - 40px)) !important;
-    height: min(700px, calc(100dvh - 110px - env(safe-area-inset-bottom, 0px))) !important;
-    min-height: min(420px, calc(100dvh - 110px - env(safe-area-inset-bottom, 0px))) !important;
+    width: min(330px, 82vw) !important;
+    height: 100% !important;
+    min-height: 0 !important;
     flex-direction: column !important;
     overflow: hidden !important;
-    border: 1px solid #dfe3e8 !important;
-    border-radius: 20px !important;
-    background: #fff !important;
-    box-shadow: 0 16px 42px rgba(15, 23, 42, 0.2) !important;
+    border: 0 !important;
+    border-radius: 0 22px 22px 0 !important;
+    background: linear-gradient(165deg, #23378f 0%, #3049b0 100%) !important;
+    color: #fff !important;
+    box-shadow: 16px 0 38px rgba(13, 21, 55, 0.28) !important;
   }
 
   .sidebar.is-manufacturing-service-sidebar .mobile-menu-header {
-    flex: 0 0 auto;
-    min-height: 94px;
+    position: relative !important;
+    flex: 0 0 auto !important;
     align-items: center;
-    padding: 18px 20px 14px;
+    justify-content: flex-start !important;
+    min-height: 112px;
+    padding: 22px 48px 22px 20px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.18) !important;
+    background: transparent !important;
   }
 
   .sidebar.is-manufacturing-service-sidebar .mobile-menu-grid {
-    flex: 0 0 auto;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 11px;
-    padding: 14px 17px 17px;
+    display: flex !important;
+    flex: 1 1 auto !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+    overflow-y: auto !important;
+    padding: 20px 13px !important;
   }
 
   .sidebar.is-manufacturing-service-sidebar .mobile-menu-item {
-    min-height: 100px;
-    border-radius: 17px;
+    display: flex !important;
+    min-height: 52px !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 14px !important;
+    padding: 0 14px !important;
+    border: 1px solid transparent !important;
+    border-radius: 11px !important;
+    background: transparent !important;
+    color: #e8edff !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    text-align: left !important;
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .mobile-menu-item .menu-icon {
+    width: 23px !important;
+    height: 23px !important;
+    flex: 0 0 23px !important;
+    padding: 2px !important;
+    color: #70d9f5 !important;
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .mobile-menu-item.active {
+    border-color: rgba(255, 255, 255, 0.14) !important;
+    border-left: 3px solid #70d9f5 !important;
+    background: rgba(255, 255, 255, 0.13) !important;
+    color: #fff !important;
   }
 
   .sidebar.is-manufacturing-service-sidebar .mobile-menu-footer {
-    gap: 14px;
-    padding: 17px;
-    border-top: 1px solid #edf0f2;
-  }
-
-  .sidebar.is-manufacturing-service-sidebar .mobile-menu-user {
-    min-height: 82px;
-    padding: 12px;
-    border-radius: 17px;
+    display: flex !important;
+    flex: 0 0 auto !important;
+    padding: 14px 16px calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.18) !important;
+    background: transparent !important;
   }
 
   .sidebar.is-manufacturing-service-sidebar .mobile-menu-logout {
-    min-height: 52px;
-    border-radius: 14px;
+    display: flex !important;
+    min-height: 48px !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
+    padding: 0 12px !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+    background: transparent !important;
+    color: #f0f4ff !important;
+    font-size: 13px !important;
+    text-align: left !important;
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .mobile-menu-logout svg {
+    width: 21px;
+    height: 21px;
+    fill: none;
+    stroke: #70d9f5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .mobile-menu-trigger {
+    color: #64748b !important;
+  }
+
+  .sidebar .mobile-tabbar {
+    z-index: 1 !important;
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .mobile-menu-backdrop {
+    z-index: 2 !important;
+  }
+
+  .manufacturing-menu-profile {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .manufacturing-menu-avatar {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    place-items: center;
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    border-radius: 50%;
+    background: #e8edff;
+    color: #2c419d;
+    font-size: 15px;
+    font-weight: 900;
+  }
+
+  .mobile-menu-header .manufacturing-menu-profile-copy {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .manufacturing-menu-profile-copy strong,
+  .manufacturing-menu-profile-copy small {
+    overflow: hidden;
+    color: #fff;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .manufacturing-menu-profile-copy strong {
+    font-size: 15px;
+    font-weight: 850;
+  }
+
+  .manufacturing-menu-profile-copy small {
+    color: #c7d2ff;
+    font-size: 10px;
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .manufacturing-menu-close {
+    position: absolute;
+    top: 22px;
+    right: 12px;
+    display: grid;
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
+    place-items: center;
+    padding: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    color: #dce5ff;
+    cursor: pointer;
+  }
+
+  .sidebar.is-manufacturing-service-sidebar .manufacturing-menu-close svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 2;
   }
 }
 

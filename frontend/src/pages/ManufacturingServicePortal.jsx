@@ -18,7 +18,7 @@ const formatDate = (value) => value ? new Date(value).toLocaleDateString(undefin
 
 const amountDue = (order) => Math.max(0, Number(order?.balance_due || 0));
 
-export default function ManufacturingServicePortal({ section, data, load, error, onError }) {
+export default function ManufacturingServicePortal({ section, data, load, error, onError, authenticatedUser }) {
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [busy, setBusy] = useState("");
@@ -38,8 +38,12 @@ export default function ManufacturingServicePortal({ section, data, load, error,
   const completedOrders = orders.filter((order) => order.status === "Completed");
   const pendingPayments = payments.filter((payment) => payment.status === "Pending confirmation");
   const totalDue = orders.reduce((total, order) => total + amountDue(order), 0);
+  const onTheWayOrders = orders.filter((order) => order.status === "Shipped");
   const activeTab = section === "billing" ? "payments" : section === "manufacturing" ? "orders" : "dashboard";
   const title = activeTab === "payments" ? "Payments" : activeTab === "orders" ? "Manufacturing orders" : "Manufacturing";
+  const firstName = String(authenticatedUser?.name || authenticatedUser?.username || "there").trim().split(/\s+/)[0];
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -130,7 +134,8 @@ export default function ManufacturingServicePortal({ section, data, load, error,
 
   const orderCard = (order) => {
     const image = order.image_url || order.product_image_url;
-    const statusIndex = steps.indexOf(order.status);
+    const statusIndex = Math.max(0, steps.indexOf(order.status === "Deposit pending" ? "Quoted" : order.status));
+    const progressPercent = (statusIndex / (steps.length - 1)) * 100;
     return (
       <article className="msp-order-card" key={order.id}>
         <div className="msp-order-main">
@@ -144,16 +149,16 @@ export default function ManufacturingServicePortal({ section, data, load, error,
           </div>
           <span className={`msp-status ${order.status === "Completed" ? "is-complete" : order.status === "Rejected" || order.status === "Cancelled" ? "is-closed" : ""}`}>{order.status}</span>
         </div>
-        <div className="msp-order-progress" aria-label={`Order status: ${order.status}`}>
-          {steps.slice(1).map((step, index) => <span className={statusIndex > index + 1 || order.status === step ? "is-done" : ""} key={step} title={step} />)}
-        </div>
+        {!['Rejected', 'Cancelled'].includes(order.status) && <div className="msp-order-progress" role="progressbar" aria-label={`Order progress: ${order.status}`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPercent}>
+          <span className="msp-order-progress-fill" style={{ width: `${progressPercent}%` }} />
+        </div>}
         <div className="msp-order-meta">
           <div><span>Quoted total</span><strong>{Number(order.quoted_total || 0) > 0 ? formatMoney(order.quoted_total, order.currency || currency) : "Quote pending"}</strong></div>
           <div><span>Balance due</span><strong className={amountDue(order) > 0 ? "is-due" : ""}>{formatMoney(order.balance_due, order.currency || currency)}</strong></div>
           <div><span>Expected ready</span><strong>{formatDate(order.estimated_ready_at || order.requested_ready_at)}</strong></div>
           {amountDue(order) > 0 && Number(order.quoted_total || 0) > 0 && <button className="msp-secondary-button" onClick={() => startPayment(order)} type="button">Submit payment</button>}
         </div>
-        {Number(order.quoted_total || 0) > 0 && <details className="msp-cost-breakdown"><summary>View cost breakdown</summary><div><span>Unit price × quantity <strong>{formatMoney(Number(order.quoted_unit_price || 0) * Number(order.quantity || 0), order.currency || currency)}</strong></span><span>Tooling / setup <strong>{formatMoney(order.tooling_cost, order.currency || currency)}</strong></span><span>Other cost <strong>{formatMoney(order.other_cost, order.currency || currency)}</strong></span><span className="msp-cost-total">Total quote <strong>{formatMoney(order.quoted_total, order.currency || currency)}</strong></span></div></details>}
+        {Number(order.quoted_total || 0) > 0 && <details className="msp-cost-breakdown"><summary>View cost breakdown</summary><div><span>Unit price × quantity <strong>{formatMoney(Number(order.quoted_unit_price || 0) * Number(order.quantity || 0), order.currency || currency)}</strong></span><span>Other cost <strong>{formatMoney(order.other_cost, order.currency || currency)}</strong></span><span className="msp-cost-total">Total quote <strong>{formatMoney(order.quoted_total, order.currency || currency)}</strong></span></div></details>}
         {order.notes && <p className="msp-order-notes"><strong>Your note:</strong> {order.notes}</p>}
         {order.admin_notes && <p className="msp-order-update"><strong>Factory update:</strong> {order.admin_notes}</p>}
         {(order.courier || order.tracking_number) && (
@@ -169,21 +174,48 @@ export default function ManufacturingServicePortal({ section, data, load, error,
   };
 
   return (
-    <main className="manufacturing-service-portal">
+    <main className={`manufacturing-service-portal ${activeTab === "dashboard" ? "msp-dashboard-view" : ""}`.trim()}>
       <div className="msp-content">
-        <div className="msp-page-heading"><div><span className="msp-eyebrow">YOUR MANUFACTURING PORTAL</span><h1>{title}</h1><p>Send a product request, follow production, and keep payments together.</p></div><div className="msp-heading-actions">{activeTab !== "payments" && <button className="msp-primary-button" onClick={() => setShowNewOrder(true)} type="button"><span>＋</span> New order</button>}{activeTab === "payments" && payableOrders.length > 0 && <button className="msp-primary-button" onClick={() => startPayment()} type="button"><span>＋</span> Submit payment</button>}</div></div>
+        <div className="msp-page-heading"><div><h1>{activeTab === "dashboard" ? `${greeting}, ${firstName}` : title}</h1></div><div className="msp-heading-actions">{activeTab !== "payments" && <button className="msp-primary-button" onClick={() => setShowNewOrder(true)} type="button"><span>＋</span> New order</button>}{activeTab === "payments" && payableOrders.length > 0 && <button className="msp-primary-button" onClick={() => startPayment()} type="button"><span>＋</span> Submit payment</button>}</div></div>
 
         {(error || notice) && <div className={`msp-notice ${error ? "is-error" : "is-success"}`} role="status"><span>{error || notice}</span>{error && <button onClick={() => onError("")} type="button" aria-label="Dismiss">×</button>}</div>}
 
         {activeTab === "dashboard" && <>
-          <section className="msp-hero"><div><span className="msp-hero-kicker">PRODUCTION, MADE CLEAR</span><h2>From your idea to a finished order.</h2><p>Send the design and quantity. We’ll quote it, keep you updated, and share tracking when it ships.</p><button onClick={() => setShowNewOrder(true)} type="button">Start a manufacturing order <span>→</span></button></div><div className="msp-hero-art" aria-hidden="true"><span>✦</span><i /><b /></div></section>
-          <section className="msp-stat-grid"><div><span>Open orders</span><strong>{openOrders.length}</strong><small>Requests in progress</small></div><div><span>Ready / complete</span><strong>{completedOrders.length + orders.filter((order) => order.status === "Ready").length}</strong><small>Finished or ready to ship</small></div><div><span>Payments in review</span><strong>{pendingPayments.length}</strong><small>Waiting for approval</small></div><div><span>Balance due</span><strong>{formatMoney(totalDue, currency)}</strong><small>Approved payments deducted</small></div></section>
-          <section className="msp-section"><div className="msp-section-heading"><div><span className="msp-eyebrow">LATEST ACTIVITY</span><h2>Your open orders</h2></div><a href="/portal/service-taker/local-orders">View all <span>→</span></a></div>{openOrders.length ? <div className="msp-order-list">{openOrders.slice(0, 3).map(orderCard)}</div> : <div className="msp-empty"><span>✦</span><h3>Your next order starts here</h3><p>Add a product photo, quantity and instructions to request a quote.</p><button className="msp-secondary-button" onClick={() => setShowNewOrder(true)} type="button">Create your first order</button></div>}</section>
+          <section className="msp-hero msp-overview-card"><span className="msp-hero-kicker">ORDERS AT A GLANCE</span><div className="msp-overview-metrics"><div><span>Open orders</span><strong>{openOrders.length}</strong></div><div><span>Balance due</span><strong>{formatMoney(totalDue, currency)}</strong></div><div><span>On the way</span><strong>{onTheWayOrders.length}</strong></div></div></section>
+          <section className="msp-section"><div className="msp-section-heading"><div><h2>Open orders</h2></div><a href="/portal/service-taker/local-orders">View all <span>→</span></a></div>{openOrders.length ? <div className="msp-order-list">{openOrders.slice(0, 3).map(orderCard)}</div> : <div className="msp-empty"><span>✦</span><h3>No open orders</h3><button className="msp-secondary-button" onClick={() => setShowNewOrder(true)} type="button">Create an order</button></div>}</section>
         </>}
 
         {activeTab === "orders" && <section className="msp-section"><div className="msp-filter-row"><div className="msp-filter-pills">{[{ key: "open", label: "Open", count: openOrders.length }, { key: "completed", label: "Completed", count: completedOrders.length }, { key: "all", label: "All orders", count: orders.length }].map((item) => <button className={filter === item.key ? "is-active" : ""} key={item.key} onClick={() => setFilter(item.key)} type="button">{item.label}<span>{item.count}</span></button>)}</div><button className="msp-secondary-button msp-desktop-new" onClick={() => setShowNewOrder(true)} type="button">＋ New order</button></div>{shownOrders.length ? <div className="msp-order-list">{shownOrders.map(orderCard)}</div> : <div className="msp-empty"><span>✦</span><h3>No {filter === "completed" ? "completed" : "open"} orders</h3><p>Create a request and follow every update here.</p><button className="msp-secondary-button" onClick={() => setShowNewOrder(true)} type="button">Create an order</button></div>}</section>}
 
-        {activeTab === "payments" && <section className="msp-section"><div className="msp-payment-summary"><div><span>Approved payments</span><strong>{formatMoney(orders.reduce((sum, order) => sum + Number(order.paid_total || 0), 0), currency)}</strong></div><div><span>In review</span><strong>{formatMoney(pendingPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0), currency)}</strong></div><div><span>Balance due</span><strong>{formatMoney(totalDue, currency)}</strong></div></div><div className="msp-section-heading msp-payment-heading"><div><span className="msp-eyebrow">PAYMENT ACTIVITY</span><h2>Receipts and approvals</h2><p>Receipts stay in review until the company approves them.</p></div></div>{payments.length ? <div className="msp-payment-list">{payments.map((payment) => <article className="msp-payment-card" key={payment.id}><span className={`msp-payment-status ${payment.status === "Pending confirmation" ? "is-review" : payment.status === "Rejected" ? "is-rejected" : "is-approved"}`}>{payment.status === "Pending confirmation" ? "In review" : payment.status === "Rejected" ? "Needs attention" : "Approved"}</span><div className="msp-payment-info"><strong>{payment.payment_type || "Payment"}</strong><span>{payment.order.request_no} · {payment.order.product_name}</span><small>{formatDate(payment.paid_at || payment.created_at)}{payment.note ? ` · ${payment.note}` : ""}</small></div><strong className="msp-payment-amount">{formatMoney(payment.amount, payment.order.currency || currency)}</strong>{payment.proof_url && <a href={getStaticUrl(payment.proof_url)} rel="noreferrer" target="_blank">View receipt ↗</a>}</article>)}</div> : <div className="msp-empty"><span>✓</span><h3>No payments yet</h3><p>When you submit a payment receipt, its review and approval status appears here.</p></div>}</section>}
+        {activeTab === "payments" && <section className="msp-section msp-payments-view">
+          <div className="msp-payment-summary">
+            <div><span>Paid</span><strong>{formatMoney(orders.reduce((sum, order) => sum + Number(order.paid_total || 0), 0), currency)}</strong></div>
+            <div><span>In review</span><strong>{formatMoney(pendingPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0), currency)}</strong></div>
+            <div><span>Due</span><strong>{formatMoney(totalDue, currency)}</strong></div>
+          </div>
+          <div className="msp-section-heading msp-payment-heading"><h2>Payment activity</h2></div>
+          {payments.length ? <div className="msp-payment-list">{payments.map((payment) => {
+            const paymentStatus = payment.status === "Pending confirmation" ? "In review" : payment.status === "Rejected" ? "Needs attention" : "Approved";
+            const statusClass = payment.status === "Pending confirmation" ? "is-review" : payment.status === "Rejected" ? "is-rejected" : "is-approved";
+            return (
+              <article className="msp-payment-card" key={payment.id}>
+                <span className={`msp-payment-symbol ${statusClass}`} aria-hidden="true">{payment.status === "Pending confirmation" ? "…" : payment.status === "Rejected" ? "!" : "✓"}</span>
+                <div className="msp-payment-info">
+                  <div className="msp-payment-inline">
+                    <strong>{payment.payment_type || "Payment"}</strong>
+                    <span>{payment.order.request_no} · {payment.order.product_name}</span>
+                    <small>{formatDate(payment.paid_at || payment.created_at)}</small>
+                    <span className={`msp-payment-status ${statusClass}`}>{paymentStatus}</span>
+                  </div>
+                </div>
+                <div className="msp-payment-trailing">
+                  <strong className="msp-payment-amount">{formatMoney(payment.amount, payment.order.currency || currency)}</strong>
+                  {payment.proof_url && <a href={getStaticUrl(payment.proof_url)} rel="noreferrer" target="_blank">Receipt ↗</a>}
+                </div>
+              </article>
+            );
+          })}</div> : <div className="msp-empty"><span>✓</span><h3>No payments yet</h3></div>}
+        </section>}
       </div>
 
       {showNewOrder && <div className="msp-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewOrder(false); }}><section aria-label="New manufacturing request" aria-modal="true" className="msp-modal" role="dialog"><header><div><span className="msp-eyebrow">NEW REQUEST</span></div><button onClick={() => setShowNewOrder(false)} type="button" aria-label="Close">×</button></header><form onSubmit={submitOrder}><label>Product or design name<input autoFocus maxLength={240} onChange={(event) => setOrderForm((current) => ({ ...current, product_name: event.target.value }))} placeholder="e.g. Custom Damascus chef knife" required value={orderForm.product_name} /></label><div className="msp-form-two"><label>Quantity<input min="1" onChange={(event) => setOrderForm((current) => ({ ...current, quantity: event.target.value }))} required type="number" value={orderForm.quantity} /></label><label className="msp-photo-input">Product photo <span>{orderImage?.name || "Add a reference image"}</span><input accept="image/png,image/jpeg,image/webp" onChange={(event) => setOrderImage(event.target.files?.[0] || null)} type="file" /></label></div>{imagePreviewUrl && <img className="msp-image-preview" alt="Product preview" src={imagePreviewUrl} /> }<label>Notes and specifications<textarea maxLength={6000} onChange={(event) => setOrderForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Enter further details here..." rows="4" value={orderForm.notes} /></label><div className="msp-modal-actions"><button className="msp-secondary-button" onClick={() => setShowNewOrder(false)} type="button">Cancel</button><button className="msp-primary-button" disabled={busy === "new-order"} type="submit">{busy === "new-order" ? "Sending…" : "Send order request"}</button></div></form></section></div>}

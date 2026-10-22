@@ -501,6 +501,7 @@ function EmptyState({ title, detail }) {
 export default function ServiceTakerWorkspace({
   mode = "portal",
   initialTab = "inventory",
+  authenticatedUser,
 }) {
   const isAdmin = mode === "admin";
   const [data, setData] = useState({
@@ -1291,7 +1292,6 @@ const visibleProducts = useMemo(
       edge_type: order.edge_type || "",
       packaging: order.packaging || "",
       quoted_unit_price: order.quoted_unit_price || "",
-      tooling_cost: order.tooling_cost || "",
       other_cost: order.other_cost || "",
       deposit_required: order.deposit_required || "",
       courier: order.courier || "",
@@ -1358,7 +1358,6 @@ const visibleProducts = useMemo(
         {
           ...manufacturingAdminForm,
           quoted_unit_price: Number(manufacturingAdminForm.quoted_unit_price || 0),
-          tooling_cost: Number(manufacturingAdminForm.tooling_cost || 0),
           other_cost: Number(manufacturingAdminForm.other_cost || 0),
           deposit_required: Number(manufacturingAdminForm.deposit_required || 0),
           blade_thickness_mm: optionalNumber(manufacturingAdminForm.blade_thickness_mm),
@@ -1899,6 +1898,7 @@ const tabs = [
   if (isManufacturingOnlyPortal) {
     return (
       <ManufacturingServicePortal
+        authenticatedUser={authenticatedUser}
         data={data}
         error={error}
         load={load}
@@ -3564,10 +3564,6 @@ const tabs = [
                                       <span style={{ fontSize: 11, color: "#64748b" }}>Unit Price:</span>
                                       <strong style={{ fontSize: 12.5, color: "#0f172a" }}>{Number(order.quoted_unit_price || 0) > 0 ? money(order.quoted_unit_price, order.currency) : "Ã¢â‚¬â€"}</strong>
                                     </div>
-                                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 6, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
-                                      <span style={{ fontSize: 11, color: "#64748b" }}>Tooling / Mold:</span>
-                                      <strong style={{ fontSize: 12.5, color: "#0f172a" }}>{money(order.tooling_cost, order.currency)}</strong>
-                                    </div>
                                     <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
                                       <span style={{ fontSize: 11, color: "#166534" }}>Deposit Required:</span>
                                       <strong style={{ fontSize: 12.5, color: "#15803d" }}>{money(order.deposit_required, order.currency)}</strong>
@@ -3982,10 +3978,6 @@ const tabs = [
                                 <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 6, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
                                   <span style={{ fontSize: 11, color: "#64748b" }}>Unit Price:</span>
                                   <strong style={{ fontSize: 12.5, color: "#0f172a" }}>{Number(order.quoted_unit_price || 0) > 0 ? money(order.quoted_unit_price, order.currency) : "Awaiting Quote"}</strong>
-                                </div>
-                                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 6, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
-                                  <span style={{ fontSize: 11, color: "#64748b" }}>Tooling / Mold:</span>
-                                  <strong style={{ fontSize: 12.5, color: "#0f172a" }}>{money(order.tooling_cost, order.currency)}</strong>
                                 </div>
                                 <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
                                   <span style={{ fontSize: 11, color: "#166534" }}>Deposit Required:</span>
@@ -4709,22 +4701,6 @@ const tabs = [
                     step={isRupeeCurrency(selectedManufacturing.currency) ? "1" : "0.01"}
                     type="number"
                     value={manufacturingAdminForm.quoted_unit_price ?? ""}
-                  />
-                </label>
-                <label>
-                  Tooling Cost ({isRupeeCurrency(selectedManufacturing.currency) ? "Rs" : selectedManufacturing.currency || 'USD'})
-                  <input
-                  inputMode={isRupeeCurrency(selectedManufacturing.currency) ? "numeric" : "decimal"}
-                    min="0"
-                    onChange={(event) =>
-                      setManufacturingAdminForm((current) => ({
-                        ...current,
-                        tooling_cost: sanitizeAmountInput(event.target.value, selectedManufacturing.currency),
-                      }))
-                    }
-                    step={isRupeeCurrency(selectedManufacturing.currency) ? "1" : "0.01"}
-                    type="number"
-                    value={manufacturingAdminForm.tooling_cost ?? ""}
                   />
                 </label>
                 <label>

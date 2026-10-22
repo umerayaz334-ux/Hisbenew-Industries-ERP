@@ -1350,7 +1350,7 @@ function App() {
               : activePage === "Service Charges"
                 ? "billing"
               : "inventory";
-      return <ServiceTakerPortal section={portalSection} />;
+      return <ServiceTakerPortal authenticatedUser={authenticatedUser} section={portalSection} />;
     }
     if (
       [
