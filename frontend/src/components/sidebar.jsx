@@ -798,7 +798,7 @@ function Sidebar({
 
       {mobileMenuOpen && (
         <div
-          className="mobile-menu-backdrop"
+          className={`mobile-menu-backdrop ${manufacturingOnlyServiceTaker ? "is-manufacturing-menu" : ""}`.trim()}
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setMobileMenuOpen(false);
           }}
@@ -806,7 +806,7 @@ function Sidebar({
           <section
             aria-label="All ERP pages"
             aria-modal="true"
-            className="mobile-menu-sheet"
+            className={`mobile-menu-sheet ${manufacturingOnlyServiceTaker ? "is-manufacturing-menu-sheet" : ""}`.trim()}
             role="dialog"
           >
             <div className="mobile-menu-header">
