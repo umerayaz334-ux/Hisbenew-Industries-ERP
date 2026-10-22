@@ -140,7 +140,6 @@ const FollowUps = lazy(pageImporters["Follow Ups"]);
 const Payouts = lazy(pageImporters.Payouts);
 const Payments = lazy(pageImporters.Billings);
 const WorkerPayouts = lazy(pageImporters["Worker Payouts"]);
-const WorkerAccounts2 = lazy(pageImporters["Worker Accounts"]);
 const Accounting = lazy(pageImporters.Accounting);
 const Production = lazy(pageImporters.Production);
 const MyTasks = lazy(pageImporters["My Tasks"]);
@@ -220,8 +219,10 @@ const pagePaths = {
   "Service Inbound": "/portal/service-taker/inbound",
   "Service Shipments": "/portal/service-taker/shipments",
   "Service Manufacturing": "/portal/service-taker/local-orders",
+  "Service Manufacturing Shipping": "/portal/service-taker/shipping",
   "Service Quotations": "/portal/service-taker/quotations",
   "Service Charges": "/portal/service-taker/charges",
+  "Service Account": "/portal/service-taker/account",
   "Follow Ups": "/portal/follow-ups",
   Payouts: "/portal/payouts",
   Billings: "/portal/billings",
@@ -252,7 +253,9 @@ const serviceTakerPages = [
   "Service Inbound",
   "Service Shipments",
   "Service Manufacturing",
+  "Service Manufacturing Shipping",
   "Service Charges",
+  "Service Account",
 ];
 
 const PLATFORM_SUPER_ADMIN_PAGES = ["Dashboard", "Companies", "Users", "Settings"];
@@ -367,6 +370,7 @@ pathToPage["/portal/payments"] = "Billings";
 pathToPage["/portal/amazon/fba-inventory"] = "Products";
 pathToPage["/portal/service-taker"] = "Service Dashboard";
 pathToPage["/portal/service-taker/manufacturing"] = "Service Manufacturing";
+pathToPage["/portal/service-taker/shipping"] = "Service Manufacturing Shipping";
 pathToPage["/website"] = "WebsiteStorefront";
 pathToPage["/website/catalog"] = "WebsiteCatalog";
 
@@ -411,6 +415,11 @@ const normalizeClientAllowedPages = (pages = [], role = "", impersonatedBySuperA
     const hasFulfillmentPage = visibleServicePages.some((page) =>
       ['Service Inbound', 'Service Shipments'].includes(page)
     );
+    if (hasFulfillmentPage) {
+      for (const page of ['Service Inbound', 'Service Shipments']) {
+        if (!visibleServicePages.includes(page)) visibleServicePages.push(page);
+      }
+    }
     if (
       visibleServicePages.includes("Service Charges") &&
       !hasFulfillmentPage &&
@@ -419,6 +428,13 @@ const normalizeClientAllowedPages = (pages = [], role = "", impersonatedBySuperA
       const insertAt = visibleServicePages.includes("Service Dashboard") ? 1 : 0;
       visibleServicePages.splice(insertAt, 0, "Service Manufacturing");
     }
+    if (visibleServicePages.includes("Service Manufacturing") && !visibleServicePages.includes("Service Manufacturing Shipping")) {
+      visibleServicePages.push("Service Manufacturing Shipping");
+    }
+    if (
+      visibleServicePages.some((page) => ["Service Manufacturing", "Service Shipments"].includes(page)) &&
+      !visibleServicePages.includes("Service Account")
+    ) visibleServicePages.push("Service Account");
     return visibleServicePages.length ? visibleServicePages : ["Service Dashboard"];
   }
   if (role === "super_admin") return PLATFORM_SUPER_ADMIN_PAGES;
@@ -698,6 +714,9 @@ function App() {
   );
   const allowedPageKey = normalizedAllowedPages.join("|");
   const schoolWorkspaceActive = isSchoolWorkspacePage(activePage);
+  const serviceTakerMinimalNavigation = authenticatedUser?.role === "service_taker" &&
+    (normalizedAllowedPages.includes("Service Manufacturing") ||
+      normalizedAllowedPages.includes("Service Shipments"));
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1345,12 +1364,16 @@ function App() {
             ? "orders"
             : activePage === "Service Manufacturing"
               ? "manufacturing"
+              : activePage === "Service Manufacturing Shipping"
+                ? "shipping"
               : activePage === "Service Quotations"
                 ? "quotations"
               : activePage === "Service Charges"
                 ? "billing"
+                : activePage === "Service Account"
+                  ? "account"
               : "inventory";
-      return <ServiceTakerPortal authenticatedUser={authenticatedUser} section={portalSection} />;
+      return <ServiceTakerPortal authenticatedUser={authenticatedUser} onLogout={handleLogout} section={portalSection} />;
     }
     if (
       [
@@ -1459,7 +1482,7 @@ function App() {
         }
       >
         <div
-          className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${
+          className={`app-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${serviceTakerMinimalNavigation ? "service-taker-navigation" : ""} ${
             schoolWorkspaceActive ? "school-workspace-layout" : ""
           }`.trim()}
           style={schoolWorkspaceActive ? schoolThemeStyle(schoolSettings) : undefined}

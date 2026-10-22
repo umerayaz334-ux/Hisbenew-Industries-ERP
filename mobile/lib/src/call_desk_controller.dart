@@ -24,6 +24,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
   String phase = 'idle';
   String otherName = '';
   String notice = '';
+  String deliveryStatus = 'calling';
   bool muted = false;
   bool speaker = true;
 
@@ -50,6 +51,18 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         : DateTime.now().difference(_connectedAt!).inSeconds;
     return '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}';
   }
+
+  String get deliveryText => switch (deliveryStatus) {
+    'ringing' => 'Ringing on their device',
+    'unreachable' => 'Not reached yet',
+    _ => 'Calling...'
+  };
+
+  String get deliveryHint => switch (deliveryStatus) {
+    'ringing' => 'Their phone is receiving this call.',
+    'unreachable' => 'Their app may be offline or without internet.',
+    _ => 'Waiting for their app to receive the call.'
+  };
 
   @override
   void notifyListeners() {
@@ -171,6 +184,9 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
         return;
       }
       _callId = asInt(call['id']);
+      deliveryStatus = asText(call['delivery_status']).isEmpty
+          ? 'calling'
+          : asText(call['delivery_status']);
       if (_callId == 0) {
         _fail('The call could not start.');
         return;
@@ -335,6 +351,14 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
       final live = await model.api.callDetails(session, id);
       if (_disposed || generation != _generation || id != _callId) return;
       final status = asText(live['status']).toLowerCase();
+      if (phase == 'outgoing') {
+        final nextDeliveryStatus = asText(live['delivery_status']);
+        if (nextDeliveryStatus.isNotEmpty &&
+            nextDeliveryStatus != deliveryStatus) {
+          deliveryStatus = nextDeliveryStatus;
+          notifyListeners();
+        }
+      }
       if (status == 'accepted' && phase == 'outgoing') {
         await PhonePermissions.releaseCallTone();
         phase = 'connecting';
@@ -515,6 +539,7 @@ class CallDesk extends ChangeNotifier with WidgetsBindingObserver {
     _callId = null;
     otherName = '';
     notice = '';
+    deliveryStatus = 'calling';
     phase = 'idle';
     notifyListeners();
   }

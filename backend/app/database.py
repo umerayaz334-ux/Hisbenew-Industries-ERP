@@ -1292,8 +1292,14 @@ def migrate_database():
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS image_url TEXT"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES service_taker_products(id)"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS other_cost FLOAT NOT NULL DEFAULT 0"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS other_cost_label VARCHAR"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS courier VARCHAR"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS shipping_requested BOOLEAN NOT NULL DEFAULT FALSE"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS shipping_recipient_name VARCHAR"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS shipping_address TEXT"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS shipping_weight_kg FLOAT"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS shipping_cost FLOAT NOT NULL DEFAULT 0"))
             connection.execute(text("CREATE INDEX IF NOT EXISTS ix_service_taker_manufacturing_product_id ON service_taker_manufacturing_orders(product_id)"))
             connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS shipping_request_type VARCHAR DEFAULT 'stock' NOT NULL"))
             connection.execute(text("ALTER TABLE service_taker_orders ADD COLUMN IF NOT EXISTS manufacturing_order_id INTEGER REFERENCES service_taker_manufacturing_orders(id)"))
@@ -2356,8 +2362,14 @@ def migrate_database():
                 "image_url": "TEXT",
                 "product_id": "INTEGER",
                 "other_cost": "FLOAT NOT NULL DEFAULT 0",
+                "other_cost_label": "VARCHAR",
                 "courier": "VARCHAR",
                 "tracking_number": "VARCHAR",
+                "shipping_requested": "BOOLEAN NOT NULL DEFAULT FALSE",
+                "shipping_recipient_name": "VARCHAR",
+                "shipping_address": "TEXT",
+                "shipping_weight_kg": "FLOAT",
+                "shipping_cost": "FLOAT NOT NULL DEFAULT 0",
             }
             for column_name, column_def in manufacturing_order_media_columns.items():
                 if column_name not in manufacturing_order_columns:

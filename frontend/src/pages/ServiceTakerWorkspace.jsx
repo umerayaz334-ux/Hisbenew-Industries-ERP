@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import ManufacturingServicePortal from "./ManufacturingServicePortal";
 import "./ServiceTakerWorkspace.css";
@@ -163,9 +163,7 @@ const emptyManufacturing = () => ({
   notes: "",
 });
 const emptyPortalPaymentProof = () => ({
-  manufacturing_order_id: "",
   amount: "",
-  payment_type: "Deposit",
   note: "",
 });
 
@@ -190,16 +188,12 @@ const manufacturingStepIndex = (status) => {
   return index;
 };
 
-const pendingManufacturingPayments = (order, type = '') =>
+const pendingManufacturingPayments = (order) =>
   (order?.payments || []).filter(
-    (payment) =>
-      payment.status === 'Pending confirmation' &&
-      (!type || String(payment.payment_type || '').toLowerCase() === String(type).toLowerCase())
+    (payment) => payment.status === 'Pending confirmation'
   );
 
-const hasPendingManufacturingDeposit = (order) => pendingManufacturingPayments(order).length > 0;
-
-const pendingManufacturingPaymentOfType = (order, type) => pendingManufacturingPayments(order, type).length > 0;
+const hasPendingManufacturingPayment = (order) => pendingManufacturingPayments(order).length > 0;
 
 const liveManufacturingStatuses = [
   "Confirmed",
@@ -209,73 +203,6 @@ const liveManufacturingStatuses = [
 ];
 
 const openFulfillmentStatuses = ["Submitted", "Awaiting label", "Processing", "Ready"];
-const shippingRequestOptions = [
-  {
-    value: "stock",
-    title: "Ship Hisbenew warehouse stock",
-    detail: "Products stored in your Hisbenew inventory.",
-  },
-  {
-    value: "manufactured",
-    title: "Ship products made by Hisbenew",
-    detail: "Finished local orders ready for delivery.",
-  },
-  {
-    value: "external",
-    title: "Ship any outside product",
-    detail: "Use Hisbenew shipping channel for other parcels.",
-  },
-];
-const courierOptions = ["FedEx", "DHL", "UPS", "USPS", "OnTrac", "Other"];
-const shippingServiceOptions = ["Economy", "Express", "Priority", "Air freight", "Custom"];
-const shippingTypeLabel = (value) =>
-  shippingRequestOptions.find((option) => option.value === value)?.title ||
-  "Ship Hisbenew warehouse stock";
-const shippingProductSummary = (order) => {
-  const requestType = order?.shipping_request_type || "stock";
-  if (requestType === "manufactured") {
-    return (
-      order.product_description ||
-      [order.manufacturing_request_no, order.manufacturing_product_name]
-        .filter(Boolean)
-        .join(" / ") ||
-      "Hisbenew-made products"
-    );
-  }
-  if (requestType === "external") {
-    return order.product_description || "Outside product shipment";
-  }
-  const items = Array.isArray(order?.items) ? order.items : [];
-  const first = items[0];
-  if (!first) return "Warehouse SKU shipment";
-  return [
-    first.sku || "SKU",
-    first.product_name || "Product",
-    items.length > 1 ? `+ ${items.length - 1} more` : "",
-  ]
-    .filter(Boolean)
-    .join(" / ");
-};
-const shippingPackageSummary = (order) => {
-  const dims = [order?.package_length_cm, order?.package_width_cm, order?.package_height_cm]
-    .filter((value) => Number(value || 0) > 0)
-    .map((value) => Number(value).toLocaleString("en-US"));
-  return [
-    `${number(order?.item_quantity || order?.package_quantity || 1)} pcs`,
-    Number(order?.package_weight_kg || 0) > 0 ? `${order.package_weight_kg} kg` : "",
-    dims.length === 3 ? `${dims.join(" x ")} cm` : "",
-  ]
-    .filter(Boolean)
-    .join(" / ");
-};
-const acceptedManufacturingStatuses = [
-  "Deposit pending",
-  "Confirmed",
-  "In production",
-  "Quality check",
-  "Ready",
-  "Completed",
-];
 const openAcceptedManufacturingStatuses = [
   "Deposit pending",
   "Confirmed",
@@ -295,31 +222,16 @@ const manufacturingProgressPercent = (order) => {
 const canProceedLocalOrder = (order) =>
   ["Quoted", "Deposit pending"].includes(order?.status) &&
   Number(order?.quoted_total || 0) > 0 &&
-  !pendingManufacturingPaymentOfType(order, "Deposit");
+  !hasPendingManufacturingPayment(order);
 
 const canRejectLocalOrder = (order) =>
   ["Quote requested", "Quoted"].includes(order?.status) &&
-  !hasPendingManufacturingDeposit(order);
+  !hasPendingManufacturingPayment(order);
 
 const canRequestFinalManufacturingBalance = (order) =>
   ["Ready", "Completed"].includes(order?.status) &&
   Number(order?.balance_due || 0) > 0 &&
-  !pendingManufacturingPaymentOfType(order, "Balance");
-
-const defaultManufacturingPaymentAmount = (order, paymentType = "Deposit") => {
-  if (!order) return "";
-  const depositDue = Number(order.deposit_balance_due || order.deposit_required || 0);
-  const balanceDue = Number(order.balance_due || 0);
-  const amount = paymentType === "Balance" 
-    ? (balanceDue > 0 ? balanceDue : Number(order.quoted_total || 0)) 
-    : (depositDue > 0 ? depositDue : (balanceDue > 0 ? balanceDue : Number(order.quoted_total || 0)));
-  return amount > 0 ? formatAmountForInput(amount, order.currency) : "";
-};
-
-const latestManufacturingUpdate = (order) => {
-  const updates = Array.isArray(order?.updates) ? order.updates : [];
-  return updates.length ? updates[0] : null;
-};
+  !hasPendingManufacturingPayment(order);
 
 function ManufacturingRoadmap({ order }) {
   const activeIndex = manufacturingStepIndex(order.status);
@@ -502,6 +414,7 @@ export default function ServiceTakerWorkspace({
   mode = "portal",
   initialTab = "inventory",
   authenticatedUser,
+  onLogout,
 }) {
   const isAdmin = mode === "admin";
   const [data, setData] = useState({
@@ -537,7 +450,6 @@ export default function ServiceTakerWorkspace({
   const [manufacturingAdminForm, setManufacturingAdminForm] = useState({});
   const [manufacturingPaymentForm, setManufacturingPaymentForm] = useState({
     amount: "",
-    payment_type: "Deposit",
     method: "",
     reference: "",
     note: "",
@@ -599,6 +511,7 @@ export default function ServiceTakerWorkspace({
   const manufacturingOrders = Array.isArray(data.manufacturing_orders)
     ? data.manufacturing_orders
     : [];
+  const shippingRequests = Array.isArray(data.shipping_requests) ? data.shipping_requests : [];
   const ledger = Array.isArray(data.ledger) ? data.ledger : [];
   const currency = data.client?.currency || clients[0]?.currency || "USD";
   const portalFulfillmentEnabled = isAdmin || data.client?.fulfillment_enabled !== false;
@@ -618,10 +531,6 @@ export default function ServiceTakerWorkspace({
   const matchesSearch = (...values) =>
     !query || values.some((value) => String(value || "").toLowerCase().includes(query));
 
-  const visibleClients = useMemo(
-    () => clients.filter((client) => matchesSearch(client.company_name, client.contact_name, client.username, client.email, client.phone)),
-    [clients, query]
-  );
 const visibleProducts = useMemo(
     () =>
       products.filter(
@@ -683,49 +592,6 @@ const visibleProducts = useMemo(
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) || null;
   const selectedManufacturing =
     manufacturingOrders.find((order) => order.id === selectedManufacturingId) || null;
-  const activeProducts = products.filter((product) => product.is_active);
-  const outOfStockProducts = activeProducts.filter(
-    (product) => Number(product.quantity_on_hand || 0) <= 0
-  );
-  const fullyReservedProducts = activeProducts.filter(
-    (product) =>
-      Number(product.quantity_on_hand || 0) > 0 &&
-      Number(product.available_quantity || 0) <= 0
-  );
-  const unavailableProducts = activeProducts.filter(
-    (product) => Number(product.available_quantity || 0) <= 0
-  );
-  const availableProducts = activeProducts.filter(
-    (product) => Number(product.available_quantity || 0) > 0
-  );
-  const inventoryAvailabilityPercent = activeProducts.length
-    ? Math.round(
-        (availableProducts.length / activeProducts.length) * 100
-      )
-    : null;
-  const stockTrackingProducts = [...activeProducts].sort((left, right) => {
-    const rank = (product) => {
-      const onHand = Number(product.quantity_on_hand || 0);
-      const available = Number(product.available_quantity || 0);
-      if (onHand <= 0) return 0;
-      if (available <= 0) return 1;
-      return 2;
-    };
-    return rank(left) - rank(right);
-  });
-  const openInboundNotices = inbounds.filter((inbound) =>
-    ["Submitted", "Partially received"].includes(inbound.status)
-  );
-  const incomingUnits = openInboundNotices.reduce(
-    (total, inbound) =>
-      total +
-      Math.max(
-        0,
-        Number(inbound.expected_quantity || 0) -
-          Number(inbound.received_quantity || 0)
-      ),
-    0
-  );
   const dispatchPriority = {
     Ready: 0,
     Processing: 1,
@@ -740,44 +606,11 @@ const visibleProducts = useMemo(
       (left, right) =>
         dispatchPriority[left.status] - dispatchPriority[right.status]
     );
-  const shippedOrders = orders
-    .filter((order) => order.status === "Shipped")
-    .sort(
-      (left, right) =>
-        new Date(right.shipped_at || right.updated_at || 0) -
-        new Date(left.shipped_at || left.updated_at || 0)
-    );
-  const openShippingRequests = visibleOrders.filter((order) =>
-    openFulfillmentStatuses.includes(order.status)
-  );
-  const stockShippingRequests = visibleOrders.filter(
-    (order) => (order.shipping_request_type || "stock") === "stock"
-  );
-  const manufacturedShippingRequests = visibleOrders.filter(
-    (order) => order.shipping_request_type === "manufactured"
-  );
-  const externalShippingRequests = visibleOrders.filter(
-    (order) => order.shipping_request_type === "external"
-  );
-  const shippingCourierSummary = courierOptions.map((courier) => ({
-    courier,
-    count: visibleOrders.filter(
-      (order) =>
-        String(order.courier || order.preferred_courier || "").toLowerCase() ===
-        courier.toLowerCase()
-    ).length,
-  }));
   const readyToShipCount = dispatchQueue.filter(
     (order) => order.status === "Ready"
   ).length;
-  const billableOrders = orders.filter(
-    (order) => order.status !== "Cancelled" && Number(order.total_cost || 0) > 0
-  );
   const manufacturingDueOrders = manufacturingOrders.filter(
     (order) => !["Cancelled", "Rejected"].includes(order.status) && Number(order.balance_due || 0) > 0
-  );
-  const pendingManufacturingDeposits = manufacturingOrders.filter(
-    (order) => !["Cancelled", "Rejected"].includes(order.status) && hasPendingManufacturingDeposit(order)
   );
   const pendingManufacturingPaymentRows = manufacturingOrders.flatMap((order) =>
     pendingManufacturingPayments(order).map((payment) => ({ order, payment }))
@@ -798,20 +631,16 @@ const visibleProducts = useMemo(
     (sum, row) => sum + Number(row.payment.amount || 0),
     0
   );
-  const paymentEligibleManufacturingOrders = manufacturingOrders.filter(
-    (order) =>
-      !["Cancelled", "Rejected"].includes(order.status) &&
-      Number(order.quoted_total || 0) > 0
+  const fulfillmentChargeOrders = orders
+    .filter((order) => order.status !== "Cancelled" && Number(order.total_cost || 0) > 0)
+    .sort((left, right) =>
+      new Date(right.updated_at || right.created_at || 0) -
+      new Date(left.updated_at || left.created_at || 0)
+    );
+  const fulfillmentChargesTotal = fulfillmentChargeOrders.reduce(
+    (sum, order) => sum + Number(order.total_cost || 0),
+    0
   );
-  const portalPaymentSelectedOrder = manufacturingOrders.find(
-    (order) => String(order.id) === String(portalPaymentForm.manufacturing_order_id)
-  );
-  const manufacturingShipmentOptions = manufacturingOrders.filter((order) => {
-    if (!["Ready", "Completed"].includes(order.status)) return false;
-    const selectedClientId = isAdmin ? orderForm.service_taker_id : data.client?.id;
-    if (!selectedClientId) return true;
-    return String(order.service_taker_id) === String(selectedClientId);
-  });
   const localQuoteRequests = manufacturingOrders.filter(
     (order) => order.status === "Quote requested"
   ).length;
@@ -822,21 +651,26 @@ const visibleProducts = useMemo(
     (order) => liveManufacturingStatuses.includes(order.status)
   ).length;
   const readyLocalOrders = manufacturingOrders.filter((order) => order.status === "Ready").length;
-  const localOrderBalanceDue = manufacturingDueOrders.reduce(
-    (sum, order) => sum + Number(order.balance_due || 0),
-    0
-  );
+  const localOrderBalanceDue = !isAdmin && data.stats?.account_balance_due !== undefined
+    ? Number(data.stats.account_balance_due || 0)
+    : manufacturingDueOrders.reduce((sum, order) => sum + Number(order.balance_due || 0), 0);
+  const accountAdvanceCredit = !isAdmin ? Number(data.stats?.advance_credit || 0) : 0;
 
   // Helper to calculate total pending balance for a specific service taker (across all local orders + fulfillment orders)
   const getServiceTakerTotalPendingBalance = (serviceTakerId) => {
     if (!serviceTakerId) return 0;
-    const clientLocalDue = manufacturingOrders
-      .filter((o) => Number(o.service_taker_id) === Number(serviceTakerId) && openAcceptedManufacturingStatuses.includes(o.status))
-      .reduce((sum, o) => sum + Number(o.balance_due || 0), 0);
-    const clientOrderDue = orders
-      .filter((o) => Number(o.service_taker_id) === Number(serviceTakerId) && o.status !== "Cancelled")
-      .reduce((sum, o) => sum + Number(o.total_cost || 0), 0);
-    return roundToTwo(clientLocalDue + clientOrderDue);
+    const clientManufacturingCharges = manufacturingOrders
+      .filter((order) => Number(order.service_taker_id) === Number(serviceTakerId) && !["Cancelled", "Rejected"].includes(order.status))
+      .reduce((sum, order) => sum + Number(order.quoted_total || (Number(order.quoted_unit_price || 0) * Number(order.quantity || 0) + Number(order.other_cost || 0))), 0);
+    const clientFulfillmentCharges = orders
+      .filter((order) => Number(order.service_taker_id) === Number(serviceTakerId) && order.status !== "Cancelled")
+      .reduce((sum, order) => sum + Number(order.total_cost || 0), 0);
+    const clientPayments = manufacturingOrders
+      .filter((order) => Number(order.service_taker_id) === Number(serviceTakerId))
+      .flatMap((order) => order.payments || [])
+      .filter((payment) => payment.status === "Confirmed")
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    return roundToTwo(Math.max(0, clientManufacturingCharges + clientFulfillmentCharges - clientPayments));
   };
 
   const roundToTwo = (num) => Math.round((Number(num || 0) + Number.EPSILON) * 100) / 100;
@@ -854,9 +688,6 @@ const visibleProducts = useMemo(
   const selectedAccountManufacturingOrders = selectedAccount
     ? manufacturingOrders.filter((order) => Number(order.service_taker_id) === Number(selectedAccount.id))
     : [];
-  const selectedAccountAcceptedManufacturingOrders = selectedAccountManufacturingOrders.filter((order) =>
-    acceptedManufacturingStatuses.includes(order.status)
-  );
   const selectedAccountOpenManufacturingOrders = selectedAccountManufacturingOrders.filter((order) =>
     openAcceptedManufacturingStatuses.includes(order.status)
   );
@@ -875,15 +706,21 @@ const visibleProducts = useMemo(
   const selectedAccountPendingPaymentRows = selectedAccountPaymentRows.filter(
     ({ payment }) => payment.status === "Pending confirmation"
   );
-  const selectedAccountOpenBalance = roundToTwo(
-    selectedAccountOpenManufacturingOrders.reduce((sum, order) => sum + Number(order.balance_due || 0), 0) +
-      selectedAccountOpenFulfillmentOrders.reduce((sum, order) => sum + Number(order.total_cost || 0), 0)
-  );
   const selectedAccountReceivedTotal = roundToTwo(
     selectedAccountPaymentRows
       .filter(({ payment }) => payment.status === "Confirmed")
       .reduce((sum, { payment }) => sum + Number(payment.amount || 0), 0)
   );
+  const selectedAccountGrossCharges = roundToTwo(
+    selectedAccountManufacturingOrders
+      .filter((order) => !["Cancelled", "Rejected"].includes(order.status))
+      .reduce((sum, order) => sum + Number(order.quoted_total || (Number(order.quoted_unit_price || 0) * Number(order.quantity || 0) + Number(order.other_cost || 0))), 0) +
+      orders
+        .filter((order) => Number(order.service_taker_id) === Number(selectedAccount?.id) && order.status !== "Cancelled")
+        .reduce((sum, order) => sum + Number(order.total_cost || 0), 0)
+  );
+  const selectedAccountOpenBalance = roundToTwo(Math.max(0, selectedAccountGrossCharges - selectedAccountReceivedTotal));
+  const selectedAccountAdvanceCredit = roundToTwo(Math.max(0, selectedAccountReceivedTotal - selectedAccountGrossCharges));
   const recentLocalOrders = manufacturingOrders
     .filter((order) => order.status !== "Cancelled")
     .sort(
@@ -891,26 +728,8 @@ const visibleProducts = useMemo(
         new Date(right.updated_at || right.created_at || 0) -
         new Date(left.updated_at || left.created_at || 0)
     );
-  const onHandUnits = Number(data.stats?.quantity_on_hand || 0);
   const availableUnits = Number(data.stats?.available_quantity || 0);
   const reservedUnits = Number(data.stats?.reserved_quantity || 0);
-  const dispatchStages = [
-    ["Awaiting label", "Awaiting label"],
-    ["Submitted", "Submitted"],
-    ["Processing", "Processing"],
-    ["Ready", "Ready to ship"],
-    ["Shipped", "Dispatched"],
-  ];
-  const localOrderStages = [
-    ["Quote requested", "Requested"],
-    ["Quoted", "Quoted"],
-    ["Deposit pending", "Deposit"],
-    ["Confirmed", "Confirmed"],
-    ["In production", "Production"],
-    ["Quality check", "QC"],
-    ["Ready", "Ready"],
-  ];
-
   const manufacturingSpec = (order) =>
     [
       order.steel_type,
@@ -1293,9 +1112,12 @@ const visibleProducts = useMemo(
       packaging: order.packaging || "",
       quoted_unit_price: order.quoted_unit_price || "",
       other_cost: order.other_cost || "",
+      other_cost_label: order.other_cost_label || "",
       deposit_required: order.deposit_required || "",
       courier: order.courier || "",
       tracking_number: order.tracking_number || "",
+      shipping_weight_kg: order.shipping_weight_kg ?? "",
+      shipping_cost: order.shipping_cost || "",
       estimated_ready_at: order.estimated_ready_at
         ? String(order.estimated_ready_at).slice(0, 10)
         : "",
@@ -1304,7 +1126,6 @@ const visibleProducts = useMemo(
     });
     setManufacturingPaymentForm({
       amount: "",
-      payment_type: "Deposit",
       method: "",
       reference: "",
       note: "",
@@ -1348,6 +1169,27 @@ const visibleProducts = useMemo(
     }
   };
 
+  const saveStandaloneShippingRequest = async (event, shipment) => {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    setBusy(`shipping-request-${shipment.id}`);
+    try {
+      await api.patch(`/service-takers/admin/shipping-requests/${shipment.id}`, {
+        status: String(fields.get("status") || "Submitted"),
+        shipping_weight_kg: fields.get("shipping_weight_kg") === "" ? null : Number(fields.get("shipping_weight_kg")),
+        shipping_cost: Number(fields.get("shipping_cost") || 0),
+        courier: String(fields.get("courier") || "").trim() || null,
+        tracking_number: String(fields.get("tracking_number") || "").trim() || null,
+      });
+      showSuccess("Shipping details saved.");
+      await load({ quiet: true });
+    } catch (saveError) {
+      setError(errorMessage(saveError, "Shipping details could not be saved."));
+    } finally {
+      setBusy("");
+    }
+  };
+
   const saveManufacturing = async (event) => {
     event.preventDefault();
     if (!selectedManufacturing) return;
@@ -1359,7 +1201,10 @@ const visibleProducts = useMemo(
           ...manufacturingAdminForm,
           quoted_unit_price: Number(manufacturingAdminForm.quoted_unit_price || 0),
           other_cost: Number(manufacturingAdminForm.other_cost || 0),
+          other_cost_label: manufacturingAdminForm.other_cost_label.trim() || null,
           deposit_required: Number(manufacturingAdminForm.deposit_required || 0),
+          shipping_weight_kg: optionalNumber(manufacturingAdminForm.shipping_weight_kg),
+          shipping_cost: Number(manufacturingAdminForm.shipping_cost || 0),
           blade_thickness_mm: optionalNumber(manufacturingAdminForm.blade_thickness_mm),
           blade_length_in: optionalNumber(manufacturingAdminForm.blade_length_in),
           overall_length_in: optionalNumber(manufacturingAdminForm.overall_length_in),
@@ -1393,7 +1238,6 @@ const visibleProducts = useMemo(
       showSuccess("Local order payment recorded.");
       setManufacturingPaymentForm({
         amount: "",
-        payment_type: "Deposit",
         method: "",
         reference: "",
         note: "",
@@ -1406,14 +1250,12 @@ const visibleProducts = useMemo(
     }
   };
 
-  const openManufacturingPaymentProof = (order = null, paymentType = "Payment") => {
-    const defaultAmount = order
-      ? defaultManufacturingPaymentAmount(order, paymentType)
-      : (Number(localOrderBalanceDue || 0) > 0 ? formatAmountForInput(localOrderBalanceDue, currency) : "");
+  const openManufacturingPaymentProof = () => {
+    const defaultAmount = Number(localOrderBalanceDue || 0) > 0
+      ? formatAmountForInput(localOrderBalanceDue, currency)
+      : "";
     setPortalPaymentForm({
-      manufacturing_order_id: order?.id ? String(order.id) : "",
       amount: defaultAmount,
-      payment_type: paymentType || "Payment",
       note: "",
     });
     setPortalPaymentProofFile(null);
@@ -1428,7 +1270,7 @@ const visibleProducts = useMemo(
 
   const openManufacturingDeposit = (order) => {
     if (Number(order?.deposit_balance_due || order?.deposit_required || 0) > 0) {
-      openManufacturingPaymentProof(order, "Deposit");
+      openManufacturingPaymentProof();
       return;
     }
     setDepositOrder(order);
@@ -1489,7 +1331,7 @@ const visibleProducts = useMemo(
 
   const requestManufacturingBalance = (order) => {
     if (!order) return;
-    openManufacturingPaymentProof(order, "Balance");
+    openManufacturingPaymentProof();
   };
 
   const submitManufacturingPaymentProof = async (event) => {
@@ -1506,22 +1348,9 @@ const visibleProducts = useMemo(
     try {
       const formData = new FormData();
       formData.append("amount", portalPaymentForm.amount);
-      formData.append("payment_type", portalPaymentForm.payment_type || "Payment");
       formData.append("note", portalPaymentForm.note || "");
       formData.append("proof_file", portalPaymentProofFile);
-      
-      const targetOrder = portalPaymentForm.manufacturing_order_id
-        ? manufacturingOrders.find((o) => String(o.id) === String(portalPaymentForm.manufacturing_order_id))
-        : (manufacturingOrders.find((o) => !["Cancelled", "Rejected"].includes(o.status) && Number(o.balance_due || 0) > 0)
-           || manufacturingOrders.find((o) => !["Cancelled", "Rejected"].includes(o.status))
-           || manufacturingOrders[0]);
-
-      const targetOrderId = targetOrder?.id || portalPaymentForm.manufacturing_order_id;
-      const endpoint = targetOrderId
-        ? `/service-takers/portal/local-orders/${targetOrderId}/payments`
-        : `/service-takers/portal/payments`;
-
-      await api.post(endpoint, formData);
+      await api.post("/service-takers/portal/payments", formData);
       showSuccess("Payment screenshot sent for company confirmation.");
       closeManufacturingPaymentProof();
       goToServiceCharges();
@@ -1722,12 +1551,6 @@ const visibleProducts = useMemo(
     setModal("client");
   };
 
-  const openClientAccount = (client) => {
-    setSelectedAccountId(client.id);
-    setShowAccountPayments(false);
-    setModal("client-account");
-  };
-
   const closeClientAccount = () => {
     setSelectedAccountId(null);
     setShowAccountPayments(false);
@@ -1768,11 +1591,14 @@ const tabs = [
     ["inventory", "Client inventory", products.length],
     ["inbound", "Inbound", data.stats?.open_inbounds || 0],
     ["orders", "Shipping", data.stats?.open_orders || 0],
+    ["parcelShipping", "Parcel requests", shippingRequests.filter((shipment) => shipment.status !== "Shipped" && shipment.status !== "Cancelled").length],
   ];
-  const adminPageTitle = activeTab === "manufacturing" ? "Local Orders" : "Service Takers";
+  const adminPageTitle = activeTab === "manufacturing" ? "Local Orders" : activeTab === "parcelShipping" ? "Parcel shipping" : "Service Takers";
   const adminPageDetail =
     activeTab === "manufacturing"
       ? "Local manufacturing quotes, deposits, production timelines and customer balances"
+      : activeTab === "parcelShipping"
+        ? "Independent parcel requests, delivery details and tracking"
       : "Client inventory, inbound receiving, outbound requests, labels and charges";
   const portalPageTitle =
     activeTab === "dashboard"
@@ -1787,6 +1613,8 @@ const tabs = [
           ? "Quotations"
         : activeTab === "billing"
           ? "Charges"
+        : activeTab === "account"
+          ? "Account"
           : "Products & Inventory";
 
   const openProductModal = () => {
@@ -1899,6 +1727,7 @@ const tabs = [
     return (
       <ManufacturingServicePortal
         authenticatedUser={authenticatedUser}
+          onLogout={onLogout}
         data={data}
         error={error}
         load={load}
@@ -1930,9 +1759,7 @@ const tabs = [
             </p>
           </div>
           <div className="service-header-actions">
-            <button className="service-secondary-button" onClick={() => load()} type="button">
-              Refresh
-            </button>
+            {isAdmin && <button className="service-secondary-button" onClick={() => load()} type="button">Refresh</button>}
             {isAdmin && (
               <button className="service-primary-button" onClick={openClientModal} type="button">
                 <span>+</span> Service taker
@@ -2063,423 +1890,98 @@ const tabs = [
           </nav>
         )}
 
-        {activeTab === "dashboard" && !isAdmin && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 20, padding: "20px 24px", background: "#f8fafc", minHeight: "calc(100vh - 64px)", width: "100%", boxSizing: "border-box" }}>
-            
-            {/* Quick Actions Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "14px 20px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", display: "inline-block" }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>
-                  {data.client?.company_name || "Service Portal"} Overview
-                </span>
-                <span style={{ fontSize: 11.5, fontWeight: 600, color: "#64748b", background: "#f1f5f9", padding: "2px 8px", borderRadius: 10 }}>
-                  {portalAccountType}
-                </span>
+        {activeTab === "account" && !isAdmin && (
+          <section className="service-self-account">
+            <header className="service-self-account-heading">
+              <span className="service-self-account-avatar">{String(data.client?.contact_name || authenticatedUser?.name || authenticatedUser?.username || "A").trim().slice(0, 1).toUpperCase()}</span>
+              <div><span>ACCOUNT</span><h2>{data.client?.contact_name || authenticatedUser?.name || authenticatedUser?.username || "Your account"}</h2><p>{data.client?.company_name || "Service portal"}</p></div>
+              <Status value={data.client?.is_active === false ? "Paused" : "Active"} />
+            </header>
+            <section aria-labelledby="service-account-details-title" className="service-account-section">
+              <div className="service-account-section-heading"><span>CLIENT DETAILS</span><h3 id="service-account-details-title">Contact information</h3></div>
+              <div className="service-self-account-grid">
+                <div><span>Portal username</span><strong>{data.client?.username || authenticatedUser?.username || "Not set"}</strong></div>
+                <div><span>Email</span><strong>{data.client?.email || authenticatedUser?.email || "Not added"}</strong></div>
+                <div><span>Phone</span><strong>{data.client?.phone || authenticatedUser?.phone || "Not added"}</strong></div>
+                <div><span>Company</span><strong>{data.client?.company_name || "Not added"}</strong></div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                {portalManufacturingEnabled && (
-                  <>
-                    <button
-                      onClick={() => openManufacturingModal()}
-                      type="button"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                        background: "#0f766e",
-                        color: "#ffffff",
-                        border: "none",
-                        borderRadius: 6,
-                        padding: "8px 14px",
-                        fontSize: 12.5,
-                        fontWeight: 650,
-                        cursor: "pointer",
-                      }}
-                    >
-                      + Request Quote
-                    </button>
-                    <button
-                      
-                      onClick={() => openManufacturingPaymentProof()}
-                      type="button"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                        background: "#ffffff",
-                        color: "#0f766e",
-                        border: "1px solid #0f766e",
-                        borderRadius: 6,
-                        padding: "7px 13px",
-                        fontSize: 12.5,
-                        fontWeight: 650,
-                        cursor: "pointer",
-                      }}
-                    >
-                      + Add Payment Screenshot
-                    </button>
-                  </>
-                )}
-                {portalFulfillmentEnabled && (
-                  <>
-                    <button
-                      onClick={openInboundModal}
-                      type="button"
-                      style={{
-                        background: "#ffffff",
-                        color: "#334155",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: 6,
-                        padding: "7px 12px",
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                      }}
-                    >
-                      + Inbound
-                    </button>
-                    <button
-                      onClick={openOrderModal}
-                      type="button"
-                      style={{
-                        background: "#0f766e",
-                        color: "#ffffff",
-                        border: "none",
-                        borderRadius: 6,
-                        padding: "8px 14px",
-                        fontSize: 12.5,
-                        fontWeight: 650,
-                        cursor: "pointer",
-                      }}
-                    >
-                      + Shipping
-                    </button>
-                  </>
-                )}
+            </section>
+            <section aria-labelledby="service-account-services-title" className="service-account-section">
+              <div className="service-account-section-heading"><span>ACCESS</span><h3 id="service-account-services-title">Your services</h3></div>
+              <div className="service-account-service-list">
+                <article className={portalManufacturingEnabled ? "is-enabled" : "is-disabled"}>
+                  <span aria-hidden="true" className="service-account-service-check">{portalManufacturingEnabled ? "✓" : "–"}</span>
+                  <div><strong>Manufacturing</strong><small>{portalManufacturingEnabled ? "Available on your account" : "Not enabled for this account"}</small></div>
+                  <span className="service-account-service-state">{portalManufacturingEnabled ? "Enabled" : "Unavailable"}</span>
+                </article>
+                <article className={portalFulfillmentEnabled ? "is-enabled" : "is-disabled"}>
+                  <span aria-hidden="true" className="service-account-service-check">{portalFulfillmentEnabled ? "✓" : "–"}</span>
+                  <div><strong>Shipping and fulfillment</strong><small>{portalFulfillmentEnabled ? "Available on your account" : "Not enabled for this account"}</small></div>
+                  <span className="service-account-service-state">{portalFulfillmentEnabled ? "Enabled" : "Unavailable"}</span>
+                </article>
               </div>
+            </section>
+            <section aria-labelledby="service-account-billing-title" className="service-account-section service-account-billing-section">
+              <div className="service-account-section-heading"><span>BILLING</span><h3 id="service-account-billing-title">Billing address</h3></div>
+              <p>{data.client?.billing_address || "No billing address has been added to this account."}</p>
+            </section>
+            <div className="service-self-account-actions">
+              <button className="service-row-button is-danger" onClick={onLogout} type="button">Log out</button>
             </div>
-
-            {/* Local Orders Manufacturing Section */}
-            {portalManufacturingEnabled && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {/* Metric Cards */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 4, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748b" }}>
-                      Active Production
-                    </span>
-                    <strong style={{ fontSize: 24, fontWeight: 800, color: "#0f172a", lineHeight: 1.1 }}>
-                      {number(activeLocalOrders)}
-                    </strong>
-                    <small style={{ fontSize: 11.5, fontWeight: 600, color: "#16a34a" }}>
-                      {number(readyLocalOrders)} ready for delivery
-                    </small>
-                  </div>
-
-                  <div style={{ background: "#ffffff", border: (localQuoteRequests + quotedLocalOrders) > 0 ? "1px solid #fed7aa" : "1px solid #e2e8f0", borderRadius: 8, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 4, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: (localQuoteRequests + quotedLocalOrders) > 0 ? "#9a3412" : "#64748b" }}>
-                      Quotes Pending
-                    </span>
-                    <strong style={{ fontSize: 24, fontWeight: 800, color: (localQuoteRequests + quotedLocalOrders) > 0 ? "#d97706" : "#0f172a", lineHeight: 1.1 }}>
-                      {number(localQuoteRequests + quotedLocalOrders)}
-                    </strong>
-                    <small style={{ fontSize: 11.5, fontWeight: 600, color: (localQuoteRequests + quotedLocalOrders) > 0 ? "#c2410c" : "#64748b" }}>
-                      {number(quotedLocalOrders)} awaiting confirmation
-                    </small>
-                  </div>
-
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 4, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748b" }}>
-                      Total Confirmed Paid
-                    </span>
-                    <strong style={{ fontSize: 24, fontWeight: 800, color: "#16a34a", lineHeight: 1.1 }}>
-                      {money(confirmedPaymentHistoryTotal, currency)}
-                    </strong>
-                    <small style={{ fontSize: 11.5, fontWeight: 600, color: "#059669" }}>
-                      {allManufacturingPaymentHistoryRows.filter(r => r.payment.status === "Confirmed").length} verified payments
-                    </small>
-                  </div>
-
-                  <div style={{ background: "#ffffff", border: Number(localOrderBalanceDue || 0) > 0 ? "1px solid #fecaca" : "1px solid #e2e8f0", borderRadius: 8, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 4, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: Number(localOrderBalanceDue || 0) > 0 ? "#991b1b" : "#64748b" }}>
-                      Remaining Balance Due
-                    </span>
-                    <strong style={{ fontSize: 24, fontWeight: 800, color: Number(localOrderBalanceDue || 0) > 0 ? "#dc2626" : "#0f172a", lineHeight: 1.1 }}>
-                      {money(localOrderBalanceDue, currency)}
-                    </strong>
-                    <small style={{ fontSize: 11.5, fontWeight: 600, color: Number(localOrderBalanceDue || 0) > 0 ? "#b91c1c" : "#64748b" }}>
-                      {number(pendingManufacturingPaymentRows.length)} waiting company check
-                    </small>
-                  </div>
-                </div>
-
-                {/* Production Stage Rail */}
-                <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "18px 20px", boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#475569" }}>
-                        Local Orders Manufacturing Pipeline
-                      </span>
-                    </div>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#0f766e" }}>
-                      {manufacturingOrders.length} total orders
-                    </span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10 }}>
-                    {[
-                      { key: "Quote requested", label: "Requested" },
-                      { key: "Quoted", label: "Quoted" },
-                      { key: "Deposit pending", label: "Deposit" },
-                      { key: "Confirmed", label: "Confirmed" },
-                      { key: "In production", label: "Production" },
-                      { key: "Quality check", label: "QC" },
-                      { key: "Ready", label: "Ready" },
-                      { key: "Completed", label: "Completed" },
-                    ].map((stage, idx) => {
-                      const count = manufacturingOrders.filter(o => o.status === stage.key).length;
-                      const hasWork = count > 0;
-                      return (
-                        <div
-                          key={stage.key}
-                          style={{
-                            background: hasWork ? "#f0fdfa" : "#f8fafc",
-                            border: hasWork ? "1px solid #99f6e4" : "1px solid #e2e8f0",
-                            borderRadius: 6,
-                            padding: "10px 12px",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 2,
-                            transition: "all 0.15s ease",
-                          }}
-                        >
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: 10, fontWeight: 800, color: hasWork ? "#0f766e" : "#94a3b8" }}>#{idx + 1}</span>
-                            <span style={{ fontSize: 14, fontWeight: 800, color: hasWork ? "#0f766e" : "#64748b" }}>{count}</span>
-                          </div>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: hasWork ? "#134e4a" : "#475569", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {stage.label}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 2-Column Split: Recent Orders & Recent Payments */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 16 }}>
-                  
-                  {/* Left Column: Recent Orders */}
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "#0f172a" }}>
-                        Recent Local Orders
-                      </h3>
-                      <button
-                        onClick={() => setActiveTab("manufacturing")}
-                        type="button"
-                        style={{ background: "none", border: "none", color: "#0f766e", fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0 }}
-                      >
-                        View All ({manufacturingOrders.length}) Ã¢â€ â€™
-                      </button>
-                    </div>
-
-                    {recentLocalOrders.length === 0 ? (
-                      <div style={{ textAlign: "center", padding: "30px 10px", color: "#64748b", fontSize: 13 }}>
-                        No local manufacturing orders yet.
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {recentLocalOrders.slice(0, 5).map((order) => {
-                          const progress = manufacturingProgressPercent(order);
-                          const imageUrl = order.image_url || order.product_image_url;
-                          return (
-                            <div
-                              key={order.id}
-                              onClick={() => setActiveTab("manufacturing")}
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                padding: "10px 12px",
-                                background: "#f8fafc",
-                                border: "1px solid #f1f5f9",
-                                borderRadius: 6,
-                                cursor: "pointer",
-                                gap: 12,
-                              }}
-                            >
-                              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                                <div
-                                  style={{
-                                    width: 36,
-                                    height: 36,
-                                    borderRadius: 4,
-                                    background: "#e2e8f0",
-                                    overflow: "hidden",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  {imageUrl ? (
-                                    <img decoding="async" loading="lazy" alt={order.product_name} src={getStaticUrl(imageUrl, { w: 160 })} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                  ) : (
-                                    <span style={{ fontSize: 14, fontWeight: 800, color: "#64748b" }}>
-                                      {String(order.product_name || order.request_no).charAt(0)}
-                                    </span>
-                                  )}
-                                </div>
-                                <div style={{ minWidth: 0, overflow: "hidden" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                    <strong style={{ fontSize: 12.5, color: "#0f766e" }}>{order.request_no}</strong>
-                                    <span style={{ fontSize: 11, color: "#64748b" }}>{shortDate(order.created_at)}</span>
-                                  </div>
-                                  <span style={{ fontSize: 12.5, fontWeight: 650, color: "#1e293b", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {order.product_name}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-                                <div style={{ textAlign: "right" }}>
-                                  <div style={{ fontSize: 12.5, fontWeight: 700, color: "#0f172a" }}>
-                                    {Number(order.quoted_total || 0) > 0 ? money(order.quoted_total, order.currency) : "Pending"}
-                                  </div>
-                                  <span style={{ fontSize: 10, fontWeight: 700, color: order.status === "Completed" ? "#475569" : "#16a34a" }}>
-                                    {order.status === "Completed" ? "100%" : `${progress}%`}
-                                  </span>
-                                </div>
-                                <Status value={order.status} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right Column: Recent Payments & Receipts */}
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.02)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "#0f172a" }}>
-                        Recent Payments & Receipts
-                      </h3>
-                      <button
-                        onClick={() => setActiveTab("billing")}
-                        type="button"
-                        style={{ background: "none", border: "none", color: "#0f766e", fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0 }}
-                      >
-                        View All ({allManufacturingPaymentHistoryRows.length}) Ã¢â€ â€™
-                      </button>
-                    </div>
-
-                    {allManufacturingPaymentHistoryRows.length === 0 ? (
-                      <div style={{ textAlign: "center", padding: "30px 10px", color: "#64748b", fontSize: 13 }}>
-                        No payment records yet.
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {allManufacturingPaymentHistoryRows.slice(0, 5).map(({ order, payment }) => (
-                          <div
-                            key={payment.id}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              padding: "10px 12px",
-                              background: "#f8fafc",
-                              border: "1px solid #f1f5f9",
-                              borderRadius: 6,
-                              gap: 12,
-                            }}
-                          >
-                            <div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <strong style={{ fontSize: 13, color: "#0f172a" }}>{payment.payment_type || "Payment"}</strong>
-                                <span style={{ fontSize: 11, color: "#64748b" }}>{formatDateTime(payment.paid_at || payment.created_at)}</span>
-                              </div>
-                              <span style={{ fontSize: 12, color: "#64748b", marginTop: 2, display: "block" }}>
-                                {payment.method || "Bank Transfer"}{payment.note ? ` Ã‚Â· ${payment.note}` : ""}
-                              </span>
-                            </div>
-
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <div style={{ textAlign: "right" }}>
-                                <strong style={{ fontSize: 13.5, color: payment.status === "Confirmed" ? "#16a34a" : "#d97706", display: "block" }}>
-                                  {money(payment.amount, currency)}
-                                </strong>
-                                <Status value={payment.status || "Confirmed"} />
-                              </div>
-                              {payment.proof_url && (
-                                <a
-                                  href={getStaticUrl(payment.proof_url)}
-                                  rel="noreferrer"
-                                  target="_blank"
-                                  style={{
-                                    fontSize: 11,
-                                    padding: "3px 7px",
-                                    color: "#0f766e",
-                                    fontWeight: 700,
-                                    background: "#f0fdfa",
-                                    border: "1px solid #ccfbf1",
-                                    borderRadius: 4,
-                                    textDecoration: "none",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  Proof &#8599;
-                                </a>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-              </div>
-            )}
-
-            {/* Fulfillment Section if enabled */}
-            {portalFulfillmentEnabled && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: portalManufacturingEnabled ? 12 : 0 }}>
-                {portalManufacturingEnabled && (
-                  <h3 style={{ margin: "10px 0 0 0", fontSize: 15, fontWeight: 750, color: "#0f172a" }}>
-                    Shipping & Warehouse Inventory
-                  </h3>
-                )}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 18px" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#64748b" }}>Total SKUs</span>
-                    <strong style={{ display: "block", fontSize: 22, fontWeight: 800, color: "#0f172a", marginTop: 4 }}>{number(activeProducts.length)}</strong>
-                    <small style={{ fontSize: 11, color: "#64748b" }}>{number(onHandUnits)} units on hand</small>
-                  </div>
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 18px" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#64748b" }}>Available Units</span>
-                    <strong style={{ display: "block", fontSize: 22, fontWeight: 800, color: "#16a34a", marginTop: 4 }}>{number(availableUnits)}</strong>
-                    <small style={{ fontSize: 11, color: "#64748b" }}>{number(reservedUnits)} units reserved</small>
-                  </div>
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 18px" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#64748b" }}>Dispatch Queue</span>
-                    <strong style={{ display: "block", fontSize: 22, fontWeight: 800, color: "#0f172a", marginTop: 4 }}>{number(dispatchQueue.length)}</strong>
-                    <small style={{ fontSize: 11, color: "#64748b" }}>{number(readyToShipCount)} ready to ship</small>
-                  </div>
-                  <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 18px" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#64748b" }}>Dispatched</span>
-                    <strong style={{ display: "block", fontSize: 22, fontWeight: 800, color: "#0f172a", marginTop: 4 }}>{number(shippedOrders.length)}</strong>
-                    <small style={{ fontSize: 11, color: "#64748b" }}>Completed outbound</small>
-                  </div>
-                </div>
-              </div>
-            )}
-
-          </div>
+          </section>
         )}
 
+        {activeTab === "dashboard" && !isAdmin && (
+          <div className="service-portal-dashboard">
+            <header className="service-dashboard-welcome">
+              <div><span>YOUR WORKSPACE</span><h2>Welcome back, {(authenticatedUser?.name || data.client?.contact_name || authenticatedUser?.username || "there").trim().split(/\s+/)[0]}</h2><p>{data.client?.company_name || "Service portal"}</p></div>
+              <div className="service-dashboard-actions">
+                {portalManufacturingEnabled && <button className="is-primary" onClick={() => openManufacturingModal()} type="button"><b>＋</b> Request quote</button>}
+                {portalFulfillmentEnabled && <button onClick={openOrderModal} type="button"><b>＋</b> Shipping request</button>}
+              </div>
+            </header>
 
+            <section className="service-dashboard-metrics" aria-label="Service overview">
+              {portalManufacturingEnabled && <article><span className="service-dashboard-metric-icon is-indigo">▤</span><div><small>In production</small><strong>{number(activeLocalOrders)}</strong><em>{number(readyLocalOrders)} ready for delivery</em></div></article>}
+              {portalFulfillmentEnabled && <article><span className="service-dashboard-metric-icon is-blue">↗</span><div><small>Shipping queue</small><strong>{number(dispatchQueue.length)}</strong><em>{number(readyToShipCount)} ready to ship</em></div></article>}
+              {portalFulfillmentEnabled && <article><span className="service-dashboard-metric-icon is-green">▣</span><div><small>Available stock</small><strong>{number(availableUnits)}</strong><em>{number(reservedUnits)} units reserved</em></div></article>}
+              {portalManufacturingEnabled && <article><span className="service-dashboard-metric-icon is-amber">◉</span><div><small>{accountAdvanceCredit > 0 ? "Advance credit" : "Balance due"}</small><strong>{money(accountAdvanceCredit > 0 ? accountAdvanceCredit : localOrderBalanceDue, currency)}</strong><em>{number(localQuoteRequests + quotedLocalOrders)} quotes to review</em></div></article>}
+            </section>
+
+            <div className="service-dashboard-columns">
+              <div className="service-dashboard-work-list">
+                {portalManufacturingEnabled && <section className="service-dashboard-panel">
+                  <div className="service-dashboard-panel-heading"><div><span>MANUFACTURING</span><h3>Recent orders</h3></div><button onClick={() => setActiveTab("manufacturing")} type="button">All orders <b>→</b></button></div>
+                  {recentLocalOrders.length ? <div className="service-dashboard-order-list">{recentLocalOrders.slice(0, 3).map((order) => {
+                    const imageUrl = order.image_url || order.product_image_url;
+                    const progress = manufacturingProgressPercent(order);
+                    return <article className="service-dashboard-order" key={order.id}>
+                      <div className="service-dashboard-order-top"><span className="service-dashboard-order-image">{imageUrl ? <img alt="" decoding="async" loading="lazy" src={getStaticUrl(imageUrl, { w: 120 })} /> : String(order.product_name || "P").slice(0, 1).toUpperCase()}</span><div className="service-dashboard-order-copy"><small>{order.request_no}</small><strong>{order.product_name}</strong><span>{number(order.quantity)} units · {shortDate(order.updated_at || order.created_at)}</span></div><Status value={order.status} /></div>
+                      <div className="service-dashboard-progress" role="progressbar" aria-label={`Order progress: ${order.status}`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></div>
+                      <div className="service-dashboard-order-footer"><span>{Number(order.quoted_total || 0) > 0 ? `Quote ${money(order.quoted_total, order.currency || currency)}` : "Quote pending"}</span><span>{order.estimated_ready_at ? `Ready ${shortDate(order.estimated_ready_at)}` : "Ready date pending"}</span></div>
+                    </article>;
+                  })}</div> : <p className="service-dashboard-empty">No manufacturing orders yet.</p>}
+                </section>}
+
+                {portalFulfillmentEnabled && <section className="service-dashboard-panel">
+                  <div className="service-dashboard-panel-heading"><div><span>SHIPPING</span><h3>Dispatch queue</h3></div><button onClick={() => setActiveTab("orders")} type="button">Open shipping <b>→</b></button></div>
+                  {dispatchQueue.length ? <div className="service-dashboard-shipping-list">{dispatchQueue.slice(0, 3).map((order) => <div key={order.id}><span className="service-dashboard-shipping-icon">↗</span><span><strong>{order.order_number || order.reference || `Order #${order.id}`}</strong><small>{order.recipient_name || order.customer_name || "Shipping request"}</small></span><Status value={order.status} /></div>)}</div> : <p className="service-dashboard-empty">Your shipping queue is clear.</p>}
+                </section>}
+              </div>
+
+              <aside className="service-dashboard-side">
+                <section className="service-dashboard-panel service-dashboard-quick-actions"><div className="service-dashboard-panel-heading"><div><span>SHORTCUTS</span><h3>Quick actions</h3></div></div>
+                  {portalManufacturingEnabled && <button onClick={() => openManufacturingModal()} type="button"><span className="is-indigo">＋</span><span><strong>New manufacturing order</strong><small>Request production and a quote</small></span><b>→</b></button>}
+                  {portalManufacturingEnabled && <button onClick={() => openManufacturingPaymentProof()} type="button"><span className="is-amber">▣</span><span><strong>Submit payment</strong><small>Upload a receipt for review</small></span><b>→</b></button>}
+                  {portalFulfillmentEnabled && <button onClick={openInboundModal} type="button"><span className="is-blue">↓</span><span><strong>Record inbound stock</strong><small>Notify the warehouse</small></span><b>→</b></button>}
+                </section>
+                {portalManufacturingEnabled && <section className="service-dashboard-panel service-dashboard-payment-panel"><div className="service-dashboard-panel-heading"><div><span>ACCOUNT ACTIVITY</span><h3>Recent payments</h3></div><button onClick={() => setActiveTab("billing")} type="button">View all <b>→</b></button></div>
+                  {allManufacturingPaymentHistoryRows.length ? allManufacturingPaymentHistoryRows.slice(0, 3).map(({ order, payment }) => <div className="service-dashboard-payment" key={payment.id}><span className={`service-dashboard-payment-mark ${payment.status === "Pending confirmation" ? "is-pending" : payment.status === "Rejected" ? "is-rejected" : ""}`}>{payment.status === "Rejected" ? "!" : payment.status === "Pending confirmation" ? "…" : "↑"}</span><span><strong>Payment made</strong><small>{order.request_no} · {shortDate(payment.paid_at || payment.created_at)}</small></span><span className="service-dashboard-payment-value"><strong>{money(payment.amount, order.currency || currency)}</strong>{payment.status === "Pending confirmation" && <small>In review</small>}</span></div>) : <p className="service-dashboard-empty">No payments recorded yet.</p>}
+                </section>}
+              </aside>
+            </div>
+          </div>
+        )}
         {activeTab === "clients" && isAdmin && (
           <div className="service-client-grid">
             {clients.length === 0 ? (
@@ -3217,6 +2719,27 @@ const tabs = [
 
         
 
+        {activeTab === "parcelShipping" && isAdmin && (
+          <section className="service-parcel-shipping-list">
+            {shippingRequests.length === 0 ? (
+              <EmptyState title="No parcel requests yet" detail="Independent shipping requests from service takers will appear here." />
+            ) : shippingRequests.map((shipment) => (
+              <form className="service-parcel-shipping-card" key={shipment.id} onSubmit={(event) => saveStandaloneShippingRequest(event, shipment)}>
+                <header><div><strong>{shipment.request_no}</strong><span>{shipment.company_name} · {shortDate(shipment.created_at)}</span></div><span className={`service-parcel-status is-${String(shipment.status || "Submitted").toLowerCase()}`}>{shipment.status}</span></header>
+                <div className="service-parcel-shipping-summary"><div><span>Recipient</span><strong>{shipment.recipient_name}</strong></div><div><span>Item details</span><strong>{shipment.item_description} · Qty {shipment.quantity}</strong></div><div><span>Delivery address</span><strong>{shipment.shipping_address}</strong></div>{shipment.notes && <div><span>Notes</span><strong>{shipment.notes}</strong></div>}</div>
+                <div className="service-parcel-shipping-fields">
+                  <label>Status<select defaultValue={shipment.status} name="status"><option>Submitted</option><option>Processing</option><option>Shipped</option><option>Cancelled</option></select></label>
+                  <label>Weight (kg)<input defaultValue={shipment.shipping_weight_kg ?? ""} min="0" name="shipping_weight_kg" step="0.01" type="number" /></label>
+                  <label>Shipping cost<input defaultValue={shipment.shipping_cost || ""} min="0" name="shipping_cost" step="0.01" type="number" /></label>
+                  <label>Courier<input defaultValue={shipment.courier || ""} maxLength="160" name="courier" /></label>
+                  <label>Tracking number<input defaultValue={shipment.tracking_number || ""} maxLength="200" name="tracking_number" /></label>
+                  <button className="service-primary-button" disabled={busy === `shipping-request-${shipment.id}`} type="submit">{busy === `shipping-request-${shipment.id}` ? "Saving…" : "Save shipping details"}</button>
+                </div>
+              </form>
+            ))}
+          </section>
+        )}
+
         {activeTab === "manufacturing" && (
           <div className={!isAdmin ? "service-manufacturing-portal" : undefined} style={{ display: "flex", flexDirection: "column", gap: 16, padding: !isAdmin ? "20px 24px" : "0", background: !isAdmin ? "#f8fafc" : "transparent", minHeight: !isAdmin ? "calc(100vh - 64px)" : "auto", width: "100%", boxSizing: "border-box" }}>
             {!isAdmin ? (
@@ -3426,7 +2949,7 @@ const tabs = [
                                     {order.product_name}
                                   </h3>
                                   <span style={{ fontSize: 11, color: "#64748b", display: "block", whiteSpace: "nowrap" }}>
-                                    Qty: <b>{number(order.quantity)} units</b> Ã‚Â· Ordered: {shortDate(order.created_at)}
+                                    Qty: <b>{number(order.quantity)} units</b> · Ordered: {shortDate(order.created_at)}
                                   </span>
                                 </div>
                               </div>
@@ -3500,7 +3023,7 @@ const tabs = [
                                     whiteSpace: "nowrap",
                                   }}
                                 >
-                                  {isExpanded ? "Collapse Ã¢â€“Â²" : "View Details Ã¢â€“Â¼"}
+                                  {isExpanded ? "Collapse ▲" : "View Details ▼"}
                                 </span>
                               </div>
                             </div>
@@ -3539,13 +3062,13 @@ const tabs = [
                                     <div style={{ background: "#f8fafc", padding: "10px 14px", borderRadius: 6, border: "1px solid #e2e8f0" }}>
                                       <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block" }}>Dimensions</span>
                                       <strong style={{ fontSize: 13, color: "#0f172a", marginTop: 2, display: "block" }}>
-                                        {order.blade_length_in ? `${order.blade_length_in}" Blade` : "Standard Length"} {order.blade_thickness_mm ? `Ã‚Â· ${order.blade_thickness_mm}mm` : ""}
+                                        {order.blade_length_in ? `${order.blade_length_in}" Blade` : "Standard Length"} {order.blade_thickness_mm ? `· ${order.blade_thickness_mm}mm` : ""}
                                       </strong>
                                     </div>
                                     <div style={{ background: "#f8fafc", padding: "10px 14px", borderRadius: 6, border: "1px solid #e2e8f0" }}>
                                       <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block" }}>Handle & Sheath</span>
                                       <strong style={{ fontSize: 13, color: "#0f172a", marginTop: 2, display: "block" }}>
-                                        {order.handle_material || "Standard"} {order.sheath_type ? `Ã‚Â· ${order.sheath_type}` : ""}
+                                        {order.handle_material || "Standard"} {order.sheath_type ? `· ${order.sheath_type}` : ""}
                                       </strong>
                                     </div>
                                     <div style={{ background: "#f8fafc", padding: "10px 14px", borderRadius: 6, border: "1px solid #e2e8f0" }}>
@@ -3562,7 +3085,7 @@ const tabs = [
                                   <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                                     <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 6, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
                                       <span style={{ fontSize: 11, color: "#64748b" }}>Unit Price:</span>
-                                      <strong style={{ fontSize: 12.5, color: "#0f172a" }}>{Number(order.quoted_unit_price || 0) > 0 ? money(order.quoted_unit_price, order.currency) : "Ã¢â‚¬â€"}</strong>
+                                      <strong style={{ fontSize: 12.5, color: "#0f172a" }}>{Number(order.quoted_unit_price || 0) > 0 ? money(order.quoted_unit_price, order.currency) : "—"}</strong>
                                     </div>
                                     <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "6px 12px", display: "flex", alignItems: "center", gap: 6 }}>
                                       <span style={{ fontSize: 11, color: "#166534" }}>Deposit Required:</span>
@@ -3881,7 +3404,7 @@ const tabs = [
                                 {order.product_name}
                               </h3>
                               <span style={{ fontSize: 11, color: "#64748b", display: "block", whiteSpace: "nowrap" }}>
-                                Qty: <b>{number(order.quantity)} units</b> Ã‚Â· Requested: {shortDate(order.created_at)}
+                                Qty: <b>{number(order.quantity)} units</b> · Requested: {shortDate(order.created_at)}
                               </span>
                             </div>
                           </div>
@@ -3906,7 +3429,7 @@ const tabs = [
                           <div style={{ textAlign: "right" }}>
                             <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block" }}>Deposit Req</span>
                             <div style={{ fontSize: 13.5, fontWeight: 750, color: "#15803d", whiteSpace: "nowrap" }}>
-                              {Number(order.deposit_required || 0) > 0 ? money(order.deposit_required, order.currency) : "Ã¢â‚¬â€"}
+                              {Number(order.deposit_required || 0) > 0 ? money(order.deposit_required, order.currency) : "—"}
                             </div>
                           </div>
 
@@ -3931,7 +3454,7 @@ const tabs = [
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {isExpanded ? "Collapse Ã¢â€“Â²" : "View Details Ã¢â€“Â¼"}
+                              {isExpanded ? "Collapse ▲" : "View Details ▼"}
                             </span>
                           </div>
                         </div>
@@ -3954,13 +3477,13 @@ const tabs = [
                                 <div style={{ background: "#f8fafc", padding: "10px 14px", borderRadius: 6, border: "1px solid #e2e8f0" }}>
                                   <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block" }}>Dimensions</span>
                                   <strong style={{ fontSize: 13, color: "#0f172a", marginTop: 2, display: "block" }}>
-                                    {order.blade_length_in ? `${order.blade_length_in}" Blade` : "Standard Length"} {order.blade_thickness_mm ? `Ã‚Â· ${order.blade_thickness_mm}mm` : ""}
+                                    {order.blade_length_in ? `${order.blade_length_in}" Blade` : "Standard Length"} {order.blade_thickness_mm ? `· ${order.blade_thickness_mm}mm` : ""}
                                   </strong>
                                 </div>
                                 <div style={{ background: "#f8fafc", padding: "10px 14px", borderRadius: 6, border: "1px solid #e2e8f0" }}>
                                   <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "uppercase", display: "block" }}>Handle & Sheath</span>
                                   <strong style={{ fontSize: 13, color: "#0f172a", marginTop: 2, display: "block" }}>
-                                    {order.handle_material || "Standard"} {order.sheath_type ? `Ã‚Â· ${order.sheath_type}` : ""}
+                                    {order.handle_material || "Standard"} {order.sheath_type ? `· ${order.sheath_type}` : ""}
                                   </strong>
                                 </div>
                                 <div style={{ background: "#f8fafc", padding: "10px 14px", borderRadius: 6, border: "1px solid #e2e8f0" }}>
@@ -4004,7 +3527,7 @@ const tabs = [
                                       boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
                                     }}
                                   >
-                                    Ã¢Å“â€œ Proceed & Pay Deposit
+                                    ✓ Proceed & Pay Deposit
                                   </button>
                                 )}
 
@@ -4114,14 +3637,32 @@ const tabs = [
 
               <div style={{ background: "#ffffff", border: Number(data.stats?.manufacturing_balance_due || 0) > 0 ? "1px solid #fecaca" : "1px solid #e2e8f0", borderRadius: 8, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 6, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
                 <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: Number(data.stats?.manufacturing_balance_due || 0) > 0 ? "#991b1b" : "#64748b" }}>
-                  Remaining Balance Due
+                  Total balance due
                 </span>
-                <strong style={{ fontSize: 24, fontWeight: 800, color: Number(data.stats?.manufacturing_balance_due || 0) > 0 ? "#dc2626" : "#0f172a", lineHeight: 1 }}>
-                  {money(data.stats?.manufacturing_balance_due, currency)}
+                <strong style={{ fontSize: 24, fontWeight: 800, color: Number(data.stats?.account_balance_due ?? (Number(data.stats?.manufacturing_balance_due || 0) + Number(data.stats?.fulfillment_balance_due || 0))) > 0 ? "#dc2626" : "#0f172a", lineHeight: 1 }}>
+                  {money(data.stats?.account_balance_due ?? (Number(data.stats?.manufacturing_balance_due || 0) + Number(data.stats?.fulfillment_balance_due || 0)), currency)}
                 </strong>
-                <small style={{ fontSize: 12, fontWeight: 600, color: Number(data.stats?.manufacturing_balance_due || 0) > 0 ? "#b91c1c" : "#64748b" }}>
-                  Outstanding orders balance
+                <small style={{ fontSize: 12, fontWeight: 600, color: Number(data.stats?.account_balance_due ?? (Number(data.stats?.manufacturing_balance_due || 0) + Number(data.stats?.fulfillment_balance_due || 0))) > 0 ? "#b91c1c" : "#64748b" }}>
+                  Manufacturing and shipping
                 </small>
+              </div>
+
+              <div style={{ background: "#ffffff", border: fulfillmentChargesTotal > 0 ? "1px solid #bfdbfe" : "1px solid #e2e8f0", borderRadius: 8, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 6, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748b" }}>
+                  Shipping charges
+                </span>
+                <strong style={{ fontSize: 24, fontWeight: 800, color: "#0f172a", lineHeight: 1 }}>
+                  {money(fulfillmentChargesTotal, currency)}
+                </strong>
+                <small style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>
+                  {fulfillmentChargeOrders.length} shipment{fulfillmentChargeOrders.length === 1 ? "" : "s"} with charges
+                </small>
+              </div>
+
+              <div style={{ background: "#ffffff", border: Number(data.stats?.advance_credit || 0) > 0 ? "1px solid #bbf7d0" : "1px solid #e2e8f0", borderRadius: 8, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 6, boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748b" }}>Advance credit</span>
+                <strong style={{ fontSize: 24, fontWeight: 800, color: Number(data.stats?.advance_credit || 0) > 0 ? "#15803d" : "#0f172a", lineHeight: 1 }}>{money(data.stats?.advance_credit || 0, currency)}</strong>
+                <small style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>Extra confirmed customer payments</small>
               </div>
             </div>
 
@@ -4185,7 +3726,8 @@ const tabs = [
                             <strong style={{ fontSize: 13, color: "#0f172a", display: "block" }}>{formatDateTime(payment.paid_at || payment.created_at)}</strong>
                           </td>
                           <td style={{ padding: "14px 18px" }}>
-                            <strong style={{ fontSize: 13.5, color: "#0f172a", display: "block" }}>{payment.payment_type || "Payment"}</strong>
+                            <span className={`service-account-payment-symbol ${payment.status === "Pending confirmation" ? "is-review" : payment.status === "Rejected" ? "is-rejected" : ""}`} aria-label={payment.status === "Pending confirmation" ? "Payment awaiting review" : payment.status === "Rejected" ? "Payment needs attention" : "Payment made by customer"} title={payment.status === "Pending confirmation" ? "Payment awaiting review" : payment.status === "Rejected" ? "Payment needs attention" : "Payment made by customer"}>{payment.status === "Pending confirmation" ? "…" : payment.status === "Rejected" ? "!" : "↑"}</span>
+                            <strong style={{ fontSize: 13.5, color: "#0f172a", display: "inline-block", verticalAlign: "middle" }}>Payment made</strong>
                             {payment.note && (
                               <span style={{ fontSize: 12, color: "#64748b", display: "block", marginTop: 2 }}>{payment.note}</span>
                             )}
@@ -4268,6 +3810,35 @@ const tabs = [
                 )}
               </div>
             </div>
+
+            <section style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.03)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "14px 20px", borderBottom: "1px solid #e2e8f0" }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#0f172a" }}>Shipping charges</h3>
+                <span style={{ fontSize: 12, color: "#64748b" }}>Added when the company updates a shipment</span>
+              </div>
+              {fulfillmentChargeOrders.length === 0 ? (
+                <p style={{ margin: 0, padding: "22px 20px", color: "#64748b", fontSize: 13 }}>No shipping charges have been added yet.</p>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
+                    <thead><tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+                      <th style={{ padding: "11px 18px", color: "#475569", fontSize: 11, textTransform: "uppercase" }}>Shipment</th>
+                      <th style={{ padding: "11px 18px", color: "#475569", fontSize: 11, textTransform: "uppercase" }}>Tracking</th>
+                      <th style={{ padding: "11px 18px", color: "#475569", fontSize: 11, textTransform: "uppercase" }}>Status</th>
+                      <th style={{ padding: "11px 18px", color: "#475569", fontSize: 11, textTransform: "uppercase", textAlign: "right" }}>Charge</th>
+                    </tr></thead>
+                    <tbody>{fulfillmentChargeOrders.map((order) => (
+                      <tr key={order.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                        <td style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 18px" }}><span className="service-charge-symbol" aria-label="Shipping charge" title="Shipping charge">−</span><span><strong>{order.request_no}</strong><small style={{ display: "block", marginTop: 3, color: "#64748b" }}>{order.recipient_name} · {shortDate(order.updated_at || order.created_at)}</small></span></td>
+                        <td style={{ padding: "13px 18px" }}>{order.tracking_number || "Pending"}{order.courier ? <span style={{ display: "block", marginTop: 3, color: "#64748b" }}>{order.courier}</span> : null}</td>
+                        <td style={{ padding: "13px 18px" }}><Status value={order.status} /></td>
+                        <td style={{ padding: "13px 18px", textAlign: "right", whiteSpace: "nowrap", fontWeight: 750 }}>{money(order.total_cost, order.currency)}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )}
+            </section>
           </div>
         )}
       </section>
@@ -4543,6 +4114,12 @@ const tabs = [
                   </div>
                 </div>
 
+                {selectedManufacturing.shipping_requested && (
+                  <div className="service-process-notes-callout">
+                    <span>Manufacturing shipping request · Recipient and delivery address</span>
+                    <p><strong>{selectedManufacturing.shipping_recipient_name || "Recipient not provided"}</strong><br />{selectedManufacturing.shipping_address || "Address not provided"}</p>
+                  </div>
+                )}
                 {selectedManufacturing.notes && (
                   <div className="service-process-notes-callout">
                     <span>Client Notes / Instructions:</span>
@@ -4703,20 +4280,35 @@ const tabs = [
                     value={manufacturingAdminForm.quoted_unit_price ?? ""}
                   />
                 </label>
-                <label>
-                  Other Cost ({isRupeeCurrency(selectedManufacturing.currency) ? "Rs" : selectedManufacturing.currency || 'USD'})
-                  <input
-                    inputMode={isRupeeCurrency(selectedManufacturing.currency) ? "numeric" : "decimal"}
-                    min="0"
-                    onChange={(event) => setManufacturingAdminForm((current) => ({
-                      ...current,
-                      other_cost: sanitizeAmountInput(event.target.value, selectedManufacturing.currency),
-                    }))}
-                    step={isRupeeCurrency(selectedManufacturing.currency) ? "1" : "0.01"}
-                    type="number"
-                    value={manufacturingAdminForm.other_cost ?? ""}
-                  />
-                </label>
+                <div className="service-cost-fields service-wide-field">
+                  <label>
+                    Other cost amount ({isRupeeCurrency(selectedManufacturing.currency) ? "Rs" : selectedManufacturing.currency || 'USD'})
+                    <input
+                      inputMode={isRupeeCurrency(selectedManufacturing.currency) ? "numeric" : "decimal"}
+                      min="0"
+                      onChange={(event) => setManufacturingAdminForm((current) => ({
+                        ...current,
+                        other_cost: sanitizeAmountInput(event.target.value, selectedManufacturing.currency),
+                      }))}
+                      step={isRupeeCurrency(selectedManufacturing.currency) ? "1" : "0.01"}
+                      type="number"
+                      value={manufacturingAdminForm.other_cost ?? ""}
+                    />
+                  </label>
+                  <label>
+                    Cost name (shown to client)
+                    <input
+                      maxLength="120"
+                      onChange={(event) => setManufacturingAdminForm((current) => ({
+                        ...current,
+                        other_cost_label: event.target.value,
+                      }))}
+                      placeholder="e.g. Packing, engraving"
+                      type="text"
+                      value={manufacturingAdminForm.other_cost_label ?? ""}
+                    />
+                  </label>
+                </div>
                 <label>
                   Deposit Required ({isRupeeCurrency(selectedManufacturing.currency) ? "Rs" : selectedManufacturing.currency || 'USD'})
                   <input
@@ -4761,6 +4353,14 @@ const tabs = [
                     placeholder="Add dispatch tracking"
                     value={manufacturingAdminForm.tracking_number || ""}
                   />
+                </label>
+                <label>
+                  Shipping Weight (kg)
+                  <input min="0" onChange={(event) => setManufacturingAdminForm((current) => ({ ...current, shipping_weight_kg: event.target.value }))} step="0.01" type="number" value={manufacturingAdminForm.shipping_weight_kg ?? ""} />
+                </label>
+                <label>
+                  Shipping Cost ({isRupeeCurrency(selectedManufacturing.currency) ? "Rs" : selectedManufacturing.currency || "USD"})
+                  <input min="0" onChange={(event) => setManufacturingAdminForm((current) => ({ ...current, shipping_cost: sanitizeAmountInput(event.target.value, selectedManufacturing.currency) }))} step={isRupeeCurrency(selectedManufacturing.currency) ? "1" : "0.01"} type="number" value={manufacturingAdminForm.shipping_cost ?? ""} />
                 </label>
                 <label className="service-wide-field">
                   Broadcast Update Message (Visible to Service Taker)
@@ -4822,7 +4422,7 @@ const tabs = [
                       .map((payment) => (
                         <article key={payment.id} className="service-process-proof-card">
                           <div>
-                            <strong>{payment.payment_type} Payment: {money(payment.amount, selectedManufacturing.currency)}</strong>
+                            <strong>Payment: {money(payment.amount, selectedManufacturing.currency)}</strong>
                             <span>{payment.note || "No note attached"} / Uploaded {shortDate(payment.created_at)}</span>
                           </div>
                           <div className="service-process-proof-actions">
@@ -4874,22 +4474,6 @@ const tabs = [
                       type="number"
                       value={manufacturingPaymentForm.amount}
                     />
-                  </label>
-                  <label>
-                    Payment Type
-                    <select
-                      onChange={(event) =>
-                        setManufacturingPaymentForm((current) => ({
-                          ...current,
-                          payment_type: event.target.value,
-                        }))
-                      }
-                      value={manufacturingPaymentForm.payment_type}
-                    >
-                      <option value="Deposit">Deposit</option>
-                      <option value="Balance">Balance</option>
-                      <option value="Adjustment">Adjustment</option>
-                    </select>
                   </label>
                   <label>
                     Payment Method
@@ -5060,6 +4644,11 @@ const tabs = [
               <small>{number(selectedAccountPaymentRows.length)} local payment records</small>
             </article>
             <article>
+              <span>Advance credit</span>
+              <strong>{money(selectedAccountAdvanceCredit, selectedAccount.currency)}</strong>
+              <small>Approved amount above account charges</small>
+            </article>
+            <article>
               <span>Payment confirmations</span>
               <strong>{number(selectedAccountPendingPaymentRows.length)}</strong>
               <small>Waiting for company approval</small>
@@ -5137,7 +4726,7 @@ const tabs = [
                           )}
                         </div>
                         <div>
-                          <strong>{payment.payment_type || "Payment"} / {order.request_no}</strong>
+                          <strong>Payment made / {order.request_no}</strong>
                           <span>{order.product_name}</span>
                           <small>{payment.note || payment.reference || "No note added"}</small>
                         </div>
@@ -5901,38 +5490,22 @@ const tabs = [
           }
           className="service-payment-upload-modal"
           onClose={closeManufacturingPaymentProof}
-          subtitle="Upload the transfer receipt or screenshot. Hisbenew will confirm it from company side."
-          title="Add payment screenshot"
+          subtitle="Submit one account payment. Any extra becomes advance credit after approval."
+          title="Add account payment"
         >
           <form className="service-form-grid service-payment-proof-form" id="manufacturing-payment-proof-form" onSubmit={submitManufacturingPaymentProof}>
             <div className="service-wide-field" style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#64748b", display: "block" }}>Account Total Balance Due</span>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#64748b", display: "block" }}>Account balance due</span>
                 <strong style={{ fontSize: 18, fontWeight: 800, color: Number(localOrderBalanceDue || 0) > 0 ? "#dc2626" : "#16a34a" }}>
                   {money(localOrderBalanceDue, currency)}
                 </strong>
+                <small style={{ display: "block", marginTop: 4, color: "#64748b" }}>Advance credit: {money(data.stats?.advance_credit || 0, currency)}</small>
               </div>
               <span style={{ fontSize: 11.5, color: "#64748b", textAlign: "right" }}>
-                Recorded payments directly reduce your account due balance.
+                Extra approved payment is kept as credit.
               </span>
             </div>
-            <label>
-              Payment type
-              <select
-                onChange={(event) => {
-                  setPortalPaymentForm((current) => ({
-                    ...current,
-                    payment_type: event.target.value,
-                  }));
-                }}
-                value={portalPaymentForm.payment_type}
-              >
-                <option value="Payment">Payment</option>
-                <option value="Deposit">Deposit</option>
-                <option value="Balance">Balance</option>
-                <option value="Advance">Advance</option>
-              </select>
-            </label>
             <label>
               Amount ({isRupeeCurrency(currency) ? "Rs" : currency})
               <input

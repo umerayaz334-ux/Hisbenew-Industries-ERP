@@ -74,12 +74,56 @@
 .msp-order-updates { margin-top: 11px; color: #68776e; font-size: 11px; }.msp-order-updates summary { cursor: pointer; font-weight: 750; }.msp-order-updates summary span { margin-left: 5px; color: #89958d; }.msp-order-updates > div { display: grid; gap: 6px; margin-top: 8px; }.msp-order-updates p { display: grid; grid-template-columns: 120px 1fr auto; gap: 9px; margin: 0; padding: 8px 10px; border-radius: 7px; background: #f7f9f7; }.msp-order-updates time { color: #919b94; font-size: 10px; }
 .msp-filter-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 15px; }.msp-filter-pills { display: flex; flex-wrap: wrap; gap: 7px; }.msp-filter-pills button { display: flex; align-items: center; gap: 7px; min-height: 35px; padding: 0 12px; border: 1px solid #e3e9e5; border-radius: 9px; background: white; color: #59675f; cursor: pointer; font-size: 10px; font-weight: 750; }.msp-filter-pills button span { color: #89958e; }.msp-filter-pills button.is-active { border-color: #176b4d; background: #176b4d; color: white; }.msp-filter-pills button.is-active span { color: #d9f0df; }
 .msp-empty { display: grid; justify-items: center; padding: 48px 18px; border: 1px dashed #d7e1da; border-radius: 15px; background: rgba(255,255,255,.75); text-align: center; }.msp-empty > span { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: #e9f4ec; color: #327b4f; font-size: 20px; }.msp-empty h3 { margin: 13px 0 5px; color: #2b3d32; font-size: 15px; }.msp-empty p { max-width: 360px; margin: 0 0 15px; color: #7a877f; font-size: 11px; line-height: 1.5; }
-.msp-payment-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin-bottom: 22px; }.msp-payment-summary > div { display: grid; gap: 8px; min-width: 0; padding: 15px 16px; border: 1px solid var(--msp-line); border-top: 3px solid #5267b4; border-radius: 12px; background: white; }.msp-payment-summary > div:nth-child(2) { border-top-color: #d7a64b; }.msp-payment-summary > div:nth-child(3) { border-top-color: #72808a; }.msp-payment-summary strong { overflow: hidden; color: #1f3628; font-size: 18px; letter-spacing: -.03em; text-overflow: ellipsis; white-space: nowrap; }.msp-payment-heading { margin-bottom: 12px; }.msp-payment-heading h2 { margin: 0; }
+.msp-payment-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin-bottom: 22px; }.msp-payment-summary > div { display: grid; gap: 8px; min-width: 0; padding: 15px 16px; border: 1px solid var(--msp-line); border-top: 3px solid #5267b4; border-radius: 12px; background: white; }.msp-payment-summary > div:nth-child(2) { border-top-color: #d7a64b; }.msp-payment-summary > div:nth-child(3) { border-top-color: #72808a; }.msp-payment-summary > div.is-due { border-top-color: #d96960; }.msp-payment-summary > div.is-credit { border-top-color: #43a675; }.msp-payment-summary > div.is-credit strong { color: #267448; }.msp-payment-summary strong { color: #1f3628; font-size: 18px; font-variant-numeric: tabular-nums; letter-spacing: -.04em; white-space: nowrap; }.msp-payment-heading { margin-bottom: 12px; }.msp-payment-heading h2 { margin: 0; }
 .msp-payment-card { display: flex; align-items: center; gap: 13px; padding: 15px; border: 1px solid var(--msp-line); border-radius: 13px; background: white; }.msp-payment-status { min-width: 73px; }.msp-payment-status.is-review { background: #fff3dd; color: #956318; }.msp-payment-info { display: grid; flex: 1; gap: 4px; min-width: 0; }.msp-payment-info strong { color: #293b30; font-size: 12px; }.msp-payment-info span,.msp-payment-info small { overflow: hidden; color: #79867e; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.msp-payment-amount { color: #26382d; font-size: 12px; white-space: nowrap; }.msp-payment-card a { color: #176b4d; font-size: 10px; font-weight: 800; text-decoration: none; white-space: nowrap; }
-.msp-modal-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 18px; background: rgba(13,28,20,.48); backdrop-filter: blur(4px); }.msp-modal { width: min(560px,100%); max-height: min(92dvh,850px); overflow-y: auto; padding: 22px; border: 1px solid rgba(255,255,255,.7); border-radius: 18px; background: white; box-shadow: 0 24px 70px rgba(0,0,0,.2); }.msp-modal > header { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 18px; }.msp-modal > header h2 { margin: 5px 0; color: #203128; font-size: 22px; letter-spacing: -.035em; }.msp-modal > header p { margin: 0; color: #79867f; font-size: 11px; }.msp-modal > header > button { width: 34px; height: 34px; border: 1px solid #e6ebe7; border-radius: 10px; background: white; color: #5d6d63; cursor: pointer; font-size: 20px; }.msp-modal form { display: grid; gap: 13px; }.msp-modal label { display: grid; gap: 6px; color: #4c5c52; font-size: 11px; font-weight: 750; }.msp-modal input,.msp-modal select,.msp-modal textarea { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid #dce5df; border-radius: 9px; outline: none; background: #fbfcfb; color: #24352b; font: inherit; font-size: 12px; }.msp-modal textarea { min-height: 88px; resize: vertical; }.msp-modal input:focus,.msp-modal select:focus,.msp-modal textarea:focus { border-color: #62a77d; box-shadow: 0 0 0 3px rgba(76,151,103,.12); }.msp-form-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.msp-modal .msp-photo-input { position: relative; min-height: 66px; align-content: center; padding: 10px 12px; border: 1px dashed #bfd5c5; border-radius: 10px; background: #f6faf7; }.msp-photo-input span { overflow: hidden; color: #78877d; font-size: 10px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }.msp-photo-input input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }.msp-image-preview { width: 110px; height: 92px; object-fit: cover; border: 1px solid #e2eae4; border-radius: 10px; }.msp-modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; }
+.msp-modal-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 18px; background: rgba(13,28,20,.48); backdrop-filter: blur(4px); }.msp-modal { width: min(560px,100%); max-height: min(92dvh,850px); overflow-y: auto; padding: 22px; border: 1px solid rgba(255,255,255,.7); border-radius: 18px; background: white; box-shadow: 0 24px 70px rgba(0,0,0,.2); }.msp-modal > header { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 18px; }.msp-modal > header h2 { margin: 5px 0; color: #203128; font-size: 22px; letter-spacing: -.035em; }.msp-modal > header p { margin: 0; color: #79867f; font-size: 11px; }.msp-modal > header > button { width: 34px; height: 34px; border: 1px solid #e6ebe7; border-radius: 10px; background: white; color: #5d6d63; cursor: pointer; font-size: 20px; }.msp-modal form { display: grid; gap: 13px; }.msp-modal label { display: grid; gap: 6px; color: #4c5c52; font-size: 11px; font-weight: 750; }.msp-modal input,.msp-modal select,.msp-modal textarea { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid #dce5df; border-radius: 9px; outline: none; background: #fbfcfb; color: #24352b; font: inherit; font-size: 12px; }.msp-modal textarea { min-height: 88px; resize: vertical; }.msp-modal input:focus,.msp-modal select:focus,.msp-modal textarea:focus { border-color: #62a77d; box-shadow: 0 0 0 3px rgba(76,151,103,.12); }.msp-form-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.msp-modal .msp-photo-input { position: relative; min-height: 94px; align-content: center; gap: 8px; padding: 14px 16px 14px 52px; border: 1px dashed #a9cbb5; border-radius: 13px; background: linear-gradient(135deg,#f2f8f4,#f8fbf9); transition: border-color .18s ease,background .18s ease,box-shadow .18s ease; }.msp-modal .msp-photo-input::before { content: "↑"; position: absolute; top: 50%; left: 15px; display: grid; width: 26px; height: 26px; place-items: center; transform: translateY(-50%); border: 1px solid #d8e9de; border-radius: 8px; background: white; color: #24744f; font-size: 17px; font-weight: 800; }.msp-modal .msp-photo-input:focus-within,.msp-modal .msp-photo-input:hover { border-color: #4c9b6c; background: #f0f8f3; box-shadow: 0 0 0 3px rgba(76,151,103,.09); }.msp-photo-input span { overflow: hidden; color: #78877d; font-size: 11px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }.msp-photo-input input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; opacity: 0; cursor: pointer; }.msp-image-preview { width: 110px; height: 92px; object-fit: cover; border: 1px solid #e2eae4; border-radius: 10px; }.msp-modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; }
 
 @media (max-width: 760px) {
-  .msp-content { padding: 22px 14px calc(86px + env(safe-area-inset-bottom)); }.msp-page-heading { align-items: flex-start; flex-direction: column; gap: 15px; margin-bottom: 18px; }.msp-heading-actions,.msp-heading-actions .msp-primary-button { width: 100%; }.msp-hero { min-height: 224px; padding: 24px 20px; border-radius: 16px; }.msp-overview-card { min-height: 0; gap: 17px; padding: 21px 18px; }.msp-overview-metrics { grid-template-columns: 1fr 1.25fr 1fr; padding-top: 14px; }.msp-overview-metrics > div { gap: 6px; padding: 0 9px; }.msp-overview-metrics span { font-size: 9px; }.msp-overview-metrics strong { font-size: clamp(15px, 4.2vw, 21px); }.msp-hero > div:first-child { max-width: 78%; }.msp-hero-art { right: -100px; opacity: .62; }.msp-hero h2 { font-size: 25px; }.msp-hero p { font-size: 11px; }.msp-stat-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; margin: 12px 0 24px; }.msp-stat-grid > div { min-height: 102px; padding: 14px; border-radius: 12px; }.msp-stat-grid strong { font-size: 23px; }.msp-order-card { padding: 13px; border-radius: 13px; }.msp-order-main { gap: 10px; }.msp-order-image { width: 48px; height: 48px; border-radius: 10px; }.msp-status { max-width: 106px; overflow: hidden; font-size: 8px; text-overflow: ellipsis; }.msp-order-identity h3 { font-size: 12px; }.msp-order-identity p { font-size: 9px; }.msp-order-meta { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 11px; }.msp-order-meta .msp-secondary-button { grid-column: 1 / -1; width: 100%; }.msp-desktop-new { display: none; }.msp-filter-row { align-items: flex-start; }.msp-filter-pills { gap: 5px; }.msp-filter-pills button { min-height: 33px; padding-inline: 9px; font-size: 9px; }.msp-payment-summary { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; margin-bottom: 20px; }.msp-payment-summary > div { gap: 6px; padding: 11px 9px; }.msp-payment-summary span { font-size: 8px; }.msp-payment-summary strong { font-size: clamp(10px, 3.2vw, 13px); }.msp-payment-card { display: grid; grid-template-columns: auto 1fr auto; gap: 9px; padding: 12px; }.msp-payment-status { grid-column: 1 / 2; grid-row: 1; min-width: 0; font-size: 8px; }.msp-payment-info { grid-column: 2 / 4; grid-row: 1; }.msp-payment-amount { grid-column: 1 / 3; grid-row: 2; }.msp-payment-card a { grid-column: 3; grid-row: 2; justify-self: end; }.msp-order-updates p { grid-template-columns: 1fr auto; }.msp-order-updates p span { grid-column: 1 / -1; grid-row: 2; }.msp-modal-backdrop { align-items: end; padding: 0; }.msp-modal { width: 100%; max-height: 92dvh; padding: 21px 17px calc(18px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; }.msp-modal-actions > button { flex: 1; }
+  .msp-content { padding: 22px 14px calc(86px + env(safe-area-inset-bottom)); }.msp-page-heading { align-items: flex-start; flex-direction: column; gap: 15px; margin-bottom: 18px; }.msp-heading-actions,.msp-heading-actions .msp-primary-button { width: 100%; }.msp-hero { min-height: 224px; padding: 24px 20px; border-radius: 16px; }.msp-overview-card { min-height: 0; gap: 17px; padding: 21px 18px; }.msp-overview-metrics { grid-template-columns: 1fr 1.25fr 1fr; padding-top: 14px; }.msp-overview-metrics > div { gap: 6px; padding: 0 9px; }.msp-overview-metrics span { font-size: 9px; }.msp-overview-metrics strong { font-size: clamp(15px, 4.2vw, 21px); }.msp-hero > div:first-child { max-width: 78%; }.msp-hero-art { right: -100px; opacity: .62; }.msp-hero h2 { font-size: 25px; }.msp-hero p { font-size: 11px; }.msp-stat-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; margin: 12px 0 24px; }.msp-stat-grid > div { min-height: 102px; padding: 14px; border-radius: 12px; }.msp-stat-grid strong { font-size: 23px; }.msp-order-card { padding: 13px; border-radius: 13px; }.msp-order-main { gap: 10px; }.msp-order-image { width: 48px; height: 48px; border-radius: 10px; }.msp-status { max-width: 106px; overflow: hidden; font-size: 8px; text-overflow: ellipsis; }.msp-order-identity h3 { font-size: 12px; }.msp-order-identity p { font-size: 9px; }.msp-order-meta { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 11px; }.msp-order-meta .msp-secondary-button { grid-column: 1 / -1; width: 100%; }.msp-desktop-new { display: none; }.msp-filter-row { align-items: flex-start; }.msp-filter-pills { gap: 5px; }.msp-filter-pills button { min-height: 33px; padding-inline: 9px; font-size: 9px; }.msp-payment-summary { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; margin-bottom: 20px; }.msp-payment-summary > div { gap: 6px; padding: 11px 6px; }.msp-payment-summary span { font-size: 8px; }.msp-payment-summary strong { font-size: clamp(9px, 2.6vw, 11px); letter-spacing: -.05em; }.msp-payment-card { display: grid; grid-template-columns: auto 1fr auto; gap: 9px; padding: 12px; }.msp-payment-status { grid-column: 1 / 2; grid-row: 1; min-width: 0; font-size: 8px; }.msp-payment-info { grid-column: 2 / 4; grid-row: 1; }.msp-payment-amount { grid-column: 1 / 3; grid-row: 2; }.msp-payment-card a { grid-column: 3; grid-row: 2; justify-self: end; }.msp-order-updates p { grid-template-columns: 1fr auto; }.msp-order-updates p span { grid-column: 1 / -1; grid-row: 2; }.msp-modal-backdrop { align-items: end; padding: 0; }.msp-modal { width: 100%; max-height: 92dvh; padding: 21px 17px calc(18px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; }.msp-modal-actions > button { flex: 1; }
+}
+
+.msp-order-image.is-previewable { padding: 0; border: 0; cursor: zoom-in; transition: transform .16s ease,box-shadow .16s ease; }
+.msp-order-image.is-previewable:hover { transform: scale(1.04); box-shadow: 0 4px 12px rgba(35,48,89,.2); }
+.msp-order-image.is-previewable:focus-visible { outline: 3px solid rgba(75,95,192,.38); outline-offset: 3px; }
+.msp-image-lightbox { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(13,20,36,.82); backdrop-filter: blur(5px); }
+.msp-image-lightbox-dialog { position: relative; display: grid; max-width: min(1100px,94vw); max-height: 92dvh; place-items: center; }
+.msp-image-lightbox-dialog img { display: block; max-width: 100%; max-height: 88dvh; object-fit: contain; border-radius: 12px; background: #fff; box-shadow: 0 22px 70px rgba(0,0,0,.34); }
+.msp-image-lightbox-close { position: absolute; z-index: 1; top: -15px; right: -15px; display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid rgba(255,255,255,.65); border-radius: 50%; background: #fff; color: #26324a; cursor: pointer; font-size: 25px; line-height: 1; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+@media (max-width: 600px) {
+  .msp-image-lightbox { padding: 14px; }
+  .msp-image-lightbox-close { top: -12px; right: -5px; }
+}
+
+/* Lift low-contrast labels and outlines without making the portal heavy. */
+.manufacturing-service-portal { color: #263451; }
+.manufacturing-service-portal .msp-eyebrow { color: #5367bd; font-size: 11px; }
+.manufacturing-service-portal .msp-dashboard-metric-label,
+.manufacturing-service-portal .msp-dashboard-metrics > a > small { color: #586783; font-size: 12px; }
+.manufacturing-service-portal .msp-dashboard-metrics > a,
+.manufacturing-service-portal .msp-dashboard-actions,
+.manufacturing-service-portal .msp-section,
+.manufacturing-service-portal .msp-order-card,
+.manufacturing-service-portal .msp-payment-card { border-color: #d9e0ec; }
+.manufacturing-service-portal .msp-order-card { box-shadow: 0 4px 14px rgba(36,48,83,.045); }
+.manufacturing-service-portal .msp-order-ref { color: #4058b4; font-size: 13px; }
+.manufacturing-service-portal .msp-order-identity h3 { color: #253451; font-size: 15px; }
+.manufacturing-service-portal .msp-order-identity p,
+.manufacturing-service-portal .msp-order-meta > div > span,
+.manufacturing-service-portal .msp-payment-date { color: #64718a; font-size: 11px; }
+.manufacturing-service-portal .msp-order-meta > div > strong { color: #263451; font-size: 13px; }
+.manufacturing-service-portal .msp-quick-action-card { border-color: #e0e5ef; }
+.manufacturing-service-portal .msp-quick-action-card strong { color: #293856; font-size: 13px; }
+.manufacturing-service-portal .msp-quick-action-card small { color: #68758e; font-size: 11px; }
+.manufacturing-service-portal .msp-dashboard-shipment > span:nth-child(2) strong { color: #293856; font-size: 13px; }
+.manufacturing-service-portal .msp-dashboard-shipment > span:nth-child(2) small { color: #68758e; font-size: 11px; }
+.manufacturing-service-portal .msp-status { border-color: #eddcb7; color: #805719; }
+.manufacturing-service-portal .msp-section-heading h2 { color: #24324e; }
+@media (max-width: 760px) {
+  .manufacturing-service-portal .msp-dashboard-metric-label,
+  .manufacturing-service-portal .msp-dashboard-metrics > a > small { font-size: 11px; }
+  .manufacturing-service-portal .msp-order-identity h3 { font-size: 14px; }
+  .manufacturing-service-portal .msp-order-meta > div > span,
+  .manufacturing-service-portal .msp-payment-date { font-size: 10px; }
 }
 
 .msp-dashboard-view { --msp-ink: #17213a; --msp-muted: #778198; }
@@ -89,12 +133,14 @@
 .msp-dashboard-view .msp-heading-actions .msp-primary-button { min-height: 44px; padding-inline: 19px; border-radius: 11px; background: #4b5fc0; box-shadow: 0 6px 16px rgba(65,83,176,.19); }
 .msp-dashboard-view .msp-heading-actions .msp-primary-button:hover { background: #3d50a9; }
 .msp-dashboard-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 13px; margin-bottom: 24px; }
-.msp-dashboard-metrics > a { display: grid; grid-template-columns: 40px minmax(0,1fr); align-items: center; column-gap: 11px; row-gap: 7px; min-width: 0; padding: 17px 18px; border: 1px solid #e4e8f1; border-radius: 15px; background: #fff; color: inherit; text-decoration: none; box-shadow: 0 5px 16px rgba(34,47,89,.035); transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease; }
+.msp-dashboard-metrics > a,.msp-dashboard-metrics > div { display: grid; grid-template-columns: 40px minmax(0,1fr); align-items: center; column-gap: 11px; row-gap: 7px; min-width: 0; padding: 17px 18px; border: 1px solid #e4e8f1; border-radius: 15px; background: #fff; color: inherit; text-decoration: none; box-shadow: 0 5px 16px rgba(34,47,89,.035); transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease; }
 .msp-dashboard-metrics > a:hover { transform: translateY(-2px); border-color: #cbd2f1; box-shadow: 0 9px 22px rgba(34,47,89,.08); }
 .msp-dashboard-metric-icon { display: grid; width: 40px; height: 40px; grid-row: span 2; place-items: center; border-radius: 12px; background: #eef0ff; color: #4b5fc0; font-size: 19px; font-weight: 800; }
+.msp-dashboard-metric-icon svg { width: 21px; height: 21px; }
 .msp-dashboard-metric-icon.is-amber { background: #fff5e6; color: #b97c21; }.msp-dashboard-metric-icon.is-blue { background: #eaf4fb; color: #347ca9; }
 .msp-dashboard-metric-label { overflow: hidden; color: #778198; font-size: 10px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .msp-dashboard-metrics > a > strong { overflow: hidden; color: #202c49; font-size: clamp(19px,2.2vw,25px); letter-spacing: -.035em; text-overflow: ellipsis; white-space: nowrap; }
+.msp-dashboard-coming-soon { font-size: clamp(11px,1.5vw,14px) !important; letter-spacing: -.02em !important; }
 .msp-dashboard-metrics > a > small { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 8px; padding-top: 9px; border-top: 1px solid #eff1f6; color: #8790a3; font-size: 9px; }
 .msp-dashboard-metrics > a > small b { color: #5367bc; font-size: 12px; }
 .msp-dashboard-grid { display: grid; grid-template-columns: minmax(0,1.65fr) minmax(255px,.85fr); align-items: start; gap: 20px; }
@@ -104,7 +150,10 @@
 .msp-dashboard-orders .msp-order-list { gap: 9px; }
 .msp-dashboard-orders .msp-order-card { padding: 13px; border-radius: 12px; }
 .msp-dashboard-orders .msp-order-image { width: 48px; height: 48px; border-radius: 10px; }
-.msp-dashboard-orders .msp-order-meta { gap: 9px; }
+.msp-dashboard-orders .msp-order-meta { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.msp-dashboard-orders .msp-order-meta > div { gap: 4px; }
+.msp-dashboard-orders .msp-order-meta > div span { font-size: 8px; }
+.msp-dashboard-orders .msp-order-meta > div strong { font-size: 10px; }
 .msp-dashboard-sidebar { display: grid; gap: 14px; min-width: 0; }
 .msp-dashboard-actions,.msp-dashboard-recent { padding: 16px; border: 1px solid #e4e8f1; border-radius: 15px; background: #fff; box-shadow: 0 5px 16px rgba(34,47,89,.035); }
 .msp-dashboard-actions > .msp-eyebrow { display: block; margin-bottom: 12px; }
@@ -130,15 +179,19 @@
   .msp-dashboard-view .msp-heading-actions { width: auto; flex: 0 0 auto; }
   .msp-dashboard-view .msp-heading-actions .msp-primary-button { width: auto; min-height: 39px; padding-inline: 12px; font-size: 10px; }
   .msp-dashboard-metrics { gap: 7px; margin-bottom: 18px; }
-  .msp-dashboard-metrics > a { grid-template-columns: 30px minmax(0,1fr); column-gap: 7px; row-gap: 5px; padding: 11px 8px; border-radius: 12px; }
-  .msp-dashboard-metric-icon { width: 30px; height: 30px; border-radius: 9px; font-size: 15px; }
+  .msp-dashboard-metrics > a,.msp-dashboard-metrics > div { grid-template-columns: 27px minmax(0,1fr); column-gap: 6px; row-gap: 7px; padding: 10px 8px; border-radius: 12px; }
+  .msp-dashboard-metric-icon { width: 27px; height: 27px; border-radius: 8px; font-size: 14px; }
   .msp-dashboard-metric-label { font-size: 8px; }
-  .msp-dashboard-metrics > a > strong { font-size: clamp(12px,3.6vw,17px); }
-  .msp-dashboard-metrics > a > small { padding-top: 7px; font-size: 7px; }
+  .msp-dashboard-metrics > a > strong,.msp-dashboard-metrics > div > strong { grid-column: 1 / -1; overflow: visible; font-size: clamp(10px,3.05vw,14px); line-height: 1.15; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
   .msp-dashboard-grid { grid-template-columns: 1fr; gap: 15px; }
   .msp-dashboard-sidebar { grid-template-columns: 1fr; }
   .msp-dashboard-actions,.msp-dashboard-recent { padding: 13px; border-radius: 13px; }
   .msp-dashboard-orders .msp-section-heading h2 { font-size: 17px; }
+  .msp-dashboard-orders .msp-order-card { padding: 11px; }
+  .msp-dashboard-orders .msp-order-main { align-items: flex-start; }
+  .msp-dashboard-orders .msp-order-meta { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+  .msp-dashboard-orders .msp-order-meta > div span { font-size: 7px; }
+  .msp-dashboard-orders .msp-order-meta > div strong { font-size: 9px; }
 }
 .msp-dashboard-view .msp-page-heading { margin-bottom: 22px; }
 .msp-dashboard-view .msp-page-heading h1 { margin-top: 0; font-size: clamp(25px, 4vw, 34px); letter-spacing: -.04em; }
@@ -207,6 +260,8 @@
 .msp-payment-symbol { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; background: #e9f4ec; color: #2d7a4c; font-size: 16px; font-weight: 900; }
 .msp-payment-symbol.is-review { background: #fff3dd; color: #956318; }
 .msp-payment-symbol.is-rejected { background: #fff0ee; color: #a13f34; }
+.msp-payment-symbol.is-outgoing { background: #e9f4ec; color: #2d7a4c; font-size: 20px; }
+.msp-payment-symbol.is-charge { background: #fff3e5; color: #bd6e20; }
 .msp-payments-view .msp-payment-info { display: block; }
 .msp-payment-inline { display: flex; min-width: 0; align-items: center; gap: 9px; overflow: hidden; white-space: nowrap; }
 .msp-payment-title { display: grid; flex: 1 1 auto; gap: 3px; min-width: 0; }
@@ -229,4 +284,253 @@
   .msp-payment-inline .msp-payment-status { padding: 0; font-size: 7px; }
   .msp-payments-view .msp-payment-trailing { grid-column: 2 / 4; align-self: center; }
   .msp-payment-trailing .msp-payment-amount { font-size: 11px; }
+}
+
+.msp-modal .msp-shipping-toggle { display: flex; min-height: 58px; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid #dfe7f4; border-radius: 11px; background: #f7f8fc; cursor: pointer; }
+.msp-shipping-toggle > span { display: grid; gap: 4px; }
+.msp-shipping-toggle strong { color: #293b63; font-size: 12px; }
+.msp-shipping-toggle small { color: #778198; font-size: 10px; font-weight: 500; }
+.msp-modal .msp-shipping-toggle input { width: 42px; min-height: 24px; height: 24px; margin: 0; accent-color: #4b5fc0; cursor: pointer; }
+.msp-shipping-address textarea { min-height: 80px; }
+.msp-shipping-card { padding: 16px; border: 1px solid var(--msp-line); border-radius: 14px; background: #fff; }
+.msp-shipping-details { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0 0 50px; padding-top: 12px; border-top: 1px solid #edf0f5; }
+.msp-shipping-details > div { display: grid; gap: 5px; min-width: 0; }
+.msp-shipping-details span { color: #8790a3; font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.msp-shipping-details strong { overflow-wrap: anywhere; color: #34415e; font-size: 11px; font-weight: 650; }
+
+@media (max-width: 520px) {
+  .msp-shipping-details { grid-template-columns: 1fr; margin-left: 0; }
+}
+
+/* Keep every manufacturing service-taker screen on the same brand palette. */
+.manufacturing-service-portal {
+  --msp-ink: #17213a;
+  --msp-muted: #778198;
+  --msp-line: #e3e8f2;
+  --msp-green: #4b5fc0;
+  --msp-brand: #4b5fc0;
+  --msp-brand-strong: #394da9;
+  --msp-brand-soft: #eef0ff;
+  background: #f3f5fa;
+  color: var(--msp-ink);
+}
+.manufacturing-service-portal .msp-primary-button { background: var(--msp-brand); box-shadow: 0 5px 14px rgba(65,83,176,.16); }
+.manufacturing-service-portal .msp-primary-button:hover { background: var(--msp-brand-strong); }
+.manufacturing-service-portal .msp-secondary-button { border-color: var(--msp-line); color: #35415f; }
+.manufacturing-service-portal .msp-secondary-button:hover { border-color: #cbd2f1; background: var(--msp-brand-soft); }
+.manufacturing-service-portal .msp-section-heading h2,
+.manufacturing-service-portal .msp-page-heading h1,
+.manufacturing-service-portal .msp-order-identity h3 { color: var(--msp-ink); }
+.manufacturing-service-portal .msp-section-heading a,
+.manufacturing-service-portal .msp-order-ref,
+.manufacturing-service-portal .msp-payment-card a { color: var(--msp-brand); }
+.manufacturing-service-portal .msp-order-image { background: var(--msp-brand-soft); color: var(--msp-brand); }
+.manufacturing-service-portal .msp-order-progress-fill { background: linear-gradient(90deg, #7183dc, var(--msp-brand)); }
+.manufacturing-service-portal .msp-filter-pills button.is-active { border-color: var(--msp-brand); background: var(--msp-brand); }
+.manufacturing-service-portal .msp-status.is-complete,
+.manufacturing-service-portal .msp-payment-status.is-approved { background: #e9edff; color: #3d50a9; }
+.manufacturing-service-portal .msp-modal input:focus,
+.manufacturing-service-portal .msp-modal select:focus,
+.manufacturing-service-portal .msp-modal textarea:focus { border-color: #7686d5; box-shadow: 0 0 0 3px rgba(75,95,192,.13); }
+.manufacturing-service-portal .msp-modal .msp-photo-input { border-color: #cbd2f1; background: linear-gradient(135deg,#f3f4ff,#fafaff); }
+.manufacturing-service-portal .msp-modal .msp-photo-input::before { border-color: #dfe3fb; color: var(--msp-brand); }
+.manufacturing-service-portal .msp-modal .msp-photo-input:focus-within,
+.manufacturing-service-portal .msp-modal .msp-photo-input:hover { border-color: #7686d5; background: #f1f2ff; box-shadow: 0 0 0 3px rgba(75,95,192,.1); }
+.manufacturing-service-portal .msp-shipping-toggle { border-color: #dfe3f5; background: #f7f8fd; }
+.manufacturing-service-portal .msp-shipping-toggle strong { color: #354578; }
+.manufacturing-service-portal .msp-modal .msp-shipping-toggle input { appearance: none; width: 44px; min-height: 26px; height: 26px; padding: 0; border: 0; border-radius: 99px; background: radial-gradient(circle at 13px 13px,#fff 0 9px,transparent 10px),#d6dbea; box-shadow: inset 0 0 0 1px rgba(30,45,80,.08); cursor: pointer; transition: background .18s ease,box-shadow .18s ease; }
+.manufacturing-service-portal .msp-modal .msp-shipping-toggle input:checked { background: radial-gradient(circle at 31px 13px,#fff 0 9px,transparent 10px),var(--msp-brand); }
+.manufacturing-service-portal .msp-modal .msp-shipping-toggle input:focus-visible { outline: 3px solid rgba(75,95,192,.2); outline-offset: 2px; }
+.manufacturing-service-portal .msp-shipping-fields { display: grid; gap: 13px; padding: 13px; border: 1px solid #e3e7f5; border-radius: 12px; background: #f8f9fd; }
+.manufacturing-service-portal .msp-shipping-fields label { margin: 0; }
+.manufacturing-service-portal .msp-shipping-fields textarea { min-height: 76px; }
+.manufacturing-service-portal .msp-empty > span { background: var(--msp-brand-soft); color: var(--msp-brand); }
+.manufacturing-service-portal .msp-payment-summary > div.is-credit strong { color: #3d50a9; }
+.manufacturing-service-portal .msp-payment-symbol.is-outgoing { background: #e9edff; color: #3d50a9; }
+.manufacturing-service-portal .msp-payment-symbol.is-charge { background: #fff1e3; color: #bd6e20; }
+.manufacturing-service-portal .msp-dashboard-action-primary > span:first-child,
+.manufacturing-service-portal .msp-dashboard-action-secondary > span:first-child { color: var(--msp-brand); }
+.manufacturing-service-portal .msp-shipping-request { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 13px; margin: 0 0 16px; padding: 17px; border: 1px solid var(--msp-line); border-radius: 15px; background: #fff; box-shadow: 0 5px 18px rgba(36,48,83,.035); }
+.manufacturing-service-portal .msp-shipping-request h3 { grid-column: 1 / -1; margin: 0; color: var(--msp-ink); font-size: 15px; }
+.manufacturing-service-portal .msp-shipping-request label { display: grid; gap: 6px; color: #4c5873; font-size: 11px; font-weight: 750; }
+.manufacturing-service-portal .msp-shipping-request label:first-of-type { grid-column: 1 / -1; }
+.manufacturing-service-portal .msp-shipping-request label:nth-of-type(2),
+.manufacturing-service-portal .msp-shipping-request label:nth-of-type(3) { grid-column: 1 / -1; }
+.manufacturing-service-portal .msp-shipping-request input,
+.manufacturing-service-portal .msp-shipping-request select,
+.manufacturing-service-portal .msp-shipping-request textarea { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid #dce2ef; border-radius: 9px; outline: none; background: #fbfcff; color: #24304a; font: inherit; font-size: 12px; }
+.manufacturing-service-portal .msp-shipping-request textarea { min-height: 78px; resize: vertical; }
+.manufacturing-service-portal .msp-shipping-request input:focus,
+.manufacturing-service-portal .msp-shipping-request select:focus,
+.manufacturing-service-portal .msp-shipping-request textarea:focus { border-color: #7686d5; box-shadow: 0 0 0 3px rgba(75,95,192,.12); }
+.manufacturing-service-portal .msp-shipping-request button { grid-column: 1 / -1; justify-self: start; }
+.manufacturing-service-portal .msp-shipping-open-button { display: inline-flex; width: auto; min-width: 190px; flex: 0 0 auto; align-items: center; gap: 9px; white-space: nowrap; }
+.manufacturing-service-portal .msp-shipping-open-button svg { width: 18px; height: 18px; flex: 0 0 18px; }
+.manufacturing-service-portal .msp-payment-card { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.manufacturing-service-portal .msp-payment-symbol { flex: 0 0 34px; }
+.manufacturing-service-portal .msp-payment-date { color: #7d879d; font-size: 9px; white-space: nowrap; }
+.manufacturing-service-portal .msp-payment-info { flex: 1 1 auto; }
+.manufacturing-service-portal .msp-payments-view .msp-payment-trailing { grid-column: auto; display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; margin-left: auto; }
+.manufacturing-service-portal .msp-payment-trailing .msp-payment-amount { color: #1d2944; font-size: 12px; font-weight: 800; }
+.manufacturing-service-portal .msp-payment-info { min-width: 0; }
+.manufacturing-service-portal .msp-payment-inline { overflow: visible; }
+
+@media (max-width: 760px) {
+  .manufacturing-service-portal .msp-shipping-request { grid-template-columns: 1fr; padding: 14px; }
+  .manufacturing-service-portal .msp-shipping-request h3,
+  .manufacturing-service-portal .msp-shipping-request label:first-of-type,
+  .manufacturing-service-portal .msp-shipping-request button { grid-column: 1; }
+  .manufacturing-service-portal .msp-shipping-request button { width: 100%; }
+  .manufacturing-service-portal .msp-shipping-open-button { min-width: 0; min-height: 42px; padding: 0 13px; font-size: 11px; }
+  .manufacturing-service-portal .msp-payments-view .msp-payment-card { display: flex; gap: 7px; padding: 12px 9px; }
+  .manufacturing-service-portal .msp-payment-symbol { flex-basis: 30px; width: 30px; height: 30px; }
+  .manufacturing-service-portal .msp-payment-info { flex: 1 1 auto; }
+  .manufacturing-service-portal .msp-payment-date { font-size: 8px; }
+  .manufacturing-service-portal .msp-payment-date { font-size: 8px; }
+  .manufacturing-service-portal .msp-payment-title > strong { font-size: 9px; }
+  .manufacturing-service-portal .msp-payment-title > span { font-size: 8px; }
+  .manufacturing-service-portal .msp-payments-view .msp-payment-trailing { flex: 0 0 auto; justify-content: flex-end; margin-left: auto; }
+  .manufacturing-service-portal .msp-payment-trailing .msp-payment-amount { font-size: 10px; }
+  .manufacturing-service-portal .msp-payment-date { max-width: 55px; overflow: hidden; text-overflow: ellipsis; }
+}
+
+.msp-dashboard-view .msp-dashboard-metrics { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
+.msp-dashboard-view .msp-dashboard-metrics > a { padding: 14px; }
+.msp-dashboard-view .msp-dashboard-metrics > a > small { grid-column: 1 / -1; }
+.msp-dashboard-view .msp-dashboard-metric-label { color: #727d96; }
+.msp-dashboard-view .msp-dashboard-actions { display: grid; gap: 8px; }
+.msp-dashboard-view .msp-dashboard-actions > .msp-eyebrow { margin-bottom: 2px; }
+.msp-dashboard-view .msp-quick-action-row { display: grid; gap: 8px; min-width: 0; }
+.msp-dashboard-view .msp-quick-action-card { display: flex; width: 100%; min-width: 0; min-height: 54px; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid #edf0f7; border-radius: 11px; background: #f7f8fb; color: #4558ad; cursor: pointer; text-align: left; text-decoration: none; }
+.msp-dashboard-view .msp-quick-action-card.is-primary { border-color: #e9ebff; background: #f1f2ff; }
+.msp-dashboard-view .msp-quick-action-icon { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 10px; background: #fff; color: #4b5fc0; }
+.msp-dashboard-view .msp-quick-action-icon svg,.msp-dashboard-view .msp-quick-action-card > b svg { display: block; width: 17px; height: 17px; }
+.msp-dashboard-view .msp-quick-action-card > span:nth-child(2) { display: grid; flex: 1; gap: 3px; min-width: 0; }
+.msp-dashboard-view .msp-quick-action-card strong { overflow: hidden; color: #28365c; font-size: 11px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.msp-dashboard-view .msp-quick-action-card small { overflow: hidden; color: #7d87a1; font-size: 9px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.msp-dashboard-view .msp-quick-action-card > b { display: grid; flex: 0 0 18px; place-items: center; color: #6978c3; }
+.msp-dashboard-view .msp-quick-action-card:hover { border-color: #cbd2f1; background: #f0f2ff; }
+.msp-dashboard-view .msp-dashboard-action-primary,
+.msp-dashboard-view .msp-dashboard-action-secondary { min-height: 56px; margin-top: 0; text-decoration: none; }
+.msp-dashboard-view .msp-dashboard-action-primary > span:first-child svg,
+.msp-dashboard-view .msp-dashboard-action-secondary > span:first-child svg,
+.msp-dashboard-view .msp-dashboard-action-primary > b svg,
+.msp-dashboard-view .msp-dashboard-action-secondary > b svg { width: 17px; height: 17px; }
+.msp-dashboard-view .msp-dashboard-shipping { margin-top: 21px; }
+.msp-dashboard-view .msp-shipping-list { display: grid; overflow: hidden; border: 1px solid #e4e8f1; border-radius: 14px; background: #fff; }
+.msp-dashboard-view .msp-dashboard-shipment { display: flex; min-width: 0; align-items: center; gap: 11px; padding: 12px 14px; border-bottom: 1px solid #edf0f5; color: inherit; text-decoration: none; }
+.msp-dashboard-view .msp-dashboard-shipment:last-child { border-bottom: 0; }
+.msp-dashboard-view .msp-dashboard-shipment > span:nth-child(2) { display: grid; flex: 1; gap: 4px; min-width: 0; }
+.msp-dashboard-view .msp-dashboard-shipment > span:nth-child(2) strong { overflow: hidden; color: #28344f; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.msp-dashboard-view .msp-dashboard-shipment > span:nth-child(2) small { overflow: hidden; color: #828ba0; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.msp-dashboard-view .msp-dashboard-shipping-empty { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px; border: 1px dashed #d8deee; border-radius: 13px; background: #fff; color: #78839a; font-size: 11px; }
+.msp-dashboard-view .msp-dashboard-shipping-empty a { display: inline-flex; align-items: center; gap: 5px; color: var(--msp-brand); font-weight: 800; text-decoration: none; }
+.msp-dashboard-view .msp-dashboard-shipping-empty svg { width: 14px; height: 14px; }
+.msp-shipping-page .msp-page-heading { margin-bottom: 12px; }
+.msp-shipping-page .msp-shipping-view { margin-top: 0; }
+.msp-shipping-toolbar { display: flex; justify-content: flex-end; margin-bottom: 13px; }
+.msp-shipping-toolbar .msp-primary-button { width: 100%; }
+.msp-shipping-page .msp-empty { min-height: 210px; padding: 34px 18px; }
+.msp-shipping-page .msp-empty h3 { margin-top: 12px; }
+.msp-shipping-page .msp-empty p { margin-bottom: 0; }
+@media (max-width: 760px) {
+  .msp-dashboard-view .msp-dashboard-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+  .msp-dashboard-view .msp-dashboard-metrics > a { padding: 11px; }
+  .msp-dashboard-view .msp-dashboard-actions { padding: 13px; }
+  .msp-dashboard-view .msp-quick-action-card { min-height: 52px; padding: 8px 9px; }
+  .msp-dashboard-view .msp-dashboard-shipping { margin-top: 18px; }
+  .msp-dashboard-view .msp-dashboard-shipment { gap: 8px; padding: 10px; }
+  .msp-dashboard-view .msp-dashboard-shipment .msp-status { max-width: 85px; }
+  .msp-shipping-page .msp-page-heading { margin-bottom: 8px; }
+  .msp-shipping-toolbar { margin-bottom: 10px; }
+}
+
+/* Final readability pass: clearer copy and more visible card edges. */
+.manufacturing-service-portal .msp-dashboard-view .msp-dashboard-metric-label,
+.manufacturing-service-portal .msp-dashboard-view .msp-dashboard-metrics > a > small { color: #56647d; font-size: 13px; }
+.manufacturing-service-portal .msp-dashboard-view .msp-stat-grid > div,
+.manufacturing-service-portal .msp-dashboard-view .msp-dashboard-metrics > a,
+.manufacturing-service-portal .msp-dashboard-view .msp-dashboard-actions,
+.manufacturing-service-portal .msp-dashboard-view .msp-order-card,
+.manufacturing-service-portal .msp-dashboard-view .msp-payment-card,
+.manufacturing-service-portal .msp-dashboard-view .msp-section { border-color: #d3dbea; }
+.manufacturing-service-portal .msp-dashboard-view .msp-quick-action-card { border-color: #dce3ef; }
+.manufacturing-service-portal .msp-dashboard-view .msp-quick-action-card strong { color: #273653; font-size: 14px; }
+.manufacturing-service-portal .msp-dashboard-view .msp-quick-action-card small { color: #5f6e87; font-size: 12px; }
+.manufacturing-service-portal .msp-dashboard-view .msp-order-identity p,
+.manufacturing-service-portal .msp-dashboard-view .msp-order-meta > div > span,
+.manufacturing-service-portal .msp-dashboard-view .msp-order-card small,
+.manufacturing-service-portal .msp-dashboard-view .msp-dashboard-shipment > span:nth-child(2) small { color: #5f6d84; }
+.manufacturing-service-portal .msp-dashboard-view .msp-order-meta > div > span,
+.manufacturing-service-portal .msp-dashboard-view .msp-order-identity p { font-size: 12px; }
+.manufacturing-service-portal .msp-dashboard-view .msp-order-meta > div > strong { color: #273653; font-size: 14px; }
+@media (max-width: 760px) {
+  .manufacturing-service-portal .msp-dashboard-view .msp-dashboard-metric-label,
+  .manufacturing-service-portal .msp-dashboard-view .msp-dashboard-metrics > a > small { font-size: 12px; }
+  .manufacturing-service-portal .msp-dashboard-view .msp-quick-action-card strong { font-size: 13px; }
+  .manufacturing-service-portal .msp-dashboard-view .msp-quick-action-card small { font-size: 11px; }
+  .manufacturing-service-portal .msp-dashboard-view .msp-order-meta > div > span,
+  .manufacturing-service-portal .msp-dashboard-view .msp-order-identity p { font-size: 11px; }
+}
+
+.msp-dashboard-view .msp-content { max-width: 1280px; padding-top: 34px; }
+.msp-dashboard-view .msp-page-heading { margin-bottom: 14px; }
+.msp-dashboard-view .msp-page-heading h1 { color: #1d2c4b; font-size: clamp(30px,3.1vw,40px); letter-spacing: -.045em; }
+.msp-dashboard-view .msp-dashboard-metrics { gap: 14px; margin-bottom: 24px; }
+.msp-dashboard-view .msp-dashboard-metrics > a { min-height: 132px; padding: 18px; border-color: #d5deed; border-radius: 16px; box-shadow: 0 5px 16px rgba(36,48,83,.045); }
+.msp-dashboard-view .msp-dashboard-metric-icon { width: 44px; height: 44px; border-radius: 13px; }
+.msp-dashboard-view .msp-dashboard-metric-label { color: #566580; font-size: 13px; }
+.msp-dashboard-view .msp-dashboard-metrics > a > strong { color: #223250; font-size: clamp(21px,2vw,27px); }
+.msp-dashboard-view .msp-dashboard-metrics > a > small { color: #596880; border-color: #e1e6f0; font-size: 11px; }
+.msp-dashboard-grid { grid-template-columns: minmax(0,1.7fr) minmax(310px,.85fr); gap: 18px; }
+.msp-dashboard-view .msp-dashboard-orders { padding: 19px; border: 1px solid #d5deed; border-radius: 17px; background: #f9faff; }
+.msp-dashboard-orders .msp-section-heading { margin-bottom: 15px; }
+.msp-dashboard-orders .msp-section-heading h2 { font-size: 21px; }
+.msp-dashboard-orders .msp-order-list { gap: 12px; }
+.msp-dashboard-orders .msp-order-card { padding: 16px; border: 1px solid #d8e0ed; border-radius: 14px; background: #fff; }
+.msp-dashboard-orders .msp-order-image { width: 56px; height: 56px; }
+.msp-dashboard-orders .msp-order-identity h3 { font-size: 16px; }
+.msp-dashboard-orders .msp-order-identity p { color: #5c6b83; font-size: 12px; }
+.msp-dashboard-orders .msp-order-progress { height: 6px; background: #e5e9f2; }
+.msp-dashboard-orders .msp-order-meta { gap: 9px; padding-top: 13px; border-color: #e1e6ef; }
+.msp-dashboard-orders .msp-order-meta > div { padding: 9px 10px; border-radius: 9px; background: #f5f7fb; }
+.msp-dashboard-orders .msp-order-meta > div span { color: #5f6d83; font-size: 10px; }
+.msp-dashboard-orders .msp-order-meta > div strong { color: #273653; font-size: 13px; }
+.msp-dashboard-view .msp-dashboard-actions,.msp-dashboard-view .msp-dashboard-recent { padding: 18px; border-color: #d5deed; border-radius: 16px; box-shadow: 0 5px 16px rgba(36,48,83,.045); }
+.msp-dashboard-view .msp-dashboard-actions > .msp-eyebrow,.msp-dashboard-view .msp-dashboard-recent .msp-eyebrow { font-size: 11px; }
+.msp-dashboard-view .msp-quick-action-row { gap: 10px; }
+.msp-dashboard-view .msp-quick-action-card { min-height: 62px; padding: 10px 12px; border-color: #dfe5f0; border-radius: 12px; }
+.msp-dashboard-view .msp-quick-action-card strong { font-size: 14px; }
+.msp-dashboard-view .msp-quick-action-card small { color: #596981; font-size: 12px; }
+.msp-dashboard-view .msp-dashboard-recent .msp-section-heading h2 { font-size: 20px; }
+.msp-dashboard-view .msp-dashboard-recent .msp-section-heading a { color: #4057b5; font-size: 12px; }
+.msp-dashboard-view .msp-dashboard-payment { gap: 10px; padding: 13px 0; border-color: #e0e5ee; }
+.msp-dashboard-view .msp-dashboard-payment-icon { width: 34px; height: 34px; }
+.msp-dashboard-view .msp-dashboard-payment > span:nth-child(2) strong { color: #2c3b58; font-size: 12px; }
+.msp-dashboard-view .msp-dashboard-payment > span:nth-child(2) small { color: #5e6d85; font-size: 10px; }
+.msp-dashboard-view .msp-dashboard-payment-value strong { color: #263653; font-size: 12px; }
+.msp-dashboard-view .msp-dashboard-shipping { padding: 18px; border: 1px solid #d5deed; border-radius: 16px; background: #fff; }
+.msp-dashboard-view .msp-dashboard-shipping .msp-section-heading h2 { font-size: 20px; }
+@media (max-width: 900px) {
+  .msp-dashboard-view .msp-content { padding-top: 22px; }
+  .msp-dashboard-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .msp-dashboard-view .msp-content { padding: 18px 14px calc(90px + env(safe-area-inset-bottom)); }
+  .msp-dashboard-view .msp-dashboard-metrics { gap: 9px; margin-bottom: 17px; }
+  .msp-dashboard-view .msp-dashboard-metrics > a { min-height: 116px; padding: 12px; border-radius: 13px; }
+  .msp-dashboard-view .msp-dashboard-metric-icon { width: 34px; height: 34px; }
+  .msp-dashboard-view .msp-dashboard-metric-label { font-size: 11px; }
+  .msp-dashboard-view .msp-dashboard-metrics > a > strong { font-size: clamp(15px,4.2vw,20px); }
+  .msp-dashboard-view .msp-dashboard-metrics > a > small { font-size: 10px; }
+  .msp-dashboard-view .msp-dashboard-orders { padding: 13px; border-radius: 14px; }
+  .msp-dashboard-orders .msp-section-heading h2 { font-size: 19px; }
+  .msp-dashboard-orders .msp-order-card { padding: 12px; }
+  .msp-dashboard-orders .msp-order-image { width: 46px; height: 46px; }
+  .msp-dashboard-orders .msp-order-identity h3 { font-size: 14px; }
+  .msp-dashboard-orders .msp-order-meta { gap: 5px; }
+  .msp-dashboard-orders .msp-order-meta > div { padding: 8px 6px; }
+  .msp-dashboard-orders .msp-order-meta > div span { font-size: 9px; }
+  .msp-dashboard-orders .msp-order-meta > div strong { font-size: 11px; }
+  .msp-dashboard-view .msp-dashboard-actions,.msp-dashboard-view .msp-dashboard-recent,.msp-dashboard-view .msp-dashboard-shipping { padding: 14px; }
 }

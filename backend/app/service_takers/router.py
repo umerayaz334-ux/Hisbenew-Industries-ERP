@@ -32,6 +32,7 @@ from .models import (
     ServiceTakerOrder,
     ServiceTakerOrderItem,
     ServiceTakerProduct,
+    ServiceTakerShippingRequest,
 )
 from .schemas import (
     ServiceTakerCreate,
@@ -40,10 +41,13 @@ from .schemas import (
     ServiceTakerManufacturingAdminUpdate,
     ServiceTakerManufacturingPaymentCreate,
     ServiceTakerManufacturingRequestCreate,
+    ServiceTakerManufacturingShippingRequest,
     ServiceTakerOrderAdminUpdate,
     ServiceTakerOrderCreate,
     ServiceTakerProductCreate,
     ServiceTakerProductUpdate,
+    ServiceTakerShippingRequestAdminUpdate,
+    ServiceTakerShippingRequestCreate,
     ServiceTakerUpdate,
 )
 
@@ -502,7 +506,7 @@ def manufacturing_quote_total(order: ServiceTakerManufacturingOrder) -> float:
 def manufacturing_balance_due(order: ServiceTakerManufacturingOrder) -> float:
     if order.status in {"Cancelled", "Rejected"}:
         return 0.0
-    return max(0.0, round(manufacturing_quote_total(order) - manufacturing_paid_total(order), 2))
+    return max(0.0, round(manufacturing_quote_total(order) + float(order.shipping_cost or 0) - manufacturing_paid_total(order), 2))
 
 
 def manufacturing_deposit_balance(order: ServiceTakerManufacturingOrder) -> float:
@@ -597,9 +601,15 @@ def manufacturing_order_response(order: ServiceTakerManufacturingOrder) -> dict:
         "target_unit_price": order.target_unit_price,
         "quoted_unit_price": float(order.quoted_unit_price or 0),
         "other_cost": float(order.other_cost or 0),
+        "other_cost_label": order.other_cost_label,
         "quoted_total": quote_total,
         "courier": order.courier,
         "tracking_number": order.tracking_number,
+        "shipping_requested": bool(order.shipping_requested),
+        "shipping_recipient_name": order.shipping_recipient_name,
+        "shipping_address": order.shipping_address,
+        "shipping_weight_kg": float(order.shipping_weight_kg) if order.shipping_weight_kg is not None else None,
+        "shipping_cost": float(order.shipping_cost or 0),
         "deposit_required": float(order.deposit_required or 0),
         "paid_total": paid_total,
         "pending_payment_total": pending_payment_total,
@@ -619,6 +629,28 @@ def manufacturing_order_response(order: ServiceTakerManufacturingOrder) -> dict:
         "updates": [manufacturing_update_response(update) for update in order.updates],
         "created_at": order.created_at,
         "updated_at": order.updated_at,
+    }
+
+
+def shipping_request_response(shipment: ServiceTakerShippingRequest) -> dict:
+    return {
+        "id": shipment.id,
+        "service_taker_id": shipment.service_taker_id,
+        "company_name": shipment.service_taker.company_name if shipment.service_taker else None,
+        "request_no": shipment.request_no,
+        "recipient_name": shipment.recipient_name,
+        "shipping_address": shipment.shipping_address,
+        "item_description": shipment.item_description,
+        "quantity": int(shipment.quantity or 1),
+        "notes": shipment.notes,
+        "status": shipment.status,
+        "shipping_weight_kg": float(shipment.shipping_weight_kg) if shipment.shipping_weight_kg is not None else None,
+        "shipping_cost": float(shipment.shipping_cost or 0),
+        "courier": shipment.courier,
+        "tracking_number": shipment.tracking_number,
+        "currency": shipment.service_taker.currency if shipment.service_taker else "USD",
+        "created_at": shipment.created_at,
+        "updated_at": shipment.updated_at,
     }
 
 
@@ -683,15 +715,19 @@ def dashboard_response(
                 "open_inbounds": 0,
                 "open_orders": 0,
                 "shipped_order_cost": 0,
+                "fulfillment_balance_due": 0,
                 "open_manufacturing": 0,
                 "manufacturing_balance_due": 0,
                 "manufacturing_payments_received": 0,
+                "account_balance_due": 0,
+                "advance_credit": 0,
             },
             "clients": [],
             "products": [],
             "inbounds": [],
             "orders": [],
             "manufacturing_orders": [],
+            "shipping_requests": [],
             "ledger": [],
         }
 
@@ -722,6 +758,12 @@ def dashboard_response(
         )
         .all()
     )
+    shipping_requests = (
+        db.query(ServiceTakerShippingRequest)
+        .filter(ServiceTakerShippingRequest.service_taker_id.in_(client_ids))
+        .order_by(ServiceTakerShippingRequest.created_at.desc(), ServiceTakerShippingRequest.id.desc())
+        .all()
+    )
     ledger = (
         db.query(ServiceTakerInventoryTransaction)
         .filter(ServiceTakerInventoryTransaction.service_taker_id.in_(client_ids))
@@ -736,6 +778,24 @@ def dashboard_response(
     reserved = sum(int(product.reserved_quantity or 0) for product in products)
     shipped_cost = sum(
         order_total(order) for order in orders if order.status == "Shipped"
+    )
+    fulfillment_balance_due = sum(
+        order_total(order) for order in orders if order.status != "Cancelled"
+    )
+    manufacturing_charges = sum(
+        manufacturing_quote_total(order) + float(order.shipping_cost or 0)
+        for order in manufacturing_orders
+        if order.status not in {"Cancelled", "Rejected"}
+    )
+    confirmed_manufacturing_payments = sum(
+        manufacturing_paid_total(order) for order in manufacturing_orders
+    )
+    account_net_balance = round(
+        manufacturing_charges
+        + sum(float(shipment.shipping_cost or 0) for shipment in shipping_requests if shipment.status != "Cancelled")
+        + fulfillment_balance_due
+        - confirmed_manufacturing_payments,
+        2,
     )
     return {
         "stats": {
@@ -754,6 +814,7 @@ def dashboard_response(
                 1 for order in orders if order.status in ACTIVE_ORDER_STATUSES
             ),
             "shipped_order_cost": round(shipped_cost, 2),
+            "fulfillment_balance_due": round(fulfillment_balance_due, 2),
             "open_manufacturing": sum(
                 1
                 for order in manufacturing_orders
@@ -771,6 +832,8 @@ def dashboard_response(
                 sum(manufacturing_paid_total(order) for order in manufacturing_orders),
                 2,
             ),
+            "account_balance_due": max(0.0, account_net_balance),
+            "advance_credit": max(0.0, round(-account_net_balance, 2)),
         },
         "clients": [client_response(db, client) for client in clients],
         "products": [product_response(product) for product in products],
@@ -779,6 +842,7 @@ def dashboard_response(
         "manufacturing_orders": [
             manufacturing_order_response(order) for order in manufacturing_orders
         ],
+        "shipping_requests": [shipping_request_response(shipment) for shipment in shipping_requests],
         "ledger": [ledger_response(transaction) for transaction in ledger],
     }
 
@@ -1105,6 +1169,10 @@ def create_manufacturing_for_client(
             status_code=400,
             detail="Choose an existing product or add a new product/design name.",
         )
+    shipping_address = clean_text(payload.shipping_address) if payload.shipping_requested else None
+    shipping_recipient_name = clean_text(payload.shipping_recipient_name) if payload.shipping_requested else None
+    if payload.shipping_requested and (not shipping_address or not shipping_recipient_name):
+        raise HTTPException(status_code=400, detail="Enter the recipient name and shipping address, or turn off shipping.")
     client_reference = clean_text(payload.client_reference) or (product.sku if product else None)
     order = ServiceTakerManufacturingOrder(
         tenant_id=client.tenant_id,
@@ -1121,6 +1189,9 @@ def create_manufacturing_for_client(
         product_name=product_name,
         image_url=product.image_url if product else None,
         quantity=payload.quantity,
+        shipping_requested=bool(payload.shipping_requested),
+        shipping_recipient_name=shipping_recipient_name,
+        shipping_address=shipping_address,
         steel_type=clean_text(payload.steel_type),
         tang_type=clean_text(payload.tang_type),
         blade_thickness_mm=payload.blade_thickness_mm,
@@ -1220,6 +1291,8 @@ def admin_update_manufacturing_request(
     if "other_cost" in fields:
         order.other_cost = float(payload.other_cost or 0)
         price_changed = True
+    if "other_cost_label" in fields:
+        order.other_cost_label = clean_text(payload.other_cost_label) or None
     if "deposit_required" in fields:
         order.deposit_required = float(payload.deposit_required or 0)
         price_changed = True
@@ -1257,6 +1330,12 @@ def admin_update_manufacturing_request(
         details_changed = True
     if "tracking_number" in fields:
         order.tracking_number = clean_text(payload.tracking_number)
+        details_changed = True
+    if "shipping_weight_kg" in fields:
+        order.shipping_weight_kg = payload.shipping_weight_kg
+        details_changed = True
+    if "shipping_cost" in fields:
+        order.shipping_cost = round(float(payload.shipping_cost or 0), 2)
         details_changed = True
     if payload.status:
         order.status = payload.status
@@ -1296,7 +1375,7 @@ def admin_record_manufacturing_payment(
         service_taker_id=order.service_taker_id,
         manufacturing_order_id=order.id,
         amount=round(float(payload.amount or 0), 2),
-        payment_type=clean_text(payload.payment_type) or "Deposit",
+        payment_type="Payment",
         status="Confirmed",
         method=clean_text(payload.method),
         reference=clean_text(payload.reference),
@@ -1311,7 +1390,7 @@ def admin_record_manufacturing_payment(
         db,
         order,
         order.status,
-        f"{payment.payment_type} payment recorded: {payment.amount:.2f}.",
+        f"Payment recorded: {payment.amount:.2f}.",
         user.id,
     )
     paid_total = manufacturing_paid_total(order)
@@ -1364,7 +1443,7 @@ def admin_confirm_manufacturing_payment(
         db,
         order,
         order.status,
-        f"{payment.payment_type} payment confirmed: {payment.amount:.2f}.",
+        f"Account payment confirmed: {payment.amount:.2f}.",
         user.id,
     )
     if order.status in {"Quoted", "Deposit pending"} and manufacturing_paid_total(order) >= float(order.deposit_required or 0):
@@ -2543,7 +2622,9 @@ def portal_create_general_payment(
     if not order:
         raise HTTPException(status_code=400, detail="Please submit a quote request first before recording payment.")
 
-    cleaned_payment_type = clean_text(payment_type) or "Payment"
+    # Portal receipts are account payments. Apply them against the customer's
+    # aggregate balance and keep any approved excess as account credit.
+    cleaned_payment_type = "Payment"
     payment = ServiceTakerManufacturingPayment(
         tenant_id=order.tenant_id,
         service_taker_id=client.id,
@@ -2552,21 +2633,21 @@ def portal_create_general_payment(
         payment_type=cleaned_payment_type,
         status="Pending confirmation",
         method="Client portal",
-        note=clean_text(note) or f"Client uploaded {cleaned_payment_type.lower()} payment screenshot from portal.",
+        note=clean_text(note) or "Client uploaded an account payment receipt from the portal.",
         paid_at=datetime.utcnow(),
     )
     if proof_file:
         attach_payment_proof(payment, proof_file)
     db.add(payment)
     db.flush()
-    if cleaned_payment_type.lower() == "deposit" and order.status in {"Quoted", "Deposit pending"}:
+    if order.status in {"Quoted", "Deposit pending"}:
         order.status = "Deposit pending"
         set_manufacturing_status_dates(order, order.status)
     add_manufacturing_update(
         db,
         order,
         order.status,
-        f"{cleaned_payment_type} payment {payment_amount:.2f} submitted by client for company confirmation.",
+        f"Account payment {payment_amount:.2f} submitted by client for company confirmation.",
         getattr(request.state, 'user_id', None),
     )
     order.updated_at = datetime.utcnow()
@@ -2716,6 +2797,83 @@ def portal_create_local_order_request(
     db: Session = Depends(get_db),
 ):
     return portal_create_manufacturing_request(payload, request, db)
+
+
+@router.post("/portal/shipping-requests", status_code=201)
+def portal_create_shipping_request(
+    payload: ServiceTakerShippingRequestCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    client_user = db.query(User).filter(User.id == client.user_id).one_or_none()
+    if not service_taker_service_access(client_user)["manufacturing_enabled"]:
+        raise HTTPException(status_code=403, detail="Shipping requests are not enabled for this account.")
+    shipment = ServiceTakerShippingRequest(
+        tenant_id=client.tenant_id,
+        service_taker_id=client.id,
+        request_no=f"ST-SHP-{uuid.uuid4().hex[:8].upper()}",
+        recipient_name=clean_text(payload.recipient_name),
+        shipping_address=clean_text(payload.shipping_address),
+        item_description=clean_text(payload.item_description),
+        quantity=payload.quantity,
+        notes=clean_text(payload.notes) or None,
+    )
+    db.add(shipment)
+    db.commit()
+    db.refresh(shipment)
+    return shipping_request_response(shipment)
+
+
+@router.patch("/admin/shipping-requests/{request_id}")
+def admin_update_shipping_request(
+    request_id: int,
+    payload: ServiceTakerShippingRequestAdminUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request, db)
+    shipment = db.query(ServiceTakerShippingRequest).filter(ServiceTakerShippingRequest.id == request_id).one_or_none()
+    if not shipment:
+        raise HTTPException(status_code=404, detail="Shipping request not found.")
+    for field in payload.model_fields_set:
+        value = getattr(payload, field)
+        if field in {"courier", "tracking_number"}:
+            value = clean_text(value) or None
+        elif field == "shipping_cost":
+            value = round(float(value or 0), 2)
+        setattr(shipment, field, value)
+    shipment.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(shipment)
+    return shipping_request_response(shipment)
+
+
+@router.patch("/portal/local-orders/{request_id}/shipping")
+def portal_request_local_order_shipping(
+    request_id: int,
+    payload: ServiceTakerManufacturingShippingRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    client = portal_service_taker(request, db)
+    order = portal_manufacturing_order(db, client, request_id)
+    if order.status in {"Cancelled", "Rejected", "Shipped"}:
+        raise HTTPException(status_code=409, detail="Shipping details cannot be changed for this order.")
+    order.shipping_requested = True
+    order.shipping_recipient_name = clean_text(payload.recipient_name)
+    order.shipping_address = clean_text(payload.shipping_address)
+    order.updated_at = datetime.utcnow()
+    add_manufacturing_update(
+        db,
+        order,
+        order.status,
+        "Manufacturing shipping requested with delivery recipient and address.",
+        getattr(request.state, "user_id", None),
+    )
+    db.commit()
+    db.refresh(order)
+    return manufacturing_order_response(order)
 
 
 @router.post("/portal/local-orders/{request_id}/image")

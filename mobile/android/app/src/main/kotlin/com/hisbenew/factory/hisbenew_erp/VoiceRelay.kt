@@ -8,7 +8,6 @@ import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
-import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import android.content.Context
 import android.os.Handler
@@ -28,7 +27,6 @@ object VoiceRelay {
     private var player: AudioTrack? = null
     private var echo: AcousticEchoCanceler? = null
     private var noise: NoiseSuppressor? = null
-    private var gain: AutomaticGainControl? = null
     private var capture: Thread? = null
     private var audioFocus: AudioFocusRequest? = null
     private var previousMode = AudioManager.MODE_NORMAL
@@ -38,7 +36,7 @@ object VoiceRelay {
     @Volatile private var events: EventChannel.EventSink? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var speakerOn = true
-    private val playbackFrames = LinkedBlockingQueue<ByteArray>(32)
+    private val playbackFrames = LinkedBlockingQueue<ByteArray>(8)
     private var playbackThread: Thread? = null
 
     fun setEvents(sink: EventChannel.EventSink?) {
@@ -69,7 +67,7 @@ object VoiceRelay {
         audio.mode = AudioManager.MODE_IN_COMMUNICATION
         audio.isSpeakerphoneOn = speakerOn
         val captureSize = max(AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), FRAME * 4)
-        val playSize = max(AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT), FRAME * 8)
+        val playSize = max(AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT), FRAME * 3)
         if (captureSize <= 0 || playSize <= 0) {
             restoreAudio(context)
             audioContext = null
@@ -85,12 +83,6 @@ object VoiceRelay {
             .setAudioFormat(format)
             .setBufferSizeInBytes(captureSize)
             .build()
-        if (record.state != AudioRecord.STATE_INITIALIZED) {
-            record.release()
-            restoreAudio(context)
-            audioContext = null
-            return false
-        }
         if (record.state != AudioRecord.STATE_INITIALIZED) {
             record.release()
             restoreAudio(context)
@@ -120,9 +112,6 @@ object VoiceRelay {
         }
         if (NoiseSuppressor.isAvailable()) {
             noise = NoiseSuppressor.create(record.audioSessionId)?.also { it.enabled = true }
-        }
-        if (AutomaticGainControl.isAvailable()) {
-            gain = AutomaticGainControl.create(record.audioSessionId)?.also { it.enabled = true }
         }
         recorder = record
         player = playback
@@ -185,10 +174,8 @@ object VoiceRelay {
         capture = null
         echo?.release()
         noise?.release()
-        gain?.release()
         echo = null
         noise = null
-        gain = null
         recorder?.run {
             try { stop() } catch (_: Exception) {}
             release()

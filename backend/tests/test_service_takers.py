@@ -25,8 +25,11 @@ from app.service_takers.router import (
     portal_create_product,
     portal_cancel_order,
     portal_dashboard,
+    portal_create_general_payment,
     portal_create_manufacturing_payment_request,
     portal_create_manufacturing_request,
+    portal_create_shipping_request,
+    admin_update_shipping_request,
     portal_upload_product_image,
     portal_upload_label,
     receive_inbound,
@@ -42,6 +45,8 @@ from app.service_takers.schemas import (
     ServiceTakerOrderAdminUpdate,
     ServiceTakerOrderCreate,
     ServiceTakerProductCreate,
+    ServiceTakerShippingRequestCreate,
+    ServiceTakerShippingRequestAdminUpdate,
 )
 
 
@@ -90,6 +95,39 @@ class ServiceTakerTests(unittest.TestCase):
             self.request(self.admin_id),
             self.db,
         )
+
+    def test_independent_shipping_request_and_admin_quote(self):
+        client = self.create_service_taker("parcel-client")
+        created = portal_create_shipping_request(
+            ServiceTakerShippingRequestCreate(
+                recipient_name="Parcel recipient",
+                shipping_address="42 Example Street",
+                item_description="Two cartons of customer-owned goods",
+                quantity=2,
+                notes="Please call before delivery.",
+            ),
+            self.request(client["user_id"]),
+            self.db,
+        )
+        self.assertEqual(created["item_description"], "Two cartons of customer-owned goods")
+        self.assertEqual(created["quantity"], 2)
+        updated = admin_update_shipping_request(
+            created["id"],
+            ServiceTakerShippingRequestAdminUpdate(
+                status="Shipped",
+                shipping_weight_kg=3.5,
+                shipping_cost=1250,
+                courier="TCS",
+                tracking_number="TRACK-123",
+            ),
+            self.request(self.admin_id),
+            self.db,
+        )
+        self.assertEqual(updated["tracking_number"], "TRACK-123")
+        self.assertEqual(updated["shipping_cost"], 1250)
+        dashboard = portal_dashboard(self.request(client["user_id"]), self.db)
+        self.assertEqual(len(dashboard["shipping_requests"]), 1)
+        self.assertEqual(dashboard["stats"]["account_balance_due"], 1250)
 
     def test_client_stock_is_received_reserved_and_shipped_separately(self):
         client_record = self.create_service_taker()
@@ -203,6 +241,10 @@ class ServiceTakerTests(unittest.TestCase):
             self.db,
         )
         self.assertEqual(cost_record["total_cost"], 8)
+
+        dashboard_with_charge = portal_dashboard(self.request(user_id), self.db)
+        self.assertEqual(dashboard_with_charge["stats"]["fulfillment_balance_due"], 8)
+        self.assertEqual(dashboard_with_charge["stats"]["account_balance_due"], 8)
 
         shipped_record = ship_order(
             order_record["id"],
@@ -359,6 +401,7 @@ class ServiceTakerTests(unittest.TestCase):
                 status="Completed",
                 quoted_unit_price=10,
                 other_cost=5,
+                other_cost_label="Packing",
                 courier="TCS",
                 tracking_number="PK-TRACK-123",
             ),
@@ -366,8 +409,22 @@ class ServiceTakerTests(unittest.TestCase):
             self.db,
         )
         self.assertEqual(quoted["quoted_total"], 55)
+        self.assertEqual(quoted["other_cost"], 5)
+        self.assertEqual(quoted["other_cost_label"], "Packing")
         self.assertEqual(quoted["courier"], "TCS")
         self.assertEqual(quoted["tracking_number"], "PK-TRACK-123")
+        reloaded = next(
+            row for row in admin_dashboard(self.request(self.admin_id), self.db)["manufacturing_orders"]
+            if row["id"] == order["id"]
+        )
+        self.assertEqual(reloaded["other_cost"], 5)
+        self.assertEqual(reloaded["other_cost_label"], "Packing")
+        client_order = next(
+            row for row in portal_dashboard(self.request(user_id), self.db)["manufacturing_orders"]
+            if row["id"] == order["id"]
+        )
+        self.assertEqual(client_order["other_cost"], 5)
+        self.assertEqual(client_order["other_cost_label"], "Packing")
 
         payment_order = portal_create_manufacturing_payment_request(
             order["id"],
@@ -386,6 +443,51 @@ class ServiceTakerTests(unittest.TestCase):
         )
         self.assertEqual(confirmed["paid_total"], 25)
         self.assertEqual(confirmed["payments"][0]["status"], "Confirmed")
+
+    def test_account_payment_creates_advance_credit_after_confirmed_overpayment(self):
+        client = create_client(
+            ServiceTakerCreate(
+                company_name="Account Payment Client",
+                contact_name="Amina Shah",
+                username="account-payment-client",
+                pin="2468",
+                currency="PKR",
+                fulfillment_enabled=False,
+                manufacturing_enabled=True,
+            ),
+            self.request(self.admin_id),
+            self.db,
+        )
+        order = portal_create_manufacturing_request(
+            ServiceTakerManufacturingRequestCreate(product_name="Test order", quantity=1),
+            self.request(client["user_id"]),
+            self.db,
+        )
+        admin_update_manufacturing_request(
+            order["id"],
+            ServiceTakerManufacturingAdminUpdate(status="Completed", quoted_unit_price=100),
+            self.request(self.admin_id),
+            self.db,
+        )
+
+        payment = portal_create_general_payment(
+            self.request(client["user_id"]),
+            amount=130,
+            payment_type="Deposit",
+            note="Customer account transfer",
+            manufacturing_order_id=None,
+            proof_file=None,
+            db=self.db,
+        )
+        self.assertEqual(payment["payment_type"], "Payment")
+        self.assertEqual(payment["status"], "Pending confirmation")
+
+        admin_confirm_manufacturing_payment(
+            order["id"], payment["id"], self.request(self.admin_id), self.db
+        )
+        dashboard = portal_dashboard(self.request(client["user_id"]), self.db)
+        self.assertEqual(dashboard["stats"]["account_balance_due"], 0)
+        self.assertEqual(dashboard["stats"]["advance_credit"], 30)
 
 
 if __name__ == "__main__":

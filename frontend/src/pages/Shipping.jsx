@@ -3374,7 +3374,7 @@ function Shipping({ userRole }) {
 
               <small>
 
-                Active USA rates: {rateCard.source_filename} Â· {rateCard.source_date}
+                Active USA rates: {rateCard.source_filename} · {rateCard.source_date}
 
               </small>
 
@@ -3789,7 +3789,7 @@ function Shipping({ userRole }) {
 
                           <span className="shipping-detail-label">
 
-                            Order items Â· {itemCount} items Â· {unitCount} units
+                            Order items · {itemCount} items · {unitCount} units
 
                           </span>
 

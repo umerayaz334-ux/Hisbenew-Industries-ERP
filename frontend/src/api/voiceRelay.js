@@ -28,6 +28,23 @@ const resample = (samples, fromRate, toRate) => {
   const ratio = fromRate / toRate;
   const length = Math.floor(samples.length / ratio);
   const output = new Float32Array(length);
+  if (ratio > 1) {
+    // Average each source interval when downsampling. Linear point sampling
+    // aliases high-frequency mic noise into the audible speech band.
+    for (let index = 0; index < length; index += 1) {
+      const start = index * ratio;
+      const end = Math.min((index + 1) * ratio, samples.length);
+      let weighted = 0;
+      let weight = 0;
+      for (let source = Math.floor(start); source < end; source += 1) {
+        const overlap = Math.min(source + 1, end) - Math.max(source, start);
+        weighted += samples[source] * overlap;
+        weight += overlap;
+      }
+      output[index] = weight ? weighted / weight : 0;
+    }
+    return output;
+  }
   for (let index = 0; index < length; index += 1) {
     const position = index * ratio;
     const left = Math.floor(position);
@@ -49,9 +66,11 @@ export function openVoiceRelay({ callId, stream, onPeer, onEnded, onError }) {
   let pingTimer = null;
   let playAt = 0;
   let pending = new Float32Array(0);
-  const audioContext = new AudioContext();
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) throw new Error("This browser does not support call audio.");
+  const audioContext = new AudioContextClass();
   const source = audioContext.createMediaStreamSource(stream);
-  const processor = audioContext.createScriptProcessor(2048, 1, 1);
+  const processor = audioContext.createScriptProcessor(1024, 1, 1);
   const silent = audioContext.createGain();
   silent.gain.value = 0;
   source.connect(processor);
@@ -70,7 +89,9 @@ export function openVoiceRelay({ callId, stream, onPeer, onEnded, onError }) {
     const player = audioContext.createBufferSource();
     player.buffer = buffer;
     player.connect(audioContext.destination);
-    const start = Math.max(audioContext.currentTime + 0.08, playAt);
+    const now = audioContext.currentTime;
+    if (playAt < now - 0.02 || playAt > now + 0.16) playAt = now + 0.04;
+    const start = Math.max(now + 0.04, playAt);
     player.start(start);
     playAt = start + buffer.duration;
   };
@@ -114,7 +135,7 @@ export function openVoiceRelay({ callId, stream, onPeer, onEnded, onError }) {
     socket.addEventListener("message", (message) => {
       if (stopped) return;
       if (typeof message.data === "string") {
-        let event = null;
+        let event;
         try {
           event = JSON.parse(message.data);
         } catch {

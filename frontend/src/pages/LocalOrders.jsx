@@ -233,6 +233,7 @@ export default function LocalOrders() {
     status: "Quoted",
     quoted_unit_price: "",
     other_cost: "",
+    other_cost_label: "",
     deposit_required: "",
     courier: "",
     tracking_number: "",
@@ -318,6 +319,7 @@ export default function LocalOrders() {
       status: order.status || "Quote requested",
       quoted_unit_price: order.quoted_unit_price ?? "",
       other_cost: order.other_cost ?? "",
+      other_cost_label: order.other_cost_label || "",
       deposit_required: order.deposit_required ?? "",
       courier: order.courier || "",
       tracking_number: order.tracking_number || "",
@@ -370,6 +372,7 @@ export default function LocalOrders() {
         status: quoteForm.status,
         quoted_unit_price: quoteForm.quoted_unit_price === "" ? null : Number(quoteForm.quoted_unit_price),
         other_cost: quoteForm.other_cost === "" ? null : Number(quoteForm.other_cost),
+        other_cost_label: quoteForm.other_cost_label.trim() || null,
         deposit_required: quoteForm.deposit_required === "" ? null : Number(quoteForm.deposit_required),
         courier: quoteForm.courier || null,
         tracking_number: quoteForm.tracking_number || null,
@@ -377,13 +380,32 @@ export default function LocalOrders() {
         update_message: quoteForm.update_message || null,
         admin_notes: quoteForm.admin_notes || null,
       };
-      await api.patch(`/service-takers/admin/local-orders/${selectedOrder.id}`, payload);
+      const response = await api.patch(`/service-takers/admin/local-orders/${selectedOrder.id}`, payload);
+      const savedOrder = response.data;
+      if (
+        !savedOrder ||
+        Math.abs(Number(savedOrder.other_cost || 0) - Number(payload.other_cost || 0)) > 0.01 ||
+        (savedOrder.other_cost_label || "") !== (payload.other_cost_label || "")
+      ) {
+        throw new Error("The optional charge did not save. Please try again.");
+      }
       setNotice("Quote & order status updated successfully.");
       const nextData = await loadData(true);
-      const updated = (nextData?.manufacturing_orders || []).find((o) => o.id === selectedOrder.id);
-      if (updated) handleSelectOrder(updated);
+      const refreshedOrders = nextData?.manufacturing_orders || [];
+      const updated = refreshedOrders.find((order) => order.id === selectedOrder.id);
+      const authoritativeOrder = savedOrder?.id === selectedOrder.id ? { ...updated, ...savedOrder } : updated;
+      if (authoritativeOrder) {
+        setData((current) => ({
+          ...current,
+          ...nextData,
+          manufacturing_orders: refreshedOrders.map((order) =>
+            order.id === selectedOrder.id ? authoritativeOrder : order
+          ),
+        }));
+        handleSelectOrder(authoritativeOrder);
+      }
     } catch (err) {
-      setError(err?.response?.data?.detail || "Could not save quote.");
+      setError(err?.response?.data?.detail || err?.message || "Could not save quote.");
     } finally {
       setBusy("");
     }
@@ -1082,22 +1104,33 @@ export default function LocalOrders() {
                         value={quoteForm.quoted_unit_price ?? ""}
                       />
                     </label>
-                    <label>
-                      Other Cost ({isRupeeCurrency(selectedOrder.currency) ? "Rs" : selectedOrder.currency || 'USD'})
-                      <input
-                        inputMode={isRupeeCurrency(selectedOrder.currency) ? "numeric" : "decimal"}
-                        min="0"
-                        onChange={(event) =>
-                          setQuoteForm((current) => ({
-                            ...current,
-                            other_cost: sanitizeAmountInput(event.target.value, selectedOrder.currency),
-                          }))
-                        }
-                        step={isRupeeCurrency(selectedOrder.currency) ? "1" : "0.01"}
-                        type="number"
-                        value={quoteForm.other_cost ?? ""}
-                      />
-                    </label>
+                    <div className="service-cost-fields service-wide-field">
+                      <label>
+                        Other cost amount ({isRupeeCurrency(selectedOrder.currency) ? "Rs" : selectedOrder.currency || 'USD'})
+                        <input
+                          inputMode={isRupeeCurrency(selectedOrder.currency) ? "numeric" : "decimal"}
+                          min="0"
+                          onChange={(event) =>
+                            setQuoteForm((current) => ({
+                              ...current,
+                              other_cost: sanitizeAmountInput(event.target.value, selectedOrder.currency),
+                            }))
+                          }
+                          step={isRupeeCurrency(selectedOrder.currency) ? "1" : "0.01"}
+                          type="number"
+                          value={quoteForm.other_cost ?? ""}
+                        />
+                      </label>
+                      <label>
+                        Cost name (shown to client)
+                        <input
+                          maxLength="120"
+                          onChange={(event) => setQuoteForm((current) => ({ ...current, other_cost_label: event.target.value }))}
+                          placeholder="e.g. Packing, engraving"
+                          value={quoteForm.other_cost_label ?? ""}
+                        />
+                      </label>
+                    </div>
                     <label>
                       Deposit Required ({isRupeeCurrency(selectedOrder.currency) ? "Rs" : selectedOrder.currency || 'USD'})
                       <input

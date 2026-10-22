@@ -142,6 +142,9 @@ class ServiceTakerManufacturingRequestCreate(BaseModel):
     client_reference: str | None = Field(default=None, max_length=160)
     product_name: str | None = Field(default=None, max_length=240)
     quantity: int = Field(default=1, ge=1, le=100000)
+    shipping_requested: bool = False
+    shipping_recipient_name: str | None = Field(default=None, max_length=200)
+    shipping_address: str | None = Field(default=None, max_length=2000)
     steel_type: str | None = Field(default=None, max_length=120)
     tang_type: str | None = Field(default=None, max_length=80)
     blade_thickness_mm: float | None = Field(default=None, ge=0)
@@ -156,6 +159,27 @@ class ServiceTakerManufacturingRequestCreate(BaseModel):
     target_unit_price: float | None = Field(default=None, ge=0)
     requested_ready_at: datetime | None = None
     notes: str | None = Field(default=None, max_length=6000)
+
+
+class ServiceTakerManufacturingShippingRequest(BaseModel):
+    recipient_name: str = Field(min_length=1, max_length=200)
+    shipping_address: str = Field(min_length=1, max_length=2000)
+
+
+class ServiceTakerShippingRequestCreate(BaseModel):
+    recipient_name: str = Field(min_length=1, max_length=200)
+    shipping_address: str = Field(min_length=1, max_length=2000)
+    item_description: str = Field(min_length=1, max_length=2000)
+    quantity: int = Field(default=1, ge=1, le=100000)
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class ServiceTakerShippingRequestAdminUpdate(BaseModel):
+    status: str | None = Field(default=None, pattern="^(Submitted|Processing|Shipped|Cancelled)$")
+    shipping_weight_kg: float | None = Field(default=None, ge=0)
+    shipping_cost: float | None = Field(default=None, ge=0)
+    courier: str | None = Field(default=None, max_length=160)
+    tracking_number: str | None = Field(default=None, max_length=200)
 
 
 class ServiceTakerManufacturingAdminUpdate(BaseModel):
@@ -177,9 +201,12 @@ class ServiceTakerManufacturingAdminUpdate(BaseModel):
     packaging: str | None = Field(default=None, max_length=160)
     quoted_unit_price: float | None = Field(default=None, ge=0)
     other_cost: float | None = Field(default=None, ge=0)
+    other_cost_label: str | None = Field(default=None, max_length=120)
     deposit_required: float | None = Field(default=None, ge=0)
     courier: str | None = Field(default=None, max_length=160)
     tracking_number: str | None = Field(default=None, max_length=200)
+    shipping_weight_kg: float | None = Field(default=None, ge=0)
+    shipping_cost: float | None = Field(default=None, ge=0)
     estimated_ready_at: datetime | None = None
     admin_notes: str | None = Field(default=None, max_length=6000)
     update_message: str | None = Field(default=None, max_length=4000)
@@ -187,7 +214,7 @@ class ServiceTakerManufacturingAdminUpdate(BaseModel):
 
 class ServiceTakerManufacturingPaymentCreate(BaseModel):
     amount: float = Field(gt=0)
-    payment_type: str = Field(default="Deposit", max_length=80)
+    payment_type: str = Field(default="Payment", max_length=80)
     method: str | None = Field(default=None, max_length=120)
     reference: str | None = Field(default=None, max_length=160)
     note: str | None = Field(default=None, max_length=2000)

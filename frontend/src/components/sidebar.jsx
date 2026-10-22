@@ -24,8 +24,10 @@ const menuItems = [
   { name: "Service Inbound", label: "Inbound", icon: "inventory" },
   { name: "Service Shipments", label: "Ship Order", icon: "truck" },
   { name: "Service Manufacturing", label: "Local Orders", icon: "factory" },
+  { name: "Service Manufacturing Shipping", label: "Shipping", icon: "truck" },
   { name: "Service Quotations", label: "Quotations", icon: "quote" },
   { name: "Service Charges", label: "Charges", icon: "wallet" },
+  { name: "Service Account", label: "Account", icon: "account" },
   { name: "Follow Ups", icon: "message" },
   { name: "Products", icon: "box" },
   { name: "Inventory", icon: "inventory" },
@@ -359,6 +361,12 @@ function SidebarIcon({ name }) {
         <path d="M7 18c.7-2.4 2.4-4 5-4s4.3 1.6 5 4" />
       </>
     ),
+    account: (
+      <>
+        <circle cx="12" cy="8" r="3.5" />
+        <path d="M4.5 20c.7-3.5 3.1-5.5 7.5-5.5s6.8 2 7.5 5.5" />
+      </>
+    ),
     chart: (
       <>
         <path d="M4 19V5" />
@@ -513,6 +521,8 @@ function Sidebar({
     normalizedVisibleAllowedPages.includes("Service Manufacturing") &&
     !normalizedVisibleAllowedPages.includes("Service Inbound") &&
     !normalizedVisibleAllowedPages.includes("Service Shipments");
+  const directServiceTakerNavigation = userRole === "service_taker" &&
+    normalizedVisibleAllowedPages.some((page) => ["Service Manufacturing", "Service Shipments"].includes(page));
   const visibleMenuItems = isSchoolWorkspace
     ? schoolMenuItems
         .filter(
@@ -533,12 +543,12 @@ function Sidebar({
         .map((page) => menuItemByName.get(page))
         .filter(
           (item) => item && normalizedVisibleAllowedPages.includes(item.name) &&
-            (!manufacturingOnlyServiceTaker || ["Service Dashboard", "Service Manufacturing", "Service Charges"].includes(item.name))
+            (!manufacturingOnlyServiceTaker || ["Service Dashboard", "Service Manufacturing", "Service Manufacturing Shipping", "Service Charges"].includes(item.name))
         );
   const visibleMenuCount = visibleMenuItems.length;
   const mobilePrimaryPageOrder =
     manufacturingOnlyServiceTaker
-      ? ["Service Dashboard", "Service Manufacturing", "Service Charges"]
+      ? ["Service Dashboard", "Service Manufacturing", "Service Manufacturing Shipping", "Service Charges"]
       : userRole === "service_taker"
       ? [
           "Service Dashboard",
@@ -632,6 +642,7 @@ function Sidebar({
       const serviceLabels = {
         "Service Dashboard": "Home",
         "Service Manufacturing": "Orders",
+        "Service Manufacturing Shipping": "Shipping",
         "Service Charges": "Payments",
       };
       if (serviceLabels[item.name]) return serviceLabels[item.name];
@@ -647,6 +658,40 @@ function Sidebar({
     return Number.isFinite(count) && count > 0 ? count : 0;
   };
   const formatNotificationCount = (count) => (count > 99 ? "99+" : String(count));
+
+  if (directServiceTakerNavigation) {
+    const serviceNavigation = [
+      ["Service Dashboard", "Home", "dashboard"],
+      ["Service Shipments", "Shipping", "truck"],
+      ["Service Manufacturing", "Orders", "clipboard"],
+      ["Service Manufacturing Shipping", "Shipping", "truck"],
+      ["Service Charges", "Payments", "wallet"],
+      ["Service Account", "Account", "account"],
+    ].filter(([page]) => normalizedVisibleAllowedPages.includes(page));
+    return (
+      <nav aria-label="Service portal navigation" className="service-taker-bottom-nav" style={{ gridTemplateColumns: `repeat(${serviceNavigation.length}, minmax(0, 1fr))` }}>
+        <div className="service-taker-nav-brand"><span>HI</span><div><strong>Hisbenew</strong><small>Service portal</small></div></div>
+        <div className="service-taker-nav-links">
+          {serviceNavigation.map(([page, label, icon]) => (
+            <a
+              aria-current={activePage === page ? "page" : undefined}
+              className={activePage === page ? "is-active" : ""}
+              href={getPageHref(page)}
+              key={page}
+              onClick={(event) => handleNavigation(event, page)}
+            >
+              <SidebarIcon name={icon} />
+              <span>{label}</span>
+            </a>
+          ))}
+        </div>
+        <div className="service-taker-nav-footer">
+          <div className="service-taker-nav-profile"><span>{String(authenticatedUser?.name || authenticatedUser?.username || "S").trim().slice(0, 1).toUpperCase()}</span><div><strong>{authenticatedUser?.name || authenticatedUser?.username || "Service taker"}</strong><small>Client portal</small></div></div>
+          <button onClick={handleMobileLogout} type="button">Log out</button>
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <aside

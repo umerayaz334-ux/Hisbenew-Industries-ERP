@@ -4171,3 +4171,29 @@
 .products-catalog-pricing p { font-size: 12px; color: #596456; margin: 8px 0 0; }
 .products-catalog-pricing input[aria-invalid="true"] { border-color: #b42318; }
 .products-catalog-selector-list { min-height: 0; }
+
+.products-bulk-price-modal { width: min(680px, calc(100vw - 32px)); }
+.products-bulk-price-form { display: grid; gap: 13px; padding: 18px 24px 22px; }
+.products-bulk-price-field { display: grid; gap: 9px; padding: 13px; border: 1px solid #e2e7ee; border-radius: 10px; background: #fafbfd; }
+.products-bulk-price-field-heading { display: flex; align-items: center; gap: 9px; color: #253047; font-size: 13px; font-weight: 750; }
+.products-bulk-price-field-heading input { width: 16px; height: 16px; margin: 0; accent-color: #4b5fc0; }
+.products-bulk-price-field > input[type="number"] { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid #d7deea; border-radius: 8px; background: #fff; color: #26334b; font: inherit; font-size: 13px; }
+.products-bulk-price-field > input:disabled { background: #f1f3f6; color: #8992a3; }
+.products-bulk-price-preview { display: grid; gap: 9px; min-width: 0; }
+.products-bulk-price-preview > strong { color: #27334d; font-size: 13px; }
+.products-bulk-price-preview-list { display: grid; max-height: 230px; overflow: auto; border: 1px solid #e5e9ef; border-radius: 9px; background: #fff; }
+.products-bulk-price-preview-list > div { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.2fr); gap: 12px; padding: 9px 11px; border-bottom: 1px solid #eef0f4; }
+.products-bulk-price-preview-list > div:last-child { border-bottom: 0; }
+.products-bulk-price-preview-list > div > span:first-child { overflow: hidden; align-self: center; color: #34405a; font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.products-bulk-price-preview-list > div > span:last-child { display: grid; gap: 3px; justify-items: end; }
+.products-bulk-price-preview-list small { color: #68748b; font-size: 10px; text-align: right; }
+.products-bulk-price-form .products-form-footer { padding: 12px 0 0; }
+
+@media (max-width: 640px) {
+  .products-bulk-price-form { padding: 14px; }
+  .products-bulk-price-preview-list > div { grid-template-columns: 1fr; gap: 5px; }
+  .products-bulk-price-preview-list > div > span:last-child { justify-items: start; }
+  .products-bulk-price-preview small { text-align: left; }
+  .products-bulk-price-form .products-form-footer { flex-direction: column-reverse; }
+  .products-bulk-price-form .products-form-footer button { width: 100%; }
+}

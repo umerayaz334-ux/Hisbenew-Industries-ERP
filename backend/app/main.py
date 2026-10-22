@@ -1202,6 +1202,7 @@ TERMINAL_INTERNAL_CALL_STATUSES = ("declined", "cancelled", "ended", "missed", "
 def internal_call_response(call: InternalCall, current_user_id: int) -> dict:
     is_incoming = call.recipient_user_id == current_user_id
     other_user = call.caller if is_incoming else call.recipient
+    delivery_status = internal_call_delivery_status(call)
     return {
         "id": call.id,
         "caller_user_id": call.caller_user_id,
@@ -1213,6 +1214,7 @@ def internal_call_response(call: InternalCall, current_user_id: int) -> dict:
         "other_user_name": other_user.name if other_user else "User",
         "other_user_role": other_user.role if other_user else None,
         "status": call.status,
+        "delivery_status": delivery_status,
         "is_incoming": is_incoming,
         "answered_at": call.answered_at,
         "ended_at": call.ended_at,
@@ -1220,6 +1222,20 @@ def internal_call_response(call: InternalCall, current_user_id: int) -> dict:
         "created_at": call.created_at,
         "updated_at": call.updated_at,
     }
+
+
+def internal_call_delivery_status(call: InternalCall, now: datetime | None = None) -> str:
+    """Tell the caller when the recipient's app has actually checked the call."""
+    if call.status != "ringing":
+        return "reached"
+    created_at = call.created_at
+    seen_at = call.recipient_last_seen_at
+    if seen_at and created_at and seen_at >= created_at:
+        return "ringing"
+    now = now or datetime.utcnow()
+    if created_at and (now - created_at).total_seconds() >= 6:
+        return "unreachable"
+    return "calling"
 
 
 def internal_call_signal_response(signal: InternalCallSignal) -> dict:
@@ -6076,7 +6092,7 @@ def create_internal_call(
         call_type=call_type,
         status="ringing",
         caller_last_seen_at=now,
-        recipient_last_seen_at=now,
+        recipient_last_seen_at=None,
     )
     db.add(call)
     db.commit()
@@ -6267,7 +6283,7 @@ async def realtime_websocket(websocket: WebSocket):
             if message_type == "ping":
                 await websocket.send_json({"type": "pong"})
                 continue
-            if message_type != "call.heartbeat":
+            if message_type not in {"call.heartbeat", "call.ringing.ack"}:
                 continue
             try:
                 call_id = int(message.get("call_id") or 0)
@@ -6278,6 +6294,19 @@ async def realtime_websocket(websocket: WebSocket):
             db = SessionLocal()
             try:
                 call = get_internal_call_for_user(db, call_id, user_id)
+                if message_type == "call.ringing.ack":
+                    if call.recipient_user_id != user_id or call.status != "ringing":
+                        continue
+                    touch_internal_call_participant(db, call, user_id)
+                    await realtime_hub.publish(
+                        [call.caller_user_id],
+                        {
+                            "type": "call.delivery",
+                            "call_id": call.id,
+                            "delivery_status": internal_call_delivery_status(call),
+                        },
+                    )
+                    continue
                 touch_internal_call_participant(db, call, user_id)
                 if call.status in TERMINAL_INTERNAL_CALL_STATUSES:
                     await websocket.send_json(

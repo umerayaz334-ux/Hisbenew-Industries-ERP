@@ -17,6 +17,7 @@ class CallCover extends StatelessWidget {
     final incoming = desk.phase == 'incoming';
     final ended = desk.phase == 'ended';
     final connected = desk.phase == 'connected';
+    final ringing = incoming || desk.phase == 'outgoing';
     final title = switch (desk.phase) {
       'connecting' => phrase(
         context,
@@ -30,71 +31,126 @@ class CallCover extends StatelessWidget {
       ),
       'outgoing' => phrase(
         context,
-        'Calling',
-        '\u06a9\u0627\u0644 \u06c1\u0648 \u0631\u06c1\u06cc \u06c1\u06d2',
+        desk.deliveryText,
+        desk.deliveryStatus == 'ringing'
+            ? '\u0622\u067e \u06a9\u06cc \u0688\u06cc\u0648\u0627\u0626\u0633 \u067e\u0631 \u0631\u0646\u06af \u06c1\u0648 \u0631\u06c1\u06cc \u06c1\u06d2'
+            : desk.deliveryStatus == 'unreachable'
+            ? '\u0627\u0628\u06be\u06cc \u0627\u0646 \u062a\u06a9 \u06a9\u0627\u0644 \u0646\u06c1\u06cc\u06ba \u067e\u06c1\u0646\u0686\u06cc'
+            : '\u06a9\u0627\u0644 \u06a9\u06cc \u06a9\u0648\u0634\u0634 \u062c\u0627\u0631\u06cc \u06c1\u06d2',
       ),
       'connected' => desk.duration,
       'ended' => desk.notice.isEmpty ? 'Call ended' : desk.notice,
       _ => phrase(context, 'Call', '\u06a9\u0627\u0644'),
     };
     return Material(
-      color: const Color(0xFF102C26),
-      child: SafeArea(
+      color: const Color(0xFF0D201A),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF17392E), Color(0xFF0B1713)],
+          ),
+        ),
+        child: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) => SingleChildScrollView(
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight),
               child: IntrinsicHeight(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
+                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
                   child: Column(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            connected ? Icons.graphic_eq : Icons.call,
-                            color: const Color(0xFF8BD6B8),
-                            size: 18,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .08),
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: .12),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            connected ? 'CALL IN PROGRESS' : 'HISBENEW VOICE',
-                            style: const TextStyle(
-                              color: Color(0xFF8BD6B8),
-                              letterSpacing: 1.8,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                        ),
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Icon(
+                              incoming
+                                  ? Icons.call_received_rounded
+                                  : connected
+                                  ? Icons.graphic_eq_rounded
+                                  : Icons.call_made_rounded,
+                              color: const Color(0xFF9BE4C5),
+                              size: 17,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 8),
+                            Text(
+                              incoming
+                                  ? 'INCOMING VOICE CALL'
+                                  : connected
+                                  ? 'CALL IN PROGRESS'
+                                  : 'OUTGOING VOICE CALL',
+                              style: const TextStyle(
+                                color: Color(0xFFB8EBD4),
+                                letterSpacing: 1.25,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const Spacer(),
-                      Container(
-                        width: 108,
-                        height: 108,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: hisbenewForest,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: const Color(0xFF8BD6B8)
-                                .withValues(alpha: .45),
-                            width: 2,
-                          ),
+                      TweenAnimationBuilder<double>(
+                        duration: const Duration(milliseconds: 420),
+                        tween: Tween<double>(begin: .92, end: 1),
+                        builder: (context, scale, child) => Transform.scale(
+                          scale: ringing ? scale : 1,
+                          child: child,
                         ),
-                        child: Text(
-                          desk.otherName.isEmpty
-                              ? 'H'
-                              : desk.otherName.characters.first.toUpperCase(),
-                          style: const TextStyle(
-                            color: Color(0xFFF3E6C8),
-                            fontSize: 40,
-                            fontWeight: FontWeight.w800,
+                        child: Container(
+                          width: 136,
+                          height: 136,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF32735A), Color(0xFF173B2E)],
+                            ),
+                            border: Border.all(
+                              color: const Color(0xFF9BE4C5)
+                                  .withValues(alpha: .55),
+                              width: 2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF53BE8D)
+                                    .withValues(alpha: ringing ? .22 : .12),
+                                blurRadius: 35,
+                                spreadRadius: 5,
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            desk.otherName.isEmpty
+                                ? 'H'
+                                : desk.otherName.characters.first.toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 46,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -1,
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 22),
+                      const SizedBox(height: 26),
                       Text(
                         desk.otherName.isEmpty
                             ? phrase(
@@ -108,23 +164,75 @@ class CallCover extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 30,
+                          fontSize: 29,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -.4,
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: connected
-                              ? const Color(0xFF8BD6B8)
-                              : const Color(0xFFF3E6C8),
-                          fontSize: connected ? 24 : 16,
-                          fontWeight: FontWeight.w700,
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .07),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                color: connected
+                                    ? const Color(0xFF75E3A7)
+                                    : incoming
+                                    ? const Color(0xFFF1C675)
+                                    : const Color(0xFFB5C7BD),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 9),
+                            Text(
+                              title,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: connected
+                                    ? const Color(0xFF9BE4C5)
+                                    : desk.deliveryStatus == 'unreachable'
+                                    ? const Color(0xFFFFD19A)
+                                    : const Color(0xFFF3E6C8),
+                                fontSize: connected ? 18 : 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                      if (desk.phase == 'outgoing') ...[
+                        const SizedBox(height: 9),
+                        Text(
+                          phrase(
+                            context,
+                            desk.deliveryHint,
+                            desk.deliveryStatus == 'ringing'
+                                ? '\u0627\u0646 \u06a9\u06cc \u0688\u06cc\u0648\u0627\u0626\u0633 \u067e\u0631 \u06a9\u0627\u0644 \u0622 \u0631\u06c1\u06cc \u06c1\u06d2'
+                                : desk.deliveryStatus == 'unreachable'
+                                ? '\u0627\u0646 \u06a9\u0627 \u0627\u06cc\u067e \u0622\u0641 \u0644\u0627\u0626\u0646 \u06c1\u0648 \u0633\u06a9\u062a\u0627 \u06c1\u06d2'
+                                : '\u0627\u0646 \u06a9\u06d2 \u0627\u06cc\u067e \u062a\u06a9 \u067e\u06c1\u0646\u0686\u0646\u06d2 \u06a9\u06cc \u06a9\u0648\u0634\u0634 \u062c\u0627\u0631\u06cc \u06c1\u06d2',
+                          ),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: desk.deliveryStatus == 'unreachable'
+                                ? const Color(0xFFFFD19A)
+                                : const Color(0xFFB5C7BD),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                       if (desk.notice.isNotEmpty && !ended) ...[
                         const SizedBox(height: 12),
                         Container(
@@ -218,6 +326,7 @@ class CallCover extends StatelessWidget {
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -237,31 +346,39 @@ class _AnswerButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Material(
-          color: color,
-          shape: const CircleBorder(),
-          elevation: 6,
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onTap,
-            child: SizedBox(
-              width: 76,
-              height: 76,
-              child: Icon(icon, color: Colors.white, size: 34),
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        button: true,
+        label: label,
+        child: Column(
+          children: [
+            Material(
+              color: color,
+              shape: const CircleBorder(),
+              elevation: 7,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onTap,
+                child: SizedBox(
+                  width: 82,
+                  height: 82,
+                  child: Icon(icon, color: Colors.white, size: 35),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(height: 9),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

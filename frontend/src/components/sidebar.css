@@ -2130,3 +2130,94 @@ a.menu-button:focus-visible, a.mobile-tab-button:focus-visible, a.mobile-menu-it
   outline: 2px solid #0d9488;
   outline-offset: -2px;
 }
+
+.service-taker-bottom-nav {
+  position: fixed;
+  z-index: 950;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  width: min(620px, 100%);
+  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  gap: 4px;
+  margin: 0 auto;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  border: 1px solid #e8eaf0;
+  border-bottom: 0;
+  border-radius: 17px 17px 0 0;
+  background: rgba(255,255,255,.97);
+  box-shadow: 0 -8px 30px rgba(34,43,80,.1);
+  backdrop-filter: blur(14px);
+}
+
+.service-taker-bottom-nav a {
+  display: grid;
+  min-width: 0;
+  min-height: 54px;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
+  border-radius: 11px;
+  color: #778198;
+  text-decoration: none;
+  transition: background .15s ease, color .15s ease;
+}
+
+.service-taker-bottom-nav a svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.service-taker-bottom-nav a span { overflow: hidden; max-width: 100%; font-size: 9px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.service-taker-bottom-nav a.is-active { background: #f0f1ff; color: #495fbd; }
+.service-taker-bottom-nav a:focus-visible { outline: 2px solid #566ac1; outline-offset: -2px; }
+
+@media (max-width: 900px) {
+  .app-layout.service-taker-navigation > .main-content:not(.login-page) { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .service-taker-bottom-nav { width: 100%; border-right: 0; border-left: 0; border-radius: 15px 15px 0 0; }
+}
+
+@media (min-width: 901px) {
+  .service-taker-bottom-nav {
+    position: fixed;
+    z-index: 1000;
+    inset: 0 auto 0 0;
+    display: flex;
+    width: 252px;
+    max-width: 252px;
+    flex-direction: column;
+    gap: 26px;
+    margin: 0;
+    padding: 27px 16px 18px;
+    border: 0;
+    border-right: 1px solid #e4e8f1;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: 5px 0 24px rgba(35,47,83,.045);
+    backdrop-filter: none;
+  }
+
+  .service-taker-nav-brand { display: flex; align-items: center; gap: 11px; padding: 0 8px 22px; border-bottom: 1px solid #edf0f5; }
+  .service-taker-nav-brand > span { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 13px; background: #485fbb; color: #fff; font-size: 15px; font-weight: 850; letter-spacing: .04em; }
+  .service-taker-nav-brand > div,.service-taker-nav-profile > div { display: grid; gap: 3px; min-width: 0; }
+  .service-taker-nav-brand strong { color: #1e2b49; font-size: 16px; line-height: 1.2; }
+  .service-taker-nav-brand small { color: #7a8498; font-size: 12px; }
+  .service-taker-nav-links { display: grid; align-content: start; gap: 6px; min-height: 0; flex: 1; }
+  .service-taker-nav-section-label { padding: 0 12px 5px; color: #8992a5; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+  .service-taker-bottom-nav a { display: flex; width: 100%; min-height: 46px; flex: 0 0 auto; align-items: center; justify-items: initial; align-content: initial; gap: 12px; padding: 0 12px; border-radius: 10px; color: #56627b; }
+  .service-taker-bottom-nav a svg { width: 20px; height: 20px; flex: 0 0 auto; }
+  .service-taker-bottom-nav a span { max-width: none; font-size: 13px; font-weight: 700; }
+  .service-taker-bottom-nav a.is-active { background: #eff1ff; color: #4359b4; }
+  .service-taker-nav-footer { display: grid; gap: 12px; padding: 14px 4px 2px; border-top: 1px solid #edf0f5; }
+  .service-taker-nav-profile { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 2px 5px; }
+  .service-taker-nav-profile > span { display: grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: #e9edff; color: #4359b4; font-size: 14px; font-weight: 800; }
+  .service-taker-nav-profile strong { overflow: hidden; color: #2c3852; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .service-taker-nav-profile small { color: #828da1; font-size: 11px; }
+  .service-taker-nav-footer > button { min-height: 40px; padding: 0 12px; border: 1px solid #e4e8f0; border-radius: 9px; background: #fff; color: #53617a; cursor: pointer; font: inherit; font-size: 12px; font-weight: 750; text-align: left; }
+  .service-taker-nav-footer > button:hover { border-color: #d6dcef; background: #f7f8fc; color: #344b9f; }
+}
+
+@media (max-width: 900px) {
+  .service-taker-nav-brand,.service-taker-nav-section-label,.service-taker-nav-footer { display: none; }
+  .service-taker-nav-links { display: contents; }
+  .service-taker-bottom-nav a { min-height: 58px; gap: 5px; }
+  .service-taker-bottom-nav a svg { width: 23px; height: 23px; }
+  .service-taker-bottom-nav a span { font-size: 11px; }
+}

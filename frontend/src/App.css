@@ -275,6 +275,11 @@ textarea:focus-visible {
   --app-sidebar-width: 78px;
 }
 
+.app-layout.service-taker-navigation {
+  --app-sidebar-width: 0px;
+  --app-content-max-width: 1440px;
+}
+
 .app-layout > .main-content:not(.login-page) {
   width: calc(100% - var(--app-sidebar-width));
   max-width: none;
@@ -284,6 +289,33 @@ textarea:focus-visible {
   transition:
     width 180ms ease,
     margin-left 180ms ease;
+}
+
+.app-layout.service-taker-navigation > .main-content:not(.login-page) {
+  width: 100%;
+  margin-left: 0;
+  padding-bottom: calc(92px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 901px) {
+  .app-layout.service-taker-navigation {
+    --app-sidebar-width: 252px;
+    --app-content-max-width: none;
+    min-height: 100vh;
+    background: #f4f6fb;
+  }
+
+  .app-layout.service-taker-navigation > .main-content:not(.login-page) {
+    width: calc(100% - var(--app-sidebar-width));
+    min-height: 100vh;
+    margin-left: var(--app-sidebar-width);
+    padding: 0 0 28px;
+  }
+
+  .app-layout.service-taker-navigation > .main-content:not(.login-page) > * {
+    max-width: none;
+    margin: 0;
+  }
 }
 
 .app-layout > .main-content:not(.login-page) > * {

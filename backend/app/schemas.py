@@ -455,6 +455,7 @@ class InternalCallOut(BaseModel):
     other_user_name: str
     other_user_role: str | None = None
     status: str
+    delivery_status: str = "calling"
     is_incoming: bool = False
     answered_at: datetime | None = None
     ended_at: datetime | None = None

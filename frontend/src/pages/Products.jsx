@@ -265,6 +265,13 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
   const [showSummary, setShowSummary] = useState(false);
   const [notice, setNotice] = useState(null);
   const [selectedProductIds, setSelectedProductIds] = useState(() => new Set());
+  const [showBulkPriceEditor, setShowBulkPriceEditor] = useState(false);
+  const [bulkPriceForm, setBulkPriceForm] = useState({
+    update_cost_price: false,
+    cost_price: "",
+    update_selling_price: false,
+    selling_price: "",
+  });
   const faireFileInputRef = useRef(null);
   const isAdmin = ["admin", "super_admin"].includes(effectiveRole);
   const isWorkerView = effectiveRole === "worker";
@@ -895,6 +902,75 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
     }
   };
 
+  const applyBulkPrices = async (event) => {
+    event.preventDefault();
+    if (selectedProducts.length === 0 || saving) return;
+    const fields = ["cost_price", "selling_price"].filter((field) =>
+      bulkPriceForm[field === "cost_price" ? "update_cost_price" : "update_selling_price"]
+    );
+    if (fields.length === 0) {
+      setNotice({ type: "error", text: "Choose at least one price to update." });
+      return;
+    }
+    const nextPrices = {};
+    for (const field of fields) {
+      const value = bulkPriceForm[field];
+      if (value === "" || !Number.isFinite(Number(value)) || Number(value) < 0) {
+        setNotice({ type: "error", text: "Enter a valid price of zero or more." });
+        return;
+      }
+      nextPrices[field] = Number(value);
+    }
+
+    setSaving(true);
+    let updatedIds = [];
+    const failedIds = [];
+    try {
+      for (let index = 0; index < selectedProducts.length; index += 8) {
+        const batch = selectedProducts.slice(index, index + 8);
+        const results = await Promise.allSettled(
+          batch.map((product) =>
+            api.put(
+              `/products/${product.id}`,
+              buildProductPayload(product, nextPrices),
+              { headers: { "Content-Type": "multipart/form-data" } }
+            )
+          )
+        );
+        results.forEach((result, offset) => {
+          const product = batch[offset];
+          if (result.status === "fulfilled") updatedIds.push(product.id);
+          else failedIds.push(product.id);
+        });
+      }
+
+      const response = await api.get("/products");
+      setProducts(Array.isArray(response.data) ? response.data : []);
+      setSelectedProductIds(new Set(failedIds));
+      setShowBulkPriceEditor(false);
+      setBulkPriceForm({
+        update_cost_price: false,
+        cost_price: "",
+        update_selling_price: false,
+        selling_price: "",
+      });
+      setNotice({
+        type: failedIds.length ? "error" : "success",
+        text: failedIds.length
+          ? `Updated ${updatedIds.length} product${updatedIds.length === 1 ? "" : "s"}; ${failedIds.length} could not be updated. Failed products remain selected.`
+          : `Prices updated for ${updatedIds.length} product${updatedIds.length === 1 ? "" : "s"}.`,
+      });
+    } catch (error) {
+      console.error("Bulk price edit error:", error);
+      setNotice({
+        type: "error",
+        text: error.response?.data?.detail || "The updated prices could not be refreshed. Reload the products list to verify changes.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveProduct = async (event) => {
     event.preventDefault();
     setSaving(true);
@@ -1458,11 +1534,25 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
           <div className="products-bulk-action-bar">
             <div>
               <strong>{selectedProducts.length} selected</strong>
+              {selectedProducts.length < filteredProducts.length && (
+                <button
+                  onClick={() => setSelectedProductIds(new Set(filteredProducts.map((product) => product.id)))}
+                  type="button"
+                >
+                  Select all {filteredProducts.length} matching
+                </button>
+              )}
               <button onClick={() => setSelectedProductIds(new Set())} type="button">
                 Clear selection
               </button>
             </div>
             <div className="products-bulk-actions">
+              {isAdmin && (
+                <button onClick={() => setShowBulkPriceEditor(true)} type="button">
+                  <Icon name="edit" size={15} />
+                  Edit prices
+                </button>
+              )}
               <button onClick={bulkEditProducts} type="button">
                 <Icon name="edit" size={15} />
                 Bulk edit
@@ -1481,6 +1571,102 @@ function Products({ authenticatedUser, initialCatalogTab = "products", userRole 
                 Delete
               </button>
             </div>
+          </div>
+        )}
+
+        {showBulkPriceEditor && (
+          <div
+            className="products-modal-overlay"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !saving) setShowBulkPriceEditor(false);
+            }}
+          >
+            <section
+              aria-labelledby="products-bulk-price-title"
+              aria-modal="true"
+              className="products-modal products-bulk-price-modal"
+              role="dialog"
+            >
+              <div className="products-modal-header">
+                <div>
+                  <span className="products-section-label">Bulk product update</span>
+                  <h2 id="products-bulk-price-title">Edit prices</h2>
+                  <p>Set prices for {selectedProducts.length} selected products. Leave a price unchecked to keep it unchanged.</p>
+                </div>
+                <button
+                  aria-label="Close bulk price editor"
+                  className="products-modal-close"
+                  disabled={saving}
+                  onClick={() => setShowBulkPriceEditor(false)}
+                  type="button"
+                >
+                  <Icon name="close" size={18} />
+                </button>
+              </div>
+              <form className="products-bulk-price-form" onSubmit={applyBulkPrices}>
+                <div className="products-bulk-price-field">
+                  <label className="products-bulk-price-field-heading" htmlFor="bulk-cost-price-enabled">
+                    <input
+                      id="bulk-cost-price-enabled"
+                      checked={bulkPriceForm.update_cost_price}
+                      onChange={(event) => setBulkPriceForm((current) => ({ ...current, update_cost_price: event.target.checked }))}
+                      type="checkbox"
+                    />
+                    <span>Wholesale price (USD)</span>
+                  </label>
+                  <input
+                    disabled={!bulkPriceForm.update_cost_price || saving}
+                    id="bulk-cost-price"
+                    min="0"
+                    onChange={(event) => setBulkPriceForm((current) => ({ ...current, cost_price: event.target.value }))}
+                    placeholder="Enter a price"
+                    step="0.01"
+                    type="number"
+                    value={bulkPriceForm.cost_price}
+                  />
+                </div>
+                <div className="products-bulk-price-field">
+                  <label className="products-bulk-price-field-heading" htmlFor="bulk-selling-price-enabled">
+                    <input
+                      id="bulk-selling-price-enabled"
+                      checked={bulkPriceForm.update_selling_price}
+                      onChange={(event) => setBulkPriceForm((current) => ({ ...current, update_selling_price: event.target.checked }))}
+                      type="checkbox"
+                    />
+                    <span>MSRP / retail price (USD)</span>
+                  </label>
+                  <input
+                    disabled={!bulkPriceForm.update_selling_price || saving}
+                    id="bulk-selling-price"
+                    min="0"
+                    onChange={(event) => setBulkPriceForm((current) => ({ ...current, selling_price: event.target.value }))}
+                    placeholder="Enter a price"
+                    step="0.01"
+                    type="number"
+                    value={bulkPriceForm.selling_price}
+                  />
+                </div>
+                <div className="products-bulk-price-preview">
+                  <strong>Review changes</strong>
+                  <div className="products-bulk-price-preview-list">
+                    {selectedProducts.map((product) => (
+                      <div key={product.id}>
+                        <span>{product.article_no} · {product.name}</span>
+                        <span>
+                          {bulkPriceForm.update_cost_price && <small>Wholesale {formatUsdCurrency(product.cost_price)} → {bulkPriceForm.cost_price === "" ? "—" : formatUsdCurrency(bulkPriceForm.cost_price)}</small>}
+                          {bulkPriceForm.update_selling_price && <small>Retail {formatUsdCurrency(product.selling_price)} → {bulkPriceForm.selling_price === "" ? "—" : formatUsdCurrency(bulkPriceForm.selling_price)}</small>}
+                          {!bulkPriceForm.update_cost_price && !bulkPriceForm.update_selling_price && <small>No prices selected</small>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="products-form-footer">
+                  <button className="products-secondary-button" disabled={saving} onClick={() => setShowBulkPriceEditor(false)} type="button">Cancel</button>
+                  <button className="products-primary-button" disabled={saving || selectedProducts.length === 0} type="submit">{saving ? "Updating…" : `Update ${selectedProducts.length} products`}</button>
+                </div>
+              </form>
+            </section>
           </div>
         )}
 

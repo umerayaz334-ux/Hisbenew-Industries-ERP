@@ -430,3 +430,175 @@
     animation: none;
   }
 }
+
+/* Clear call states and easier thumb targets on the redesigned voice sheet. */
+.erp-call-overlay {
+  background:
+    radial-gradient(circle at 50% 28%, rgba(39, 110, 82, 0.22), transparent 36%),
+    rgba(5, 17, 13, 0.78);
+  backdrop-filter: blur(12px);
+}
+
+.erp-call-card {
+  position: relative;
+  min-height: 510px;
+  overflow: hidden;
+  border-color: rgba(197, 236, 216, 0.2);
+  background:
+    radial-gradient(ellipse at 50% 14%, rgba(95, 181, 139, 0.23), transparent 40%),
+    linear-gradient(160deg, #173c30 0%, #10271f 57%, #0a1914 100%);
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.46);
+}
+
+.erp-call-overlay.is-incoming .erp-call-card {
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(92, 182, 133, 0.28), transparent 43%),
+    linear-gradient(160deg, #1b4636 0%, #10291f 58%, #0a1914 100%);
+}
+
+.erp-call-pulse {
+  width: 124px;
+  height: 124px;
+  margin-bottom: 28px;
+  border-color: rgba(183, 239, 205, 0.54);
+  background: linear-gradient(145deg, #388260, #1b503c);
+  box-shadow: 0 18px 48px rgba(16, 83, 55, 0.44);
+}
+
+.erp-call-pulse::before,
+.erp-call-pulse::after {
+  border-color: rgba(138, 229, 174, 0.32);
+}
+
+.erp-call-eyebrow {
+  color: #a8e3bf;
+  letter-spacing: 0.16em;
+}
+
+.erp-call-card h2 {
+  max-width: 100%;
+  font-size: clamp(25px, 7vw, 32px);
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+
+.erp-call-status {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 22px;
+  padding: 8px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.075);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.erp-call-status::before {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  margin-right: 9px;
+  border-radius: 50%;
+  background: #b4c9bc;
+  content: "";
+}
+
+.erp-call-status.is-good::before {
+  background: #70e0a1;
+  box-shadow: 0 0 0 4px rgba(112, 224, 161, 0.13);
+}
+
+.erp-call-status.is-unstable::before {
+  background: #ffc778;
+}
+
+.erp-call-notice {
+  box-sizing: border-box;
+  max-width: 320px;
+  padding: 10px 13px;
+  border: 1px solid rgba(255, 201, 138, 0.2);
+  border-radius: 13px;
+  background: rgba(255, 190, 111, 0.09);
+}
+
+.erp-call-actions {
+  gap: 28px;
+  margin-top: 42px;
+}
+
+.erp-call-action {
+  width: 82px;
+  min-height: 100px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.erp-call-action svg {
+  box-sizing: border-box;
+  width: 58px;
+  height: 58px;
+  padding: 17px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.erp-call-action:hover svg {
+  transform: translateY(-2px) scale(1.04);
+}
+
+.erp-call-action:focus-visible,
+.erp-call-close:focus-visible,
+.erp-call-enable-sound:focus-visible {
+  border-radius: 16px;
+  outline: 3px solid #b6f2d0;
+  outline-offset: 4px;
+}
+
+.erp-call-action.is-decline svg {
+  background: #d74352;
+  box-shadow: 0 10px 26px rgba(215, 67, 82, 0.26);
+}
+
+.erp-call-action.is-answer svg {
+  background: #31a96c;
+  box-shadow: 0 10px 28px rgba(49, 169, 108, 0.34);
+}
+
+.erp-call-actions.is-incoming {
+  gap: clamp(42px, 18vw, 78px);
+  margin-top: 48px;
+}
+
+.erp-call-actions.is-incoming .erp-call-action {
+  width: 88px;
+}
+
+.erp-call-actions:not(.is-incoming) .erp-call-action.is-decline {
+  width: 88px;
+}
+
+.erp-call-actions:not(.is-incoming) .erp-call-action.is-decline svg {
+  width: 64px;
+  height: 64px;
+  padding: 20px;
+}
+
+@media (max-width: 560px) {
+  .erp-call-card {
+    box-sizing: border-box;
+    justify-content: center;
+    padding: max(28px, env(safe-area-inset-top)) 24px max(36px, env(safe-area-inset-bottom));
+  }
+
+  .erp-call-overlay.is-incoming .erp-call-card,
+  .erp-call-overlay.is-outgoing .erp-call-card {
+    min-height: 100dvh;
+  }
+
+  .erp-call-actions {
+    margin-top: 36px;
+  }
+}

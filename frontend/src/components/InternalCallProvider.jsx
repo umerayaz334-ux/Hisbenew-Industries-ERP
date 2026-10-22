@@ -37,8 +37,7 @@ const TERMINAL_STATUSES = new Set([
 const AUDIO_CONSTRAINTS = {
   audio: {
     echoCancellation: true,
-    // Some mobile noise gates clip the beginning and end of spoken words.
-    noiseSuppression: { ideal: false },
+    noiseSuppression: true,
     autoGainControl: true,
     channelCount: { ideal: 1 },
     sampleRate: { ideal: 48000 },
@@ -299,6 +298,7 @@ export function InternalCallProvider({ children, user }) {
   const voiceRelayCallIdRef = useRef(null);
   const voiceRelayRetriesRef = useRef(0);
   const voiceRelayRetryTimerRef = useRef(null);
+  const startVoiceRelayRef = useRef(null);
   const screenStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -415,7 +415,7 @@ export function InternalCallProvider({ children, user }) {
             setNotice("Voice connection interrupted. Reconnecting...");
             voiceRelayRetryTimerRef.current = window.setTimeout(() => {
               voiceRelayRetryTimerRef.current = null;
-              startVoiceRelay(callId, localStreamRef.current);
+              startVoiceRelayRef.current?.(callId, localStreamRef.current);
             }, 1200);
           } else {
             setNotice(message || "The voice connection could not be restored.");
@@ -427,6 +427,10 @@ export function InternalCallProvider({ children, user }) {
       setNotice(error?.message || "The voice connection could not start.");
     }
   }, [updatePhase]);
+
+  useEffect(() => {
+    startVoiceRelayRef.current = startVoiceRelay;
+  }, [startVoiceRelay]);
 
   const hideRemoteVideo = useCallback(() => {
     const video = remoteVideoRef.current;
@@ -1255,6 +1259,13 @@ export function InternalCallProvider({ children, user }) {
         if (callRef.current?.id === event.call_id) finishLocally("Call ended");
         return;
       }
+      if (event?.type === "call.delivery") {
+        const currentCall = callRef.current;
+        if (currentCall?.id === event.call_id) {
+          updateCall({ ...currentCall, delivery_status: event.delivery_status });
+        }
+        return;
+      }
       if (event?.type !== "call.updated" || !event.call) return;
 
       const call = event.call;
@@ -1264,6 +1275,7 @@ export function InternalCallProvider({ children, user }) {
         updateCall(call);
         if (call.status === "ringing" && call.is_incoming) {
           updatePhase("incoming");
+          sendRealtime({ type: "call.ringing.ack", call_id: call.id });
         } else {
           updatePhase("interrupted");
           setNotice("This call was interrupted. End it and call again.");
@@ -1343,7 +1355,7 @@ export function InternalCallProvider({ children, user }) {
         if (error.response?.status === 404) finishLocally("Call ended");
       }
     };
-    const intervalId = window.setInterval(refreshCall, 20000);
+    const intervalId = window.setInterval(refreshCall, phase === "outgoing" ? 2000 : 20000);
     return () => {
       disposed = true;
       window.clearInterval(intervalId);
@@ -1416,8 +1428,12 @@ export function InternalCallProvider({ children, user }) {
         : "Starting microphone..."
       : phase === "incoming"
         ? `Incoming ${isVideoCall ? "video" : "voice"} call`
-        : phase === "outgoing"
-          ? "Calling..."
+      : phase === "outgoing"
+          ? activeCall?.delivery_status === "ringing"
+            ? "Ringing on their device"
+            : activeCall?.delivery_status === "unreachable"
+              ? "Their app may be offline"
+              : "Calling..."
           : phase === "connecting"
             ? "Connecting securely..."
             : phase === "connected"
@@ -1512,11 +1528,11 @@ export function InternalCallProvider({ children, user }) {
 
             {isIncoming ? (
               <div className="erp-call-actions is-incoming">
-                <button className="erp-call-action is-decline" onClick={declineCall} type="button">
+                <button aria-label="Decline incoming call" className="erp-call-action is-decline" onClick={declineCall} type="button">
                   <CallIcon name="phoneOff" />
                   <span>Decline</span>
                 </button>
-                <button className="erp-call-action is-answer" onClick={acceptCall} type="button">
+                <button aria-label="Answer incoming call" className="erp-call-action is-answer" onClick={acceptCall} type="button">
                   <CallIcon name="phone" />
                   <span>Answer</span>
                 </button>
@@ -1529,15 +1545,18 @@ export function InternalCallProvider({ children, user }) {
               <div className="erp-call-actions">
                 {canControlAudio && (
                   <button
+                    aria-label={isMuted ? "Turn microphone on" : "Mute microphone"}
+                    aria-pressed={isMuted}
                     className={`erp-call-action is-mute ${isMuted ? "is-active" : ""}`}
                     onClick={toggleMute}
+                    title={isMuted ? "Turn microphone on" : "Mute microphone"}
                     type="button"
                   >
                     <CallIcon name={isMuted ? "micOff" : "mic"} />
                     <span>{isMuted ? "Unmute" : "Mute"}</span>
                   </button>
                 )}
-                <button className="erp-call-action is-decline" onClick={endCall} type="button">
+                <button aria-label="End voice call" className="erp-call-action is-decline" onClick={endCall} type="button">
                   <CallIcon name="phoneOff" />
                   <span>Hang up</span>
                 </button>

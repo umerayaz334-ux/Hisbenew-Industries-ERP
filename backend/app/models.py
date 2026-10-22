@@ -2328,6 +2328,7 @@ from .service_takers.models import (
     ServiceTakerManufacturingOrder,
     ServiceTakerManufacturingPayment,
     ServiceTakerManufacturingUpdate,
+    ServiceTakerShippingRequest,
     ServiceTakerOrder,
     ServiceTakerOrderItem,
     ServiceTakerProduct,
@@ -2401,6 +2402,7 @@ TENANT_SCOPED_MODELS = (
     ServiceTakerManufacturingOrder,
     ServiceTakerManufacturingPayment,
     ServiceTakerManufacturingUpdate,
+    ServiceTakerShippingRequest,
 )
 
 

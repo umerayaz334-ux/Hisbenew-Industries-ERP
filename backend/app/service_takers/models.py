@@ -345,9 +345,15 @@ class ServiceTakerManufacturingOrder(Base):
     target_unit_price = Column(Float, nullable=True)
     quoted_unit_price = Column(Float, nullable=False, default=0)
     other_cost = Column(Float, nullable=False, default=0)
+    other_cost_label = Column(String, nullable=True)
     quoted_total = Column(Float, nullable=False, default=0)
     courier = Column(String, nullable=True)
     tracking_number = Column(String, nullable=True)
+    shipping_requested = Column(Boolean, nullable=False, default=False)
+    shipping_recipient_name = Column(String, nullable=True)
+    shipping_address = Column(Text, nullable=True)
+    shipping_weight_kg = Column(Float, nullable=True)
+    shipping_cost = Column(Float, nullable=False, default=0)
     deposit_required = Column(Float, nullable=False, default=0)
     requested_ready_at = Column(DateTime, nullable=True)
     estimated_ready_at = Column(DateTime, nullable=True)
@@ -382,6 +388,29 @@ class ServiceTakerManufacturingOrder(Base):
     )
 
 
+class ServiceTakerShippingRequest(Base):
+    __tablename__ = "service_taker_shipping_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    service_taker_id = Column(Integer, ForeignKey("service_takers.id"), nullable=False, index=True)
+    request_no = Column(String, nullable=False, unique=True, index=True)
+    recipient_name = Column(String, nullable=False)
+    shipping_address = Column(Text, nullable=False)
+    item_description = Column(Text, nullable=False)
+    quantity = Column(Integer, nullable=False, default=1)
+    notes = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="Submitted", index=True)
+    shipping_weight_kg = Column(Float, nullable=True)
+    shipping_cost = Column(Float, nullable=False, default=0)
+    courier = Column(String, nullable=True)
+    tracking_number = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    service_taker = relationship("ServiceTaker")
+
+
 class ServiceTakerManufacturingPayment(Base):
     __tablename__ = "service_taker_manufacturing_payments"
     __table_args__ = (
@@ -407,7 +436,7 @@ class ServiceTakerManufacturingPayment(Base):
         index=True,
     )
     amount = Column(Float, nullable=False, default=0)
-    payment_type = Column(String, nullable=False, default="Deposit")
+    payment_type = Column(String, nullable=False, default="Payment")
     status = Column(String, nullable=False, default="Confirmed", index=True)
     method = Column(String, nullable=True)
     reference = Column(String, nullable=True, index=True)

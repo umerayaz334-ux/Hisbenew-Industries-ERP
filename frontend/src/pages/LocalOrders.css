@@ -432,6 +432,29 @@
   width: min(920px, 100%);
 }
 
+.local-orders-modal-backdrop .local-orders-drawer > footer {
+  position: sticky;
+  bottom: -16px;
+  z-index: 5;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: auto -16px -16px;
+  padding: 12px 16px;
+  border-top: 1px solid #d9e0ec;
+  background: rgba(255,255,255,.98);
+  box-shadow: 0 -8px 18px rgba(31,45,78,.07);
+}
+
+.local-orders-modal-backdrop .local-orders-drawer > footer .service-primary-button {
+  min-height: 44px;
+  padding-inline: 20px;
+  border-radius: 9px;
+  background: #4b5fc0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
 .local-pending-confirmations {
   background: #fff7ed;
   border: 1px solid #fed7aa;

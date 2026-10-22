@@ -75,7 +75,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Manufacturing'), findsOneWidget);
     expect(find.text('Account'), findsOneWidget);
-    expect(find.text('Settings'), findsNothing);
+    expect(find.text('Settings'), findsOneWidget);
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Downloaded product photos'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
