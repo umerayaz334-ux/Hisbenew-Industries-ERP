@@ -153,20 +153,24 @@
 .msp-payment-symbol.is-rejected { background: #fff0ee; color: #a13f34; }
 .msp-payments-view .msp-payment-info { display: block; }
 .msp-payment-inline { display: flex; min-width: 0; align-items: center; gap: 9px; overflow: hidden; white-space: nowrap; }
-.msp-payment-inline > strong { flex: 0 0 auto; color: #26382d; font-size: 11px; }
-.msp-payment-inline > span:not(.msp-payment-status) { overflow: hidden; color: #66736b; font-size: 10px; text-overflow: ellipsis; }
+.msp-payment-title { display: grid; flex: 1 1 auto; gap: 3px; min-width: 0; }
+.msp-payment-title > strong { overflow: hidden; color: #26382d; font-size: 11px; text-overflow: ellipsis; }
+.msp-payment-title > span { overflow: hidden; color: #66736b; font-size: 9px; text-overflow: ellipsis; }
 .msp-payment-inline > small { flex: 0 0 auto; color: #89948d; font-size: 9px; }
 .msp-payment-inline .msp-payment-status { min-width: 0; padding: 4px 7px; font-size: 8px; }
+.msp-payment-inline .msp-payment-status.is-review { padding: 0; background: transparent; color: #956318; font-size: 8px; font-weight: 750; }
+.msp-payment-inline .msp-payment-status.is-rejected { padding: 0; background: transparent; color: #a13f34; font-size: 8px; font-weight: 750; }
 .msp-payment-trailing { display: grid; justify-items: end; gap: 5px; }
+.msp-payments-view .msp-payment-trailing { grid-column: 2 / 4; display: flex; align-items: center; justify-content: flex-start; gap: 7px; }
 .msp-payment-trailing a { color: #5267b4; font-size: 10px; font-weight: 800; text-decoration: none; }
 
 @media (max-width: 760px) {
   .msp-payments-view .msp-payment-card { grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; padding: 12px 10px; }
   .msp-payment-inline { gap: 6px; }
-  .msp-payment-inline > strong { font-size: 10px; }
-  .msp-payment-inline > span:not(.msp-payment-status) { font-size: 9px; }
+  .msp-payment-title > strong { font-size: 10px; }
+  .msp-payment-title > span { font-size: 8px; }
   .msp-payment-inline > small { display: inline; font-size: 8px; }
-  .msp-payment-inline .msp-payment-status { padding: 4px 6px; font-size: 7px; }
-  .msp-payment-trailing { align-self: center; }
+  .msp-payment-inline .msp-payment-status { padding: 0; font-size: 7px; }
+  .msp-payments-view .msp-payment-trailing { grid-column: 2 / 4; align-self: center; }
   .msp-payment-trailing .msp-payment-amount { font-size: 11px; }
 }

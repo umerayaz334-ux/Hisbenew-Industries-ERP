@@ -195,17 +195,16 @@ export default function ManufacturingServicePortal({ section, data, load, error,
           </div>
           <div className="msp-section-heading msp-payment-heading"><h2>Payment activity</h2></div>
           {payments.length ? <div className="msp-payment-list">{payments.map((payment) => {
-            const paymentStatus = payment.status === "Pending confirmation" ? "In review" : payment.status === "Rejected" ? "Needs attention" : "Approved";
             const statusClass = payment.status === "Pending confirmation" ? "is-review" : payment.status === "Rejected" ? "is-rejected" : "is-approved";
             return (
               <article className="msp-payment-card" key={payment.id}>
                 <span className={`msp-payment-symbol ${statusClass}`} aria-hidden="true">{payment.status === "Pending confirmation" ? "…" : payment.status === "Rejected" ? "!" : "✓"}</span>
                 <div className="msp-payment-info">
                   <div className="msp-payment-inline">
-                    <strong>{payment.payment_type || "Payment"}</strong>
-                    <span>{payment.order.request_no} · {payment.order.product_name}</span>
+                    <div className="msp-payment-title"><strong>{payment.payment_type || "Payment"}</strong><span>{payment.order.request_no} · {payment.order.product_name}</span></div>
                     <small>{formatDate(payment.paid_at || payment.created_at)}</small>
-                    <span className={`msp-payment-status ${statusClass}`}>{paymentStatus}</span>
+                    {payment.status === "Pending confirmation" && <span className="msp-payment-status is-review">In review</span>}
+                    {payment.status === "Rejected" && <span className="msp-payment-status is-rejected">Needs attention</span>}
                   </div>
                 </div>
                 <div className="msp-payment-trailing">
