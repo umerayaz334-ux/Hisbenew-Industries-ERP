@@ -802,3 +802,41 @@ body {
   font-size: 0.92rem;
   font-weight: 700;
 }
+
+/* Consistent typography throughout the client service portal and navigation. */
+.app-layout.service-taker-navigation {
+  --portal-font: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --sans: var(--portal-font);
+  --heading: var(--portal-font);
+  font-family: var(--portal-font);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+.app-layout.service-taker-navigation :is(h1, h2, h3, h4, p, a, span, strong, small, label, input, select, textarea, button, table, th, td, summary, nav, aside) {
+  font-family: var(--portal-font);
+}
+.app-layout.service-taker-navigation :is(h1, h2, h3) {
+  font-weight: 650;
+  letter-spacing: -.025em;
+  line-height: 1.25;
+}
+.app-layout.service-taker-navigation :is(button, label, th, summary) { font-weight: 600; }
+.app-layout.service-taker-navigation :is(input, select, textarea) { font-weight: 400; line-height: 1.5; }
+.app-layout.service-taker-navigation :is(td, input, [class*="metric"], [class*="amount"]) { font-variant-numeric: tabular-nums; }
+.app-layout.service-taker-navigation :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid #4b5fc0;
+  outline-offset: 3px;
+}
+
+/* Larger, readable client portal navigation and controls. */
+.app-layout.service-taker-navigation { font-size: 16px; }
+.app-layout.service-taker-navigation :is(.service-taker-nav-link, .service-taker-nav-link span, .service-taker-nav-footer > button) { font-size: 15px; line-height: 1.5; }
+.app-layout.service-taker-navigation .manufacturing-service-portal :is(.msp-primary-button, .msp-secondary-button, .msp-filter-pills button) { font-size: 15px; min-height: 44px; }
+.app-layout.service-taker-navigation .manufacturing-service-portal :is(.msp-modal input, .msp-modal select, .msp-modal textarea, .msp-shipping-request input, .msp-shipping-request textarea) { font-size: 16px; }
+.app-layout.service-taker-navigation .service-taker-bottom-nav a { font-size: 15px; }
+.app-layout.service-taker-navigation .service-taker-bottom-nav a span { font-size: inherit; }
+@media (max-width: 900px) {
+  .app-layout.service-taker-navigation .service-taker-bottom-nav a { font-size: 13px; }
+}

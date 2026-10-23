@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import "./LocalOrders.css";
+import BulkActions from "../components/BulkActions";
 import "./ServiceTakerWorkspace.css";
 
 const isRupeeCurrency = (curr) => String(curr || "").toUpperCase() === "PKR";
@@ -229,6 +230,7 @@ export default function LocalOrders() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [clientFilter, setClientFilter] = useState("all");
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [quoteForm, setQuoteForm] = useState({
     status: "Quoted",
     quoted_unit_price: "",
@@ -649,10 +651,18 @@ export default function LocalOrders() {
 
       <div className="local-orders-content-layout">
         <div className="local-orders-table-card">
+          <BulkActions items={filteredOrders.map((order) => ({ ...order, key: String(order.id) }))} selected={selectedIds} setSelected={setSelectedIds}
+            statuses={["Quote requested", "Quoted", "Rejected", "Deposit pending", "Confirmed", "In production", "Quality check", "Ready", "Completed", "Cancelled"]}
+            fields={[{ name: "steel_type", label: "Steel type", maxLength: 120 }, { name: "handle_material", label: "Handle material" }, { name: "finish", label: "Finish" }, { name: "packaging", label: "Packaging" }, { name: "admin_notes", label: "Admin notes (replace)", maxLength: 6000 }]}
+            endpoint={(order) => `/service-takers/admin/local-orders/${order.id}`}
+            onRefresh={async () => { const refreshed = await loadData(true); if (refreshed) setSelectedOrder((current) => current ? refreshed.manufacturing_orders.find((order) => order.id === current.id) || null : null); }}
+            onBusyChange={(value) => setBusy(value ? "bulk" : "")}
+            disabled={loading || Boolean(busy)} deleteHelp="Permanently delete these orders, all attached payments, updates, and local shipping details. Their quotes, shipping charges, and payment credits are removed from the client balance. This cannot be undone and does not issue a bank refund." />
           <div className="local-orders-table-wrapper">
             <table className="local-orders-table">
               <thead>
                 <tr>
+                  <th className="bulk-check-cell"><input className="bulk-row-check" disabled={Boolean(busy)} type="checkbox" aria-label="Select all shown orders" checked={filteredOrders.length > 0 && filteredOrders.every((order) => selectedIds.includes(String(order.id)))} onChange={(event) => setSelectedIds(event.target.checked ? filteredOrders.map((order) => String(order.id)) : [])} /></th>
                   <th>Order</th>
                   <th>Service Taker</th>
                   <th>Product</th>
@@ -668,7 +678,7 @@ export default function LocalOrders() {
               <tbody>
                 {filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan="10" style={{ textAlign: "center", padding: "36px", color: "#64748b" }}>
+                    <td colSpan="11" style={{ textAlign: "center", padding: "36px", color: "#64748b" }}>
                       No local manufacturing requests found.
                     </td>
                   </tr>
@@ -678,10 +688,11 @@ export default function LocalOrders() {
                     return (
                       <tr
                         key={ord.id}
-                        className={selectedOrder?.id === ord.id ? "is-selected" : ""}
+                        className={selectedOrder?.id === ord.id || selectedIds.includes(String(ord.id)) ? "is-selected" : ""}
                         onClick={() => handleSelectOrder(ord)}
                         style={{ cursor: "pointer" }}
                       >
+                        <td className="bulk-check-cell" onClick={(event) => event.stopPropagation()}><input className="bulk-row-check" disabled={Boolean(busy)} type="checkbox" aria-label={`Select ${ord.request_no}`} checked={selectedIds.includes(String(ord.id))} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...current, String(ord.id)] : current.filter((id) => id !== String(ord.id)))} /></td>
                         <td>
                           <strong>{ord.request_no}</strong>
                           <div style={{ fontSize: 11, color: "#64748b" }}>{shortDate(ord.created_at)}</div>

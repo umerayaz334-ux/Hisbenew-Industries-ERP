@@ -1,5 +1,7 @@
 import io
 import unittest
+from pydantic import ValidationError
+from app.security import verify_pin
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -14,9 +16,17 @@ from app.service_takers.models import (
     ServiceTaker,
     ServiceTakerInventoryTransaction,
     ServiceTakerProduct,
+    ServiceTakerManufacturingPayment,
+    ServiceTakerManufacturingUpdate,
 )
 from app.service_takers.router import (
+    portal_update_profile,
+    portal_change_pin,
+    admin_delete_local_order,
+    admin_delete_shipping_request,
+    admin_delete_manufacturing_shipping,
     admin_confirm_manufacturing_payment,
+    admin_update_manufacturing_shipping,
     admin_update_manufacturing_request,
     admin_dashboard,
     create_client,
@@ -37,8 +47,11 @@ from app.service_takers.router import (
     update_order,
 )
 from app.service_takers.schemas import (
+    ServiceTakerProfileUpdate,
+    ServiceTakerPinChange,
     ServiceTakerManufacturingAdminUpdate,
     ServiceTakerManufacturingRequestCreate,
+    ServiceTakerManufacturingShippingAdminUpdate,
     ServiceTakerCreate,
     ServiceTakerInboundCreate,
     ServiceTakerInboundReceive,
@@ -96,6 +109,43 @@ class ServiceTakerTests(unittest.TestCase):
             self.db,
         )
 
+    def test_portal_profile_and_pin_changes_are_scoped_and_validated(self):
+        client = self.create_service_taker("profile-client")
+        other = self.create_service_taker("other-profile-client")
+        request = self.request(client["user_id"])
+        result = portal_update_profile(ServiceTakerProfileUpdate(
+            contact_name=" Updated Name ", email=" new@example.com ", phone="03001234567",
+            billing_address="42 Example Street"), request, self.db)
+        self.assertEqual(result["email"], "new@example.com")
+        self.assertEqual(result["contact_name"], "Updated Name")
+        self.assertEqual(portal_dashboard(request, self.db)["client"]["email"], "new@example.com")
+        user = self.db.get(User, client["user_id"])
+        self.assertEqual(user.email, "new@example.com")
+        self.assertNotEqual(self.db.get(User, other["user_id"]).email, "new@example.com")
+        with self.assertRaises(ValidationError):
+            ServiceTakerProfileUpdate(contact_name="Name", email="invalid")
+        with self.assertRaises(ValidationError):
+            ServiceTakerProfileUpdate(contact_name="Name", is_active=False)
+        with self.assertRaises(ValidationError):
+            ServiceTakerProfileUpdate(contact_name="   ")
+        with self.assertRaises(HTTPException):
+            portal_update_profile(ServiceTakerProfileUpdate(contact_name="Admin"), self.request(self.admin_id), self.db)
+        original_hash = user.pin
+        for current, new, confirm in [("9999", "1357", "1357"), ("2468", "1357", "0000"), ("2468", "2468", "2468")]:
+            with self.assertRaises(HTTPException):
+                portal_change_pin(ServiceTakerPinChange(current_pin=current, new_pin=new, confirm_pin=confirm), request, self.db)
+            self.assertEqual(user.pin, original_hash)
+        with self.assertRaises(ValidationError):
+            ServiceTakerPinChange(current_pin="2468", new_pin="abc1", confirm_pin="abc1")
+        portal_change_pin(ServiceTakerPinChange(current_pin="2468", new_pin="1357", confirm_pin="1357"), request, self.db)
+        self.assertTrue(verify_pin("1357", user.pin))
+        self.assertFalse(verify_pin("2468", user.pin))
+        self.assertIsNone(user.raw_pin)
+        self.assertTrue(verify_pin("2468", self.db.get(User, other["user_id"]).pin))
+        cleared = portal_update_profile(ServiceTakerProfileUpdate(contact_name="Updated Name", email=""), request, self.db)
+        self.assertIsNone(cleared["email"])
+        self.assertIsNone(user.email)
+
     def test_independent_shipping_request_and_admin_quote(self):
         client = self.create_service_taker("parcel-client")
         created = portal_create_shipping_request(
@@ -128,6 +178,56 @@ class ServiceTakerTests(unittest.TestCase):
         dashboard = portal_dashboard(self.request(client["user_id"]), self.db)
         self.assertEqual(len(dashboard["shipping_requests"]), 1)
         self.assertEqual(dashboard["stats"]["account_balance_due"], 1250)
+        admin_update_shipping_request(
+            created["id"], ServiceTakerShippingRequestAdminUpdate(status="Delivered"),
+            self.request(self.admin_id), self.db,
+        )
+        delivered = portal_dashboard(self.request(client["user_id"]), self.db)
+        self.assertEqual(delivered["shipping_requests"][0]["status"], "Delivered")
+        self.assertEqual(delivered["shipping_requests"][0]["tracking_number"], "TRACK-123")
+        self.assertEqual(delivered["stats"]["account_balance_due"], 1250)
+
+    def test_bulk_delete_reverses_charges_and_payments(self):
+        client = self.create_service_taker("bulk-client")
+        admin_request = self.request(self.admin_id)
+        client_request = self.request(client["user_id"])
+        parcel = portal_create_shipping_request(
+            ServiceTakerShippingRequestCreate(recipient_name="Recipient", shipping_address="Address", item_description="Parcel"),
+            client_request, self.db,
+        )
+        with self.assertRaises(HTTPException) as denied:
+            admin_delete_shipping_request(parcel["id"], client_request, self.db)
+        self.assertEqual(denied.exception.status_code, 403)
+        admin_update_shipping_request(parcel["id"], ServiceTakerShippingRequestAdminUpdate(shipping_cost=50, status="Delivered"), admin_request, self.db)
+        self.assertEqual(portal_dashboard(client_request, self.db)["stats"]["account_balance_due"], 50)
+        admin_delete_shipping_request(parcel["id"], admin_request, self.db)
+        self.assertEqual(portal_dashboard(client_request, self.db)["shipping_requests"], [])
+        self.assertEqual(portal_dashboard(client_request, self.db)["stats"]["account_balance_due"], 0)
+
+        order = portal_create_manufacturing_request(
+            ServiceTakerManufacturingRequestCreate(product_name="Bulk test", quantity=1, shipping_requested=True,
+                                                  shipping_recipient_name="Recipient", shipping_address="Address"),
+            client_request, self.db,
+        )
+        admin_update_manufacturing_shipping(order["id"], ServiceTakerManufacturingShippingAdminUpdate(status="Delivered", shipping_cost=75), admin_request, self.db)
+        admin_delete_manufacturing_shipping(order["id"], admin_request, self.db)
+        dashboard = portal_dashboard(client_request, self.db)
+        self.assertEqual(dashboard["shipping_requests"], [])
+        self.assertTrue(any(row["id"] == order["id"] for row in dashboard["manufacturing_orders"]))
+        self.assertEqual(dashboard["stats"]["account_balance_due"], 0)
+        admin_update_manufacturing_request(order["id"], ServiceTakerManufacturingAdminUpdate(quoted_unit_price=100, status="Completed", shipping_cost=25), admin_request, self.db)
+        payment = portal_create_general_payment(client_request, amount=50, payment_type="Payment", note="Deletion test", manufacturing_order_id=order["id"], proof_file=None, db=self.db)
+        admin_confirm_manufacturing_payment(order["id"], payment["id"], admin_request, self.db)
+        self.assertEqual(portal_dashboard(client_request, self.db)["stats"]["account_balance_due"], 75)
+        with self.assertRaises(HTTPException) as denied:
+            admin_delete_local_order(order["id"], client_request, self.db)
+        self.assertEqual(denied.exception.status_code, 403)
+        admin_delete_local_order(order["id"], admin_request, self.db)
+        self.assertFalse(any(row["id"] == order["id"] for row in portal_dashboard(client_request, self.db)["manufacturing_orders"]))
+        self.assertEqual(portal_dashboard(client_request, self.db)["stats"]["account_balance_due"], 0)
+        self.assertEqual(portal_dashboard(client_request, self.db)["stats"]["advance_credit"], 0)
+        self.assertEqual(self.db.query(ServiceTakerManufacturingPayment).filter_by(manufacturing_order_id=order["id"]).count(), 0)
+        self.assertEqual(self.db.query(ServiceTakerManufacturingUpdate).filter_by(manufacturing_order_id=order["id"]).count(), 0)
 
     def test_client_stock_is_received_reserved_and_shipped_separately(self):
         client_record = self.create_service_taker()
@@ -443,6 +543,69 @@ class ServiceTakerTests(unittest.TestCase):
         )
         self.assertEqual(confirmed["paid_total"], 25)
         self.assertEqual(confirmed["payments"][0]["status"], "Confirmed")
+
+    def test_shipping_requested_with_manufacturing_order_appears_in_local_and_client_shipping(self):
+        client = create_client(
+            ServiceTakerCreate(
+                company_name="Manufacturing Client",
+                contact_name="Amina Shah",
+                username="manufacturing-shipping-client",
+                pin="2468",
+                currency="PKR",
+                fulfillment_enabled=False,
+                manufacturing_enabled=True,
+            ),
+            self.request(self.admin_id),
+            self.db,
+        )
+        order = portal_create_manufacturing_request(
+            ServiceTakerManufacturingRequestCreate(
+                product_name="Custom parcel item",
+                quantity=2,
+                shipping_requested=True,
+                shipping_recipient_name="Parcel recipient",
+                shipping_address="42 Example Street",
+            ),
+            self.request(client["user_id"]),
+            self.db,
+        )
+
+        admin_shipping = admin_dashboard(self.request(self.admin_id), self.db)["shipping_requests"]
+        admin_request = next(row for row in admin_shipping if row["id"] == order["id"] and row["request_type"] == "manufacturing")
+        self.assertEqual(admin_request["item_description"], "Custom parcel item")
+        self.assertEqual(admin_request["shipping_address"], "42 Example Street")
+
+        updated = admin_update_manufacturing_shipping(
+            order["id"],
+            ServiceTakerManufacturingShippingAdminUpdate(
+                status="Shipped",
+                shipping_weight_kg=2.5,
+                shipping_cost=850,
+                courier="TCS",
+                tracking_number="PK-12345",
+            ),
+            self.request(self.admin_id),
+            self.db,
+        )
+        self.assertEqual(updated["status"], "Shipped")
+        self.assertEqual(updated["manufacturing_status"], "Quote requested")
+
+        client_shipping = portal_dashboard(self.request(client["user_id"]), self.db)["shipping_requests"]
+        client_request = next(row for row in client_shipping if row["id"] == order["id"] and row["request_type"] == "manufacturing")
+        self.assertEqual(client_request["status"], "Shipped")
+        self.assertEqual(client_request["shipping_cost"], 850)
+        self.assertEqual(client_request["tracking_number"], "PK-12345")
+        admin_update_manufacturing_shipping(
+            order["id"], ServiceTakerManufacturingShippingAdminUpdate(status="Delivered"),
+            self.request(self.admin_id), self.db,
+        )
+        for dashboard in (admin_dashboard(self.request(self.admin_id), self.db),
+                          portal_dashboard(self.request(client["user_id"]), self.db)):
+            delivered = next(row for row in dashboard["shipping_requests"]
+                             if row["id"] == order["id"] and row["request_type"] == "manufacturing")
+            self.assertEqual(delivered["status"], "Delivered")
+            self.assertEqual(delivered["manufacturing_status"], "Quote requested")
+            self.assertEqual(delivered["shipping_cost"], 850)
 
     def test_account_payment_creates_advance_credit_after_confirmed_overpayment(self):
         client = create_client(

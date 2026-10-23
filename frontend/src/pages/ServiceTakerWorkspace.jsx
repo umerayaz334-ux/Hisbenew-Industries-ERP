@@ -1,3 +1,4 @@
+import ServiceAccountSettings from "../components/ServiceAccountSettings";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import ManufacturingServicePortal from "./ManufacturingServicePortal";
@@ -1172,9 +1173,13 @@ const visibleProducts = useMemo(
   const saveStandaloneShippingRequest = async (event, shipment) => {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
-    setBusy(`shipping-request-${shipment.id}`);
+    const requestKey = `${shipment.request_type || "parcel"}-${shipment.id}`;
+    setBusy(`shipping-request-${requestKey}`);
     try {
-      await api.patch(`/service-takers/admin/shipping-requests/${shipment.id}`, {
+      const endpoint = shipment.request_type === "manufacturing"
+        ? `/service-takers/admin/local-orders/${shipment.id}/shipping`
+        : `/service-takers/admin/shipping-requests/${shipment.id}`;
+      await api.patch(endpoint, {
         status: String(fields.get("status") || "Submitted"),
         shipping_weight_kg: fields.get("shipping_weight_kg") === "" ? null : Number(fields.get("shipping_weight_kg")),
         shipping_cost: Number(fields.get("shipping_cost") || 0),
@@ -1591,7 +1596,7 @@ const tabs = [
     ["inventory", "Client inventory", products.length],
     ["inbound", "Inbound", data.stats?.open_inbounds || 0],
     ["orders", "Shipping", data.stats?.open_orders || 0],
-    ["parcelShipping", "Parcel requests", shippingRequests.filter((shipment) => shipment.status !== "Shipped" && shipment.status !== "Cancelled").length],
+    ["parcelShipping", "Parcel requests", shippingRequests.filter((shipment) => !['Shipped', 'Delivered', 'Cancelled'].includes(shipment.status)).length],
   ];
   const adminPageTitle = activeTab === "manufacturing" ? "Local Orders" : activeTab === "parcelShipping" ? "Parcel shipping" : "Service Takers";
   const adminPageDetail =
@@ -1890,46 +1895,7 @@ const tabs = [
           </nav>
         )}
 
-        {activeTab === "account" && !isAdmin && (
-          <section className="service-self-account">
-            <header className="service-self-account-heading">
-              <span className="service-self-account-avatar">{String(data.client?.contact_name || authenticatedUser?.name || authenticatedUser?.username || "A").trim().slice(0, 1).toUpperCase()}</span>
-              <div><span>ACCOUNT</span><h2>{data.client?.contact_name || authenticatedUser?.name || authenticatedUser?.username || "Your account"}</h2><p>{data.client?.company_name || "Service portal"}</p></div>
-              <Status value={data.client?.is_active === false ? "Paused" : "Active"} />
-            </header>
-            <section aria-labelledby="service-account-details-title" className="service-account-section">
-              <div className="service-account-section-heading"><span>CLIENT DETAILS</span><h3 id="service-account-details-title">Contact information</h3></div>
-              <div className="service-self-account-grid">
-                <div><span>Portal username</span><strong>{data.client?.username || authenticatedUser?.username || "Not set"}</strong></div>
-                <div><span>Email</span><strong>{data.client?.email || authenticatedUser?.email || "Not added"}</strong></div>
-                <div><span>Phone</span><strong>{data.client?.phone || authenticatedUser?.phone || "Not added"}</strong></div>
-                <div><span>Company</span><strong>{data.client?.company_name || "Not added"}</strong></div>
-              </div>
-            </section>
-            <section aria-labelledby="service-account-services-title" className="service-account-section">
-              <div className="service-account-section-heading"><span>ACCESS</span><h3 id="service-account-services-title">Your services</h3></div>
-              <div className="service-account-service-list">
-                <article className={portalManufacturingEnabled ? "is-enabled" : "is-disabled"}>
-                  <span aria-hidden="true" className="service-account-service-check">{portalManufacturingEnabled ? "✓" : "–"}</span>
-                  <div><strong>Manufacturing</strong><small>{portalManufacturingEnabled ? "Available on your account" : "Not enabled for this account"}</small></div>
-                  <span className="service-account-service-state">{portalManufacturingEnabled ? "Enabled" : "Unavailable"}</span>
-                </article>
-                <article className={portalFulfillmentEnabled ? "is-enabled" : "is-disabled"}>
-                  <span aria-hidden="true" className="service-account-service-check">{portalFulfillmentEnabled ? "✓" : "–"}</span>
-                  <div><strong>Shipping and fulfillment</strong><small>{portalFulfillmentEnabled ? "Available on your account" : "Not enabled for this account"}</small></div>
-                  <span className="service-account-service-state">{portalFulfillmentEnabled ? "Enabled" : "Unavailable"}</span>
-                </article>
-              </div>
-            </section>
-            <section aria-labelledby="service-account-billing-title" className="service-account-section service-account-billing-section">
-              <div className="service-account-section-heading"><span>BILLING</span><h3 id="service-account-billing-title">Billing address</h3></div>
-              <p>{data.client?.billing_address || "No billing address has been added to this account."}</p>
-            </section>
-            <div className="service-self-account-actions">
-              <button className="service-row-button is-danger" onClick={onLogout} type="button">Log out</button>
-            </div>
-          </section>
-        )}
+        {activeTab === "account" && !isAdmin && <ServiceAccountSettings key={data.client?.id} client={data.client} authenticatedUser={authenticatedUser} load={load} onLogout={onLogout} />}
 
         {activeTab === "dashboard" && !isAdmin && (
           <div className="service-portal-dashboard">
@@ -2724,16 +2690,16 @@ const tabs = [
             {shippingRequests.length === 0 ? (
               <EmptyState title="No parcel requests yet" detail="Independent shipping requests from service takers will appear here." />
             ) : shippingRequests.map((shipment) => (
-              <form className="service-parcel-shipping-card" key={shipment.id} onSubmit={(event) => saveStandaloneShippingRequest(event, shipment)}>
-                <header><div><strong>{shipment.request_no}</strong><span>{shipment.company_name} · {shortDate(shipment.created_at)}</span></div><span className={`service-parcel-status is-${String(shipment.status || "Submitted").toLowerCase()}`}>{shipment.status}</span></header>
+              <form className="service-parcel-shipping-card" key={`${shipment.request_type || "parcel"}-${shipment.id}`} onSubmit={(event) => saveStandaloneShippingRequest(event, shipment)}>
+                <header><div><strong>{shipment.request_no}</strong><span>{shipment.company_name} · {shipment.request_type === "manufacturing" ? `Manufacturing order · ${shipment.manufacturing_status || "In progress"} · ` : ""}{shortDate(shipment.created_at)}</span></div><span className={`service-parcel-status is-${String(shipment.status || "Submitted").toLowerCase()}`}>{shipment.status}</span></header>
                 <div className="service-parcel-shipping-summary"><div><span>Recipient</span><strong>{shipment.recipient_name}</strong></div><div><span>Item details</span><strong>{shipment.item_description} · Qty {shipment.quantity}</strong></div><div><span>Delivery address</span><strong>{shipment.shipping_address}</strong></div>{shipment.notes && <div><span>Notes</span><strong>{shipment.notes}</strong></div>}</div>
                 <div className="service-parcel-shipping-fields">
-                  <label>Status<select defaultValue={shipment.status} name="status"><option>Submitted</option><option>Processing</option><option>Shipped</option><option>Cancelled</option></select></label>
+                  <label>Status<select defaultValue={shipment.status} name="status"><option>Submitted</option><option>Processing</option><option>Shipped</option><option>Delivered</option><option>Cancelled</option></select></label>
                   <label>Weight (kg)<input defaultValue={shipment.shipping_weight_kg ?? ""} min="0" name="shipping_weight_kg" step="0.01" type="number" /></label>
                   <label>Shipping cost<input defaultValue={shipment.shipping_cost || ""} min="0" name="shipping_cost" step="0.01" type="number" /></label>
                   <label>Courier<input defaultValue={shipment.courier || ""} maxLength="160" name="courier" /></label>
                   <label>Tracking number<input defaultValue={shipment.tracking_number || ""} maxLength="200" name="tracking_number" /></label>
-                  <button className="service-primary-button" disabled={busy === `shipping-request-${shipment.id}`} type="submit">{busy === `shipping-request-${shipment.id}` ? "Saving…" : "Save shipping details"}</button>
+                  <button className="service-primary-button" disabled={busy === `shipping-request-${shipment.request_type || "parcel"}-${shipment.id}`} type="submit">{busy === `shipping-request-${shipment.request_type || "parcel"}-${shipment.id}` ? "Saving…" : "Save shipping details"}</button>
                 </div>
               </form>
             ))}

@@ -9,6 +9,7 @@ const menuItems = [
   { name: "Customers", icon: "customers" },
   { name: "Orders", icon: "orders" },
   { name: "Local Orders", icon: "factory" },
+  { name: "Local Shipping", label: "Local Shipping", icon: "truck" },
   { name: "Payouts", icon: "wallet" },
   { name: "Billings", icon: "wallet" },
   { name: "Accounting", icon: "scale" },
@@ -71,6 +72,7 @@ const roleAllowedPages = {
     "Customers",
     "Orders",
     "Local Orders",
+    "Local Shipping",
     "Payouts",
     "Billings",
     "Accounting",
@@ -164,6 +166,7 @@ const mainMenuOrder = [
   "My Tasks",
   "Orders",
   "Local Orders",
+  "Local Shipping",
   "Customers",
   "Suppliers",
   "Inventory",
@@ -670,7 +673,7 @@ function Sidebar({
     ].filter(([page]) => normalizedVisibleAllowedPages.includes(page));
     return (
       <nav aria-label="Service portal navigation" className="service-taker-bottom-nav" style={{ gridTemplateColumns: `repeat(${serviceNavigation.length}, minmax(0, 1fr))` }}>
-        <div className="service-taker-nav-brand"><span>HI</span><div><strong>Hisbenew</strong><small>Service portal</small></div></div>
+        <div className="service-taker-nav-brand"><span>HI</span><div><strong>Hisbenew Industries</strong></div></div>
         <div className="service-taker-nav-links">
           {serviceNavigation.map(([page, label, icon]) => (
             <a
@@ -771,7 +774,7 @@ function Sidebar({
                   isSuperAdminItem ? "super-admin-button" : ""
                 } ${
                   isSchoolWorkspace || mainMenuOrder.includes(item.name) ? "" : "menu-secondary-button"
-                } ${activePage === item.name ? "active" : ""}`.trim()}
+                } ${item.name === "Local Shipping" ? "is-subpage" : ""} ${activePage === item.name ? "active" : ""}`.trim()}
                 href={getPageHref(item.name)}
                 onClick={(event) => handleNavigation(event, item.name)}
                 onFocus={() => onPrefetchPage?.(item.name)}
@@ -913,7 +916,7 @@ function Sidebar({
                     aria-current={activePage === item.name ? "page" : undefined}
                     className={`mobile-menu-item ${
                       activePage === item.name ? "active" : ""
-                    }`.trim()}
+                    } ${item.name === "Local Shipping" ? "is-subpage" : ""}`.trim()}
                     key={item.name}
                     href={getPageHref(item.name)}
                 onClick={(event) => handleNavigation(event, item.name)}

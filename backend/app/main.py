@@ -203,6 +203,7 @@ ALL_ERP_PAGES = [
     "Customers",
     "Orders",
     "Local Orders",
+    "Local Shipping",
     "Payouts",
     "Billings",
     "Accounting",
@@ -657,6 +658,7 @@ ROLE_PAGE_DEFAULTS = {
 
 PAGE_PARENT_MAP = {
     "Local Orders": "Orders",
+    "Local Shipping": "Local Orders",
     "Payouts": "Orders",
     "Billings": "Orders",
     "Accounting": "Orders",
@@ -739,6 +741,7 @@ def normalize_allowed_pages(role: str, pages: list[str] | None) -> list[str]:
         "Amazon Pricing",
         "Service Takers",
         "Local Orders",
+        "Local Shipping",
     ):
         if role in {"admin", "super_admin"} and admin_page not in normalized:
             normalized.append(admin_page)

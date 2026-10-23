@@ -213,6 +213,17 @@
     padding 140ms ease;
 }
 
+.menu-button.is-subpage {
+  width: calc(100% - 15px);
+  min-height: 35px;
+  margin-left: 15px;
+  padding-left: 13px;
+  border-left: 2px solid #d9dfef;
+  color: #4f5d78;
+  font-size: 13px;
+}
+.menu-button.is-subpage.active { border-left-color: #4c61bf; }
+
 .menu-button:hover {
   border-color: #d9d9d9;
   background: #f5f5f5;

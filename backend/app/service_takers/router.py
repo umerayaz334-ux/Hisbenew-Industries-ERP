@@ -20,7 +20,7 @@ from ..models import (
     UserRoleRequest,
     WebsiteVisitorMessage,
 )
-from ..security import hash_pin, sanitize_upload_filename
+from ..security import hash_pin, verify_pin, sanitize_upload_filename
 from .models import (
     ServiceTaker,
     ServiceTakerInbound,
@@ -35,12 +35,15 @@ from .models import (
     ServiceTakerShippingRequest,
 )
 from .schemas import (
+    ServiceTakerProfileUpdate,
+    ServiceTakerPinChange,
     ServiceTakerCreate,
     ServiceTakerInboundCreate,
     ServiceTakerInboundReceive,
     ServiceTakerManufacturingAdminUpdate,
     ServiceTakerManufacturingPaymentCreate,
     ServiceTakerManufacturingRequestCreate,
+    ServiceTakerManufacturingShippingAdminUpdate,
     ServiceTakerManufacturingShippingRequest,
     ServiceTakerOrderAdminUpdate,
     ServiceTakerOrderCreate,
@@ -170,6 +173,41 @@ def portal_service_taker(request: Request, db: Session) -> ServiceTaker:
             detail="Your service portal is not active.",
         )
     return service_taker
+
+
+@router.patch("/portal/profile")
+def portal_update_profile(payload: ServiceTakerProfileUpdate, request: Request, db: Session = Depends(get_db)):
+    client = portal_service_taker(request, db)
+    user = db.query(User).filter(User.id == client.user_id).one()
+    client.contact_name = payload.contact_name
+    client.email = payload.email
+    client.phone = payload.phone or None
+    client.billing_address = payload.billing_address or None
+    user.name = client.contact_name
+    user.email = client.email
+    user.phone = client.phone
+    client.updated_at = datetime.utcnow()
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(client)
+    return client_response(db, client)
+
+
+@router.post("/portal/change-pin")
+def portal_change_pin(payload: ServiceTakerPinChange, request: Request, db: Session = Depends(get_db)):
+    client = portal_service_taker(request, db)
+    user = db.query(User).filter(User.id == client.user_id).one()
+    if not verify_pin(payload.current_pin, user.pin):
+        raise HTTPException(status_code=400, detail="Current PIN is incorrect.")
+    if payload.new_pin != payload.confirm_pin:
+        raise HTTPException(status_code=400, detail="New PIN and confirmation do not match.")
+    if payload.new_pin == payload.current_pin:
+        raise HTTPException(status_code=400, detail="Choose a different PIN from your current PIN.")
+    user.pin = hash_pin(payload.new_pin)
+    user.raw_pin = None
+    user.updated_at = datetime.utcnow()
+    db.commit()
+    return {"message": "PIN updated. Use your new PIN the next time you sign in."}
 
 
 def next_number(db: Session, model, field_name: str, prefix: str) -> str:
@@ -606,6 +644,7 @@ def manufacturing_order_response(order: ServiceTakerManufacturingOrder) -> dict:
         "courier": order.courier,
         "tracking_number": order.tracking_number,
         "shipping_requested": bool(order.shipping_requested),
+        "shipping_status": order.shipping_status or "Submitted",
         "shipping_recipient_name": order.shipping_recipient_name,
         "shipping_address": order.shipping_address,
         "shipping_weight_kg": float(order.shipping_weight_kg) if order.shipping_weight_kg is not None else None,
@@ -651,6 +690,30 @@ def shipping_request_response(shipment: ServiceTakerShippingRequest) -> dict:
         "currency": shipment.service_taker.currency if shipment.service_taker else "USD",
         "created_at": shipment.created_at,
         "updated_at": shipment.updated_at,
+    }
+
+
+def manufacturing_shipping_request_response(order: ServiceTakerManufacturingOrder) -> dict:
+    return {
+        "id": order.id,
+        "request_type": "manufacturing",
+        "service_taker_id": order.service_taker_id,
+        "company_name": order.service_taker.company_name if order.service_taker else None,
+        "request_no": order.request_no,
+        "recipient_name": order.shipping_recipient_name,
+        "shipping_address": order.shipping_address,
+        "item_description": order.product_name,
+        "quantity": int(order.quantity or 1),
+        "notes": order.notes,
+        "status": order.shipping_status or "Submitted",
+        "manufacturing_status": order.status,
+        "shipping_weight_kg": float(order.shipping_weight_kg) if order.shipping_weight_kg is not None else None,
+        "shipping_cost": float(order.shipping_cost or 0),
+        "courier": order.courier,
+        "tracking_number": order.tracking_number,
+        "currency": order.service_taker.currency if order.service_taker else "USD",
+        "created_at": order.created_at,
+        "updated_at": order.updated_at,
     }
 
 
@@ -797,6 +860,17 @@ def dashboard_response(
         - confirmed_manufacturing_payments,
         2,
     )
+    combined_shipping_requests = [
+        shipping_request_response(shipment) for shipment in shipping_requests
+    ] + [
+        manufacturing_shipping_request_response(order)
+        for order in manufacturing_orders
+        if order.shipping_requested
+    ]
+    combined_shipping_requests.sort(
+        key=lambda shipment: (shipment.get("created_at") or datetime.min, shipment["id"]),
+        reverse=True,
+    )
     return {
         "stats": {
             "service_takers": len(clients),
@@ -842,7 +916,7 @@ def dashboard_response(
         "manufacturing_orders": [
             manufacturing_order_response(order) for order in manufacturing_orders
         ],
-        "shipping_requests": [shipping_request_response(shipment) for shipment in shipping_requests],
+        "shipping_requests": combined_shipping_requests,
         "ledger": [ledger_response(transaction) for transaction in ledger],
     }
 
@@ -2760,6 +2834,52 @@ def admin_update_local_order_request(
     return admin_update_manufacturing_request(request_id, payload, request, db)
 
 
+@router.delete("/admin/local-orders/{request_id}")
+def admin_delete_local_order(request_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request, db)
+    order = get_admin_manufacturing_order(db, request_id)
+    # Fulfillment has its own inventory and accounting lifecycle. Detach its
+    # optional source reference before removing the manufacturing record.
+    db.query(ServiceTakerOrder).filter(
+        ServiceTakerOrder.manufacturing_order_id == order.id
+    ).update({ServiceTakerOrder.manufacturing_order_id: None}, synchronize_session="fetch")
+    # Payments and updates cascade with the order. Dashboard balances are
+    # calculated from surviving orders/payments, reversing both charge and credit.
+    db.delete(order)
+    db.commit()
+    return {"deleted": True, "id": request_id}
+
+
+@router.delete("/admin/local-orders/{request_id}/shipping")
+def admin_delete_manufacturing_shipping(request_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request, db)
+    order = get_admin_manufacturing_order(db, request_id)
+    if not order.shipping_requested:
+        raise HTTPException(status_code=404, detail="Shipping request not found.")
+    order.shipping_requested = False
+    order.shipping_status = "Submitted"
+    order.shipping_recipient_name = None
+    order.shipping_address = None
+    order.shipping_weight_kg = None
+    order.shipping_cost = 0
+    order.courier = None
+    order.tracking_number = None
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    return {"deleted": True, "id": request_id}
+
+
+@router.delete("/admin/shipping-requests/{request_id}")
+def admin_delete_shipping_request(request_id: int, request: Request, db: Session = Depends(get_db)):
+    require_admin(request, db)
+    shipment = db.query(ServiceTakerShippingRequest).filter(ServiceTakerShippingRequest.id == request_id).one_or_none()
+    if not shipment:
+        raise HTTPException(status_code=404, detail="Shipping request not found.")
+    db.delete(shipment)
+    db.commit()
+    return {"deleted": True, "id": request_id}
+
+
 @router.post("/admin/local-orders/{request_id}/payments", status_code=201)
 def admin_record_local_order_payment(
     request_id: int,
@@ -2847,6 +2967,35 @@ def admin_update_shipping_request(
     db.commit()
     db.refresh(shipment)
     return shipping_request_response(shipment)
+
+
+@router.patch("/admin/local-orders/{request_id}/shipping")
+def admin_update_manufacturing_shipping(
+    request_id: int,
+    payload: ServiceTakerManufacturingShippingAdminUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request, db)
+    order = get_admin_manufacturing_order(db, request_id)
+    if not order.shipping_requested:
+        raise HTTPException(status_code=404, detail="This manufacturing request has no shipping request.")
+    if order.status in {"Cancelled", "Rejected"} and payload.status not in {None, "Cancelled"}:
+        raise HTTPException(status_code=409, detail="Shipping cannot be dispatched for a cancelled manufacturing request.")
+    if "status" in payload.model_fields_set:
+        order.shipping_status = payload.status or "Submitted"
+    if "shipping_weight_kg" in payload.model_fields_set:
+        order.shipping_weight_kg = payload.shipping_weight_kg
+    if "shipping_cost" in payload.model_fields_set:
+        order.shipping_cost = round(float(payload.shipping_cost or 0), 2)
+    if "courier" in payload.model_fields_set:
+        order.courier = clean_text(payload.courier)
+    if "tracking_number" in payload.model_fields_set:
+        order.tracking_number = clean_text(payload.tracking_number)
+    order.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(order)
+    return manufacturing_shipping_request_response(order)
 
 
 @router.patch("/portal/local-orders/{request_id}/shipping")

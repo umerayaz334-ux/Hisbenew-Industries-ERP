@@ -344,12 +344,16 @@ class ServiceTakerManufacturingOrder(Base):
     packaging = Column(String, nullable=True)
     target_unit_price = Column(Float, nullable=True)
     quoted_unit_price = Column(Float, nullable=False, default=0)
+    # Kept for compatibility with older local SQLite schemas that still have a
+    # required tooling_cost column. New schemas can remove it in a later migration.
+    tooling_cost = Column(Float, nullable=False, default=0)
     other_cost = Column(Float, nullable=False, default=0)
     other_cost_label = Column(String, nullable=True)
     quoted_total = Column(Float, nullable=False, default=0)
     courier = Column(String, nullable=True)
     tracking_number = Column(String, nullable=True)
     shipping_requested = Column(Boolean, nullable=False, default=False)
+    shipping_status = Column(String, nullable=False, default="Submitted")
     shipping_recipient_name = Column(String, nullable=True)
     shipping_address = Column(Text, nullable=True)
     shipping_weight_kg = Column(Float, nullable=True)

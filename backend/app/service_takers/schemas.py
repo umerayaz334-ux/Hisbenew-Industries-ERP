@@ -1,6 +1,36 @@
-﻿from datetime import datetime
+from datetime import datetime
 
-from pydantic import BaseModel, Field, constr
+from pydantic import BaseModel, Field, constr, field_validator
+import re
+
+
+class ServiceTakerProfileUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+    contact_name: str = Field(min_length=1, max_length=200)
+    email: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, max_length=100)
+    billing_address: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("contact_name", "email", "phone", "billing_address", mode="before")
+    @classmethod
+    def trim_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value):
+        if not value:
+            return None
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("Enter a valid email address.")
+        return value
+
+
+class ServiceTakerPinChange(BaseModel):
+    model_config = {"extra": "forbid"}
+    current_pin: str = Field(pattern=r"^[0-9]{4}$")
+    new_pin: str = Field(pattern=r"^[0-9]{4}$")
+    confirm_pin: str = Field(pattern=r"^[0-9]{4}$")
 
 
 class ServiceTakerCreate(BaseModel):
@@ -175,7 +205,15 @@ class ServiceTakerShippingRequestCreate(BaseModel):
 
 
 class ServiceTakerShippingRequestAdminUpdate(BaseModel):
-    status: str | None = Field(default=None, pattern="^(Submitted|Processing|Shipped|Cancelled)$")
+    status: str | None = Field(default=None, pattern="^(Submitted|Processing|Shipped|Delivered|Cancelled)$")
+    shipping_weight_kg: float | None = Field(default=None, ge=0)
+    shipping_cost: float | None = Field(default=None, ge=0)
+    courier: str | None = Field(default=None, max_length=160)
+    tracking_number: str | None = Field(default=None, max_length=200)
+
+
+class ServiceTakerManufacturingShippingAdminUpdate(BaseModel):
+    status: str | None = Field(default=None, pattern="^(Submitted|Processing|Shipped|Delivered|Cancelled)$")
     shipping_weight_kg: float | None = Field(default=None, ge=0)
     shipping_cost: float | None = Field(default=None, ge=0)
     courier: str | None = Field(default=None, max_length=160)

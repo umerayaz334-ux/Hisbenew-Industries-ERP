@@ -5239,3 +5239,5 @@
 .service-cost-fields label input { width: 100%; min-width: 0; min-height: 42px; padding: 0 11px; border: 1px solid #c4cede; border-radius: 7px; background: #fff; color: #202c49; font: inherit; font-size: 14px; }
 .service-cost-fields label input:focus { border-color: #6073c9; outline: 0; box-shadow: 0 0 0 3px rgba(75,95,192,.13); }
 @media (max-width: 600px) { .service-cost-fields { grid-template-columns: 1fr; gap: 10px; padding: 12px; } }
+
+.service-parcel-status.is-delivered { background: #e3f3e9; color: #17633e !important; }

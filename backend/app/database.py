@@ -1291,11 +1291,15 @@ def migrate_database():
             connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_internal_messages_client_request_id ON internal_messages(client_request_id)"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS image_url TEXT"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS product_id INTEGER REFERENCES service_taker_products(id)"))
+            # Retain compatibility with older databases where tooling_cost is
+            # still a required legacy column on manufacturing requests.
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS tooling_cost FLOAT NOT NULL DEFAULT 0"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS other_cost FLOAT NOT NULL DEFAULT 0"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS other_cost_label VARCHAR"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS courier VARCHAR"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS shipping_requested BOOLEAN NOT NULL DEFAULT FALSE"))
+            connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS shipping_status VARCHAR NOT NULL DEFAULT 'Submitted'"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS shipping_recipient_name VARCHAR"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS shipping_address TEXT"))
             connection.execute(text("ALTER TABLE service_taker_manufacturing_orders ADD COLUMN IF NOT EXISTS shipping_weight_kg FLOAT"))
@@ -2361,11 +2365,13 @@ def migrate_database():
             manufacturing_order_media_columns = {
                 "image_url": "TEXT",
                 "product_id": "INTEGER",
+                "tooling_cost": "FLOAT NOT NULL DEFAULT 0",
                 "other_cost": "FLOAT NOT NULL DEFAULT 0",
                 "other_cost_label": "VARCHAR",
                 "courier": "VARCHAR",
                 "tracking_number": "VARCHAR",
                 "shipping_requested": "BOOLEAN NOT NULL DEFAULT FALSE",
+                "shipping_status": "VARCHAR NOT NULL DEFAULT 'Submitted'",
                 "shipping_recipient_name": "VARCHAR",
                 "shipping_address": "TEXT",
                 "shipping_weight_kg": "FLOAT",

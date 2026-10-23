@@ -79,6 +79,7 @@ const pageImporters = {
   "Service Quotations": () => import("./pages/ServiceTakerPortal"),
   "Service Charges": () => import("./pages/ServiceTakerPortal"),
   "Local Orders": () => import("./pages/LocalOrders"),
+  "Local Shipping": () => import("./pages/LocalShipping"),
   "Follow Ups": () => import("./pages/FollowUps"),
   Payouts: () => import("./pages/Payouts"),
   Billings: () => import("./pages/Payments"),
@@ -136,6 +137,7 @@ const PrinterSettings = lazy(pageImporters["Printer Settings"]);
 const ServiceTakers = lazy(pageImporters["Service Takers"]);
 const ServiceTakerPortal = lazy(pageImporters["Service Dashboard"]);
 const LocalOrders = lazy(pageImporters["Local Orders"]);
+const LocalShipping = lazy(pageImporters["Local Shipping"]);
 const FollowUps = lazy(pageImporters["Follow Ups"]);
 const Payouts = lazy(pageImporters.Payouts);
 const Payments = lazy(pageImporters.Billings);
@@ -205,6 +207,7 @@ const pagePaths = {
   Suppliers: "/portal/suppliers",
   Orders: "/portal/orders",
   "Local Orders": "/portal/local-orders",
+  "Local Shipping": "/portal/local-shipping",
   Shipping: "/portal/shipping",
   "Shipping Balance": "/portal/shipping-balance",
   "Warehouse / Fulfillment": "/portal/fulfillment",
@@ -1354,6 +1357,7 @@ function App() {
     if (activePage === "Shipping Balance") return <ShippingBalance />;
     if (activePage === "Service Takers") return <ServiceTakers />;
     if (activePage === "Local Orders") return <LocalOrders />;
+    if (activePage === "Local Shipping") return <LocalShipping />;
     if (serviceTakerPages.includes(activePage)) {
       const portalSection =
         activePage === "Service Dashboard"

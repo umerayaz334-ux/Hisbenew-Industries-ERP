@@ -1,4 +1,5 @@
 import axios from "axios";
+import { errorDetailText } from "../utils/apiError";
 
 const normalizeApiBase = (value) => String(value || "").trim().replace(/\/+$/, "");
 
@@ -48,16 +49,16 @@ const getBrowserNetworkApiBase = () => {
   if (typeof window === "undefined") return "";
 
   const { hostname, port, protocol } = window.location;
-  if (!hostname || isLoopbackHost(hostname)) return "";
+  if (!hostname) return "";
   if (!["http:", "https:"].includes(protocol)) return "";
 
-  if (!import.meta.env.DEV && port !== "5173") return "";
-
-  // The mobile launcher terminates local HTTPS in Vite and proxies /api to
-  // FastAPI, keeping microphone-capable pages free of mixed HTTP content.
-  if (import.meta.env.DEV && protocol === "https:" && port === "5173") {
+  // Local Vite requests stay same-origin through the configured /api proxy.
+  if (import.meta.env.DEV && port === "5173") {
     return "/api";
   }
+
+  if (isLoopbackHost(hostname)) return "";
+  if (!import.meta.env.DEV && port !== "5173") return "";
 
   return `${protocol === "https:" ? "https" : "http"}://${hostname}:8000`;
 };
@@ -339,6 +340,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    if (error?.response?.data?.detail && typeof error.response.data.detail !== "string") {
+      error.validationDetails = error.response.data.detail;
+      error.response.data.detail = errorDetailText(error.validationDetails);
+    }
     const status = error?.response?.status;
     const config = error?.config || {};
     const retryCount = Number(config.__retryCount || 0);
