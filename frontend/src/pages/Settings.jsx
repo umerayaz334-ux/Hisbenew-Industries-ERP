@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api, { API_BASE_URL } from "../api/api";
+import { renderEmailPreview } from "../utils/emailPreview";
 import { useConfirmDialog } from "../components/DialogProvider";
 import "./Users.css";
 import "./Settings.css";
@@ -141,6 +142,8 @@ const getApiErrorDetail = async (error, fallback) => {
 };
 
 const EMAIL_EVENTS = [
+  { key: "service_taker_tracking", label: "Service taker · Tracking update" },
+  { key: "service_taker_balance_reminder", label: "Service taker · Balance reminder" },
   { key: "production_task_assigned", label: "Production task assigned" },
   { key: "manual_task_assigned", label: "Manual worker task" },
   { key: "batch_auto_assigned", label: "Batch auto-assigned" },
@@ -178,6 +181,18 @@ const DEFAULT_EMAIL_SETTINGS = {
     footer_text: "This message was sent by Hisbenew Industries ERP.",
   },
   events: {
+    service_taker_tracking: {
+      label: "Service taker tracking update", enabled: true, recipients: "custom",
+      subject: "Tracking update for order {{order_no}}", preheader: "Your tracking details and account balance.",
+      heading: "Tracking update",
+      body: "Hello {{contact_name}},\n\nTracking has been added or updated for order {{order_no}} — {{product_name}}.\nPackage: {{package_details}}\nCourier: {{courier}}\nTracking number: {{tracking_number}}\n\nThank you,\n{{company_name}}",
+    },
+    service_taker_balance_reminder: {
+      label: "Service taker balance reminder", enabled: true, recipients: "custom",
+      subject: "Balance reminder: {{currency}} {{account_balance}} due", preheader: "Your outstanding account balance.",
+      heading: "Balance reminder",
+      body: "Hello {{contact_name}},\n\nYour total pending balance is {{currency}} {{account_balance}}.\nPlease arrange payment. If you have already paid, please share your receipt for confirmation.\n\nThank you,\n{{company_name}}",
+    },
     production_task_assigned: {
       label: "Production task assigned",
       enabled: true,
@@ -248,11 +263,17 @@ function Settings({ authenticatedUser, onUpdateUser }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [activeSettingsTab, setActiveSettingsTab] = useState("profile");
+  const [activeSettingsTab, setActiveSettingsTab] = useState(() => ["templates", "emails"].includes(new URLSearchParams(window.location.search).get("tab")) ? new URLSearchParams(window.location.search).get("tab") : "profile");
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installState, setInstallState] = useState(() =>
     isStandaloneApp() ? "installed" : "browser"
   );
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (activeSettingsTab === "templates" || activeSettingsTab === "emails") url.searchParams.set("tab", activeSettingsTab);
+    else url.searchParams.delete("tab");
+    window.history.replaceState(window.history.state, "", url);
+  }, [activeSettingsTab]);
   const [copiedTarget, setCopiedTarget] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [eraseOptions, setEraseOptions] = useState([]);
@@ -275,13 +296,14 @@ function Settings({ authenticatedUser, onUpdateUser }) {
     mergeEmailSettings()
   );
   const [emailTemplateKey, setEmailTemplateKey] = useState(
-    "production_task_assigned"
+    "service_taker_tracking"
   );
-  const [emailPreview, setEmailPreview] = useState(null);
+  const emailPreview = useMemo(() => renderEmailPreview(emailSettings, emailTemplateKey), [emailSettings, emailTemplateKey]);
   const [emailTestRecipient, setEmailTestRecipient] = useState("");
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailSaving, setEmailSaving] = useState(false);
   const [emailTesting, setEmailTesting] = useState(false);
+  const [emailPasswordVisible, setEmailPasswordVisible] = useState(false);
   const [emailMessage, setEmailMessage] = useState("");
   const [emailError, setEmailError] = useState("");
   const [callSettings, setCallSettings] = useState({
@@ -343,7 +365,7 @@ function Settings({ authenticatedUser, onUpdateUser }) {
     () => [
       { key: "profile", label: "Profile" },
       ...(isAdmin ? [{ key: "calling", label: "Calling" }] : []),
-      ...(isAdmin ? [{ key: "emails", label: "Email APIs" }] : []),
+      ...(isAdmin ? [{ key: "emails", label: "Email settings" }, { key: "templates", label: "Email templates" }] : []),
       { key: "install", label: "App install" },
       { key: "sync", label: "Connection" },
       ...(isAdmin ? [{ key: "data", label: "Data" }] : []),
@@ -795,7 +817,7 @@ function Settings({ authenticatedUser, onUpdateUser }) {
         timeout: 15000,
       });
       setEmailSettings(mergeEmailSettings(response.data || {}));
-      setEmailMessage("Email API settings saved.");
+      setEmailMessage("Email settings saved for this tenant.");
       return true;
     } catch (saveEmailError) {
       console.error("Email settings save error:", saveEmailError);
@@ -806,24 +828,6 @@ function Settings({ authenticatedUser, onUpdateUser }) {
       return false;
     } finally {
       setEmailSaving(false);
-    }
-  };
-
-  const previewEmailTemplate = async () => {
-    setEmailError("");
-    setEmailPreview(null);
-    try {
-      const response = await api.post("/admin/email/preview", {
-        event_key: emailTemplateKey,
-        context: {},
-      });
-      setEmailPreview(response.data);
-    } catch (previewError) {
-      console.error("Email preview error:", previewError);
-      setEmailError(
-        previewError.response?.data?.detail ||
-          "Email preview could not be generated."
-      );
     }
   };
 
@@ -1131,12 +1135,7 @@ function Settings({ authenticatedUser, onUpdateUser }) {
         <section className="settings-email-panel">
           <div className="settings-panel-heading">
             <div>
-              <span className="users-eyebrow">Email APIs</span>
-              <h2>Email automation</h2>
-              <p>
-                Connect SMTP or email APIs, choose ERP events, and control the
-                message templates used for worker and order notifications.
-              </p>
+              <h2>Email settings</h2>
             </div>
             <label className="settings-switch">
               <input
@@ -1146,7 +1145,7 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                 }
                 type="checkbox"
               />
-              <span>{emailSettings.enabled ? "Enabled" : "Disabled"}</span>
+              <span>{emailSettings.enabled ? "Email enabled" : "Email disabled"}</span>
             </label>
           </div>
 
@@ -1156,23 +1155,23 @@ function Settings({ authenticatedUser, onUpdateUser }) {
             <>
               <div className="settings-email-grid">
                 <article className="settings-email-card">
-                  <h3>Sender</h3>
+                  <div className="email-step-heading"><span>1</span><div><h3>Your sender details</h3></div></div>
                   <div className="settings-form-grid">
                     <label>
-                      Provider
+                      Send emails using
                       <select
                         value={emailSettings.provider}
                         onChange={(event) =>
                           updateEmailSetting("provider", event.target.value)
                         }
                       >
-                        <option value="smtp">SMTP</option>
+                        <option value="smtp">Business mailbox (SMTP)</option>
                         <option value="resend">Resend API</option>
                         <option value="webhook">Custom webhook API</option>
                       </select>
                     </label>
                     <label>
-                      From name
+                      Business / sender name
                       <input
                         value={emailSettings.from_name}
                         onChange={(event) =>
@@ -1182,18 +1181,18 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                       />
                     </label>
                     <label>
-                      From email
+                      Sender email address
                       <input
                         type="email"
                         value={emailSettings.from_email}
                         onChange={(event) =>
                           updateEmailSetting("from_email", event.target.value)
                         }
-                        placeholder="erp@yourdomain.com"
+                        placeholder="info@hisbenew.com"
                       />
                     </label>
                     <label>
-                      Reply-to
+                      Reply-to address (optional)
                       <input
                         type="email"
                         value={emailSettings.reply_to}
@@ -1207,21 +1206,21 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                 </article>
 
                 <article className="settings-email-card">
-                  <h3>
+                  <div className="email-step-heading"><span>2</span><div><h3>
                     {emailSettings.provider === "smtp"
-                      ? "SMTP connection"
+                      ? "Connect your mailbox"
                       : "API connection"}
-                  </h3>
+                  </h3></div></div>
                   {emailSettings.provider === "smtp" ? (
                     <div className="settings-form-grid">
                       <label>
-                        SMTP host
+                        Outgoing mail server
                         <input
                           value={emailSettings.smtp.host}
                           onChange={(event) =>
                             updateEmailGroup("smtp", "host", event.target.value)
                           }
-                          placeholder="smtp.gmail.com"
+                          placeholder="e.g. mail.yourdomain.com"
                         />
                       </label>
                       <label>
@@ -1236,45 +1235,42 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                         />
                       </label>
                       <label>
-                        Username
+                        Mailbox username
                         <input
                           value={emailSettings.smtp.username}
                           onChange={(event) =>
                             updateEmailGroup("smtp", "username", event.target.value)
                           }
-                          placeholder="SMTP username"
+                          placeholder="info@hisbenew.com"
+                          autoComplete="username"
                         />
                       </label>
                       <label>
                         Password / app password
+                        <span className="email-password-field">
                         <input
-                          type="password"
+                          type={emailPasswordVisible ? "text" : "password"}
                           value={emailSettings.smtp.password}
                           onChange={(event) =>
                             updateEmailGroup("smtp", "password", event.target.value)
                           }
                           placeholder="SMTP password"
+                          autoComplete="new-password"
                         />
+                        <button type="button" aria-pressed={emailPasswordVisible} onClick={() => setEmailPasswordVisible((visible) => !visible)}>{emailPasswordVisible ? "Hide" : "Show"}</button>
+                        </span>
                       </label>
-                      <label className="settings-check-row">
-                        <input
-                          checked={Boolean(emailSettings.smtp.use_tls)}
-                          onChange={(event) =>
-                            updateEmailGroup("smtp", "use_tls", event.target.checked)
-                          }
-                          type="checkbox"
-                        />
-                        Use STARTTLS
-                      </label>
-                      <label className="settings-check-row">
-                        <input
-                          checked={Boolean(emailSettings.smtp.use_ssl)}
-                          onChange={(event) =>
-                            updateEmailGroup("smtp", "use_ssl", event.target.checked)
-                          }
-                          type="checkbox"
-                        />
-                        Use SSL
+                      <label className="settings-wide-field">
+                        Connection security
+                        <select value={emailSettings.smtp.use_ssl ? "ssl" : emailSettings.smtp.use_tls ? "tls" : "none"}
+                          onChange={(event) => setEmailSettings((current) => ({ ...current, smtp: { ...current.smtp,
+                            use_ssl: event.target.value === "ssl", use_tls: event.target.value === "tls",
+                            port: event.target.value === "ssl" ? 465 : event.target.value === "tls" ? 587 : current.smtp.port,
+                          } }))}>
+                          <option value="tls">STARTTLS · usually port 587</option>
+                          <option value="ssl">SSL / TLS · usually port 465</option>
+                          <option value="none">None · only if your provider requires it</option>
+                        </select>
                       </label>
                     </div>
                   ) : (
@@ -1324,11 +1320,38 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                 </article>
               </div>
 
+              <div className="email-finish-grid">
+                <article className="settings-email-card">
+                  <h3>Test connection</h3>
+                  <div className="settings-form-grid">
+                    <label className="settings-wide-field">Send a test to
+                      <input type="email" value={emailTestRecipient} onChange={(event) => setEmailTestRecipient(event.target.value)} placeholder="you@example.com" />
+                    </label>
+                  </div>
+                  <div className="settings-email-actions">
+                    <button className="settings-secondary-action" disabled={emailTesting || emailSaving || !emailTestRecipient.trim()} onClick={sendEmailTest} type="button">
+                      {emailTesting ? "Sending test…" : "Save & send test email"}
+                    </button>
+                    <button className="settings-primary-action" disabled={emailSaving || emailTesting} onClick={saveEmailSettings} type="button">
+                      {emailSaving ? "Saving…" : "Save connection"}
+                    </button>
+                  </div>
+                </article>
+              </div>
+              {emailError && <p className="settings-sync-error" role="alert">{emailError}</p>}
+              {emailMessage && <p className="users-success" role="status">{emailMessage}</p>}
+
+              <div className="email-notification-row">
+                <span>Tracking emails are sent only when selected on the order.</span>
+                <button type="button" className="settings-secondary-action" onClick={() => setActiveSettingsTab("templates")}>Edit templates</button>
+              </div>
+              <details className="email-advanced-settings">
+                <summary><span><strong>Notification rules</strong></span><span className="email-expand-icon" aria-hidden="true">+</span></summary>
+                <div className="email-advanced-body">
               <div className="settings-email-card">
                 <div className="settings-card-heading-row">
                   <div>
-                    <h3>Events and recipients</h3>
-                    <p>Choose when ERP sends emails and who receives them.</p>
+                    <h3>Worker notifications</h3>
                   </div>
                   <label>
                     Admin recipients
@@ -1343,7 +1366,7 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                 </div>
 
                 <div className="settings-event-grid">
-                  {EMAIL_EVENTS.map((event) => {
+                  {EMAIL_EVENTS.filter((event) => !event.key.startsWith("service_taker_")).map((event) => {
                     const config = emailSettings.events[event.key];
                     return (
                       <article
@@ -1400,30 +1423,31 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                 </div>
               </div>
 
+                </div>
+              </details>
+            </>
+          )}
+        </section>
+      )}
+
+      {isAdmin && activeSettingsTab === "templates" && (
+        <section className="settings-email-panel email-templates-page">
+          <div className="settings-panel-heading"><h2>Email templates</h2>
+            <button type="button" className="settings-primary-action" disabled={emailSaving} onClick={saveEmailSettings}>{emailSaving ? "Saving…" : "Save templates"}</button>
+            <button type="button" className="settings-secondary-action" onClick={() => setActiveSettingsTab("emails")}>Email settings</button>
+          </div>
+          {emailLoading ? <p>Loading…</p> : <>
+              <div className="email-template-picker" role="group" aria-label="Email template">
+                {EMAIL_EVENTS.map((event) => <button type="button" key={event.key} aria-pressed={emailTemplateKey === event.key}
+                  className={emailTemplateKey === event.key ? "is-selected" : ""} onClick={() => setEmailTemplateKey(event.key)}>{event.label}</button>)}
+              </div>
               <div className="settings-email-editor">
                 <article className="settings-email-card">
                   <div className="settings-card-heading-row">
                     <div>
-                      <h3>Template editor</h3>
-                      <p>
-                        Tokens: {"{{worker_name}}"}, {"{{task_name}}"},{" "}
-                        {"{{product_name}}"}, {"{{quantity}}"}, {"{{due_date}}"},{" "}
-                        {"{{order_no}}"}.
-                      </p>
+                      <h3>Message</h3>
+
                     </div>
-                    <label>
-                      Template
-                      <select
-                        value={emailTemplateKey}
-                        onChange={(event) => setEmailTemplateKey(event.target.value)}
-                      >
-                        {EMAIL_EVENTS.map((event) => (
-                          <option key={event.key} value={event.key}>
-                            {event.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
                   </div>
 
                   <div className="settings-form-grid">
@@ -1468,6 +1492,19 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                     </label>
                     <label className="settings-wide-field">
                       Email body
+                      <select aria-label="Insert template field" value="" onChange={(event) => {
+                        if (event.target.value) updateEmailEvent(emailTemplateKey, "body", `${selectedEmailEvent.body || ""}{{${event.target.value}}}`);
+                      }}>
+                        <option value="">Insert field…</option>
+                        {(emailTemplateKey.startsWith("service_taker_")
+                          ? (emailTemplateKey === "service_taker_tracking"
+                            ? ["contact_name", "company_name", "order_no", "product_name", "quantity", "package_details", "packaging", "shipping_weight_kg", "courier", "tracking_number"]
+                            : ["contact_name", "company_name", "currency", "account_balance"])
+                          : ["worker_name", "task_name", "product_name", "quantity", "due_date", "order_no"]
+                        ).filter((field) => emailTemplateKey !== "service_taker_balance_reminder" || ["contact_name", "company_name", "currency", "account_balance"].includes(field)).map((field) => (
+                          <option key={field} value={field}>{field.replaceAll("_", " ")}</option>
+                        ))}
+                      </select>
                       <textarea
                         rows={9}
                         value={selectedEmailEvent.body || ""}
@@ -1483,8 +1520,13 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                   </div>
                 </article>
 
-                <article className="settings-email-card">
-                  <h3>Style and test</h3>
+                <div className="email-template-preview-column">
+                  <div className="settings-email-preview email-live-preview">
+                    <div><span>Live preview</span><strong>{emailPreview.subject}</strong></div>
+                    <iframe title="Email preview" srcDoc={emailPreview.html} sandbox="" />
+                  </div>
+                <details className="settings-email-card email-appearance-details">
+                  <summary>Email appearance</summary>
                   <div className="settings-form-grid">
                     <label>
                       Accent color
@@ -1515,15 +1557,6 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                         }
                       />
                     </label>
-                    <label>
-                      Test recipient
-                      <input
-                        type="email"
-                        value={emailTestRecipient}
-                        onChange={(event) => setEmailTestRecipient(event.target.value)}
-                        placeholder="you@example.com"
-                      />
-                    </label>
                     <label className="settings-wide-field">
                       Footer text
                       <textarea
@@ -1538,48 +1571,20 @@ function Settings({ authenticatedUser, onUpdateUser }) {
                   <div className="settings-email-actions">
                     <button
                       className="settings-secondary-action"
-                      onClick={previewEmailTemplate}
-                      type="button"
-                    >
-                      Preview
-                    </button>
-                    <button
-                      className="settings-secondary-action"
-                      disabled={emailSaving}
+                      disabled={emailSaving || emailTesting}
                       onClick={saveEmailSettings}
                       type="button"
                     >
-                      {emailSaving ? "Saving..." : "Save settings"}
-                    </button>
-                    <button
-                      className="settings-primary-action settings-test-email-button"
-                      disabled={emailTesting}
-                      onClick={sendEmailTest}
-                      type="button"
-                    >
-                      {emailTesting ? "Sending..." : "Send test"}
+                      {emailSaving ? "Saving..." : "Save templates"}
                     </button>
                   </div>
-                </article>
+                </details>
+                </div>
               </div>
 
-              {emailError && <p className="settings-sync-error">{emailError}</p>}
-              {emailMessage && <p className="users-success">{emailMessage}</p>}
-              {emailPreview && (
-                <div className="settings-email-preview">
-                  <div>
-                    <span>Preview subject</span>
-                    <strong>{emailPreview.subject}</strong>
-                  </div>
-                  <iframe
-                    title="Email preview"
-                    srcDoc={emailPreview.html}
-                    sandbox=""
-                  />
-                </div>
-              )}
-            </>
-          )}
+          {emailError && <p className="settings-sync-error" role="alert">{emailError}</p>}
+          {emailMessage && <p className="users-success" role="status">{emailMessage}</p>}
+          </>}
         </section>
       )}
 

@@ -275,7 +275,7 @@ Invoke-Step `
             $backendPath `
             /E `
             /XD ".venv" "venv" "__pycache__" ".git" "static" "uploads" "optimized" `
-            /XF "*.pyc" "*.db*" "*.sqlite*" ".env*" ".secret_key" ".turn-*" "*service-account*.json" "*firebase-adminsdk*.json" `
+            /XF "*.pyc" "*.db*" "*.sqlite*" ".env*" ".secret_key" ".turn-*" "email_settings*.json" "*service-account*.json" "*firebase-adminsdk*.json" `
             /R:1 /W:2 /NFL /NDL /NJH /NJS
 
         if ($LASTEXITCODE -ge 8) {

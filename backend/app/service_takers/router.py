@@ -1,5 +1,6 @@
 ﻿import json
 import os
+import logging
 import uuid
 from datetime import datetime
 
@@ -283,6 +284,19 @@ def product_response(product: ServiceTakerProduct) -> dict:
     }
 
 
+def service_taker_account_balance(db: Session, client: ServiceTaker) -> float:
+    def rows(model):
+        return db.query(model).filter(model.service_taker_id == client.id, model.tenant_id == client.tenant_id).all()
+
+    manufacturing = rows(ServiceTakerManufacturingOrder)
+    charges = sum(manufacturing_quote_total(o) + float(o.shipping_cost or 0)
+                  for o in manufacturing if o.status not in {"Cancelled", "Rejected"})
+    charges += sum(order_total(o) for o in rows(ServiceTakerOrder) if o.status != "Cancelled")
+    charges += sum(float(o.shipping_cost or 0) for o in rows(ServiceTakerShippingRequest) if o.status != "Cancelled")
+    paid = sum(manufacturing_paid_total(o) for o in manufacturing)
+    return max(0.0, round(charges - paid, 2))
+
+
 def client_response(db: Session, client: ServiceTaker) -> dict:
     user = db.query(User).filter(User.id == client.user_id).one_or_none()
     service_access = service_taker_service_access(user)
@@ -310,6 +324,7 @@ def client_response(db: Session, client: ServiceTaker) -> dict:
         "email": client.email,
         "phone": client.phone,
         "billing_address": client.billing_address,
+        "account_balance_due": service_taker_account_balance(db, client),
         "currency": client.currency,
         "pick_pack_fee": float(client.pick_pack_fee or 0),
         "additional_item_fee": float(client.additional_item_fee or 0),
@@ -606,6 +621,44 @@ def manufacturing_update_response(update: ServiceTakerManufacturingUpdate) -> di
         "actor_type": actor_type,
         "created_at": update.created_at,
     }
+
+
+def notify_local_order_tracking(db: Session, order, previous_tracking: str | None) -> dict:
+    tracking = clean_text(order.tracking_number)
+    if not tracking or tracking == clean_text(previous_tracking):
+        return {"status": "skipped", "reason": "tracking_unchanged"}
+    from ..main import load_email_settings, send_email_message, render_email_template
+
+    settings = load_email_settings(order.tenant_id)
+    if not settings.get("enabled"):
+        return {"status": "skipped", "reason": "email_disabled"}
+    if not settings["events"]["service_taker_tracking"].get("enabled"):
+        return {"status": "skipped", "reason": "tracking_email_disabled"}
+    client = order.service_taker
+    if not client or client.tenant_id != order.tenant_id or not client.email:
+        return {"status": "skipped", "reason": "no_service_taker_email"}
+    try:
+        currency = client.currency or "USD"
+        rendered = render_email_template(settings, "service_taker_tracking", {
+            "contact_name": client.contact_name, "customer_name": client.company_name,
+            "company_name": settings.get("from_name") or "Hisbenew Industries",
+            "order_no": order.request_no, "courier": order.courier or "Not specified",
+            "tracking_number": tracking, "currency": currency,
+            "product_name": order.product_name, "quantity": int(order.quantity or 0),
+            "packaging": order.packaging or "Not specified",
+            "shipping_weight_kg": order.shipping_weight_kg or "Not specified",
+            "package_details": " · ".join(filter(None, [
+                f"{int(order.quantity or 0)} pieces", order.packaging,
+                f"Weight: {order.shipping_weight_kg:g} kg" if order.shipping_weight_kg else None,
+            ])),
+        })
+        # Balances belong only to this customer, not global notification CC lists.
+        settings = {**settings, "cc": "", "bcc": ""}
+        send_email_message(settings, [client.email], rendered["subject"], rendered["text"], rendered["html"])
+        return {"status": "sent"}
+    except Exception:
+        logging.getLogger(__name__).exception("Tracking email failed for local order %s", order.id)
+        return {"status": "failed", "reason": "Check the tenant email connection."}
 
 
 def manufacturing_order_response(order: ServiceTakerManufacturingOrder) -> dict:
@@ -1358,6 +1411,7 @@ def admin_update_manufacturing_request(
 
     fields = payload.model_fields_set
     original_status = order.status
+    previous_tracking = order.tracking_number
     price_changed = False
     if "quoted_unit_price" in fields:
         order.quoted_unit_price = float(payload.quoted_unit_price or 0)
@@ -1430,7 +1484,9 @@ def admin_update_manufacturing_request(
     order.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(order)
-    return manufacturing_order_response(order)
+    result = manufacturing_order_response(order)
+    result["tracking_email"] = notify_local_order_tracking(db, order, previous_tracking) if payload.send_tracking_email else {"status": "skipped", "reason": "not_requested"}
+    return result
 
 
 @router.post("/admin/manufacturing-requests/{request_id}/payments", status_code=201)
@@ -1682,6 +1738,41 @@ def admin_dashboard(request: Request, db: Session = Depends(get_db)):
         ServiceTaker.id.desc(),
     ).all()
     return dashboard_response(db, clients)
+
+
+@router.post("/admin/clients/{client_id}/balance-reminder")
+def admin_send_balance_reminder(client_id: int, request: Request, db: Session = Depends(get_db)):
+    actor = require_admin(request, db)
+    client = service_taker_by_id(db, client_id)
+    tenant_id = getattr(request.state, "tenant_id", None) or actor.tenant_id
+    if tenant_id is not None and client.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Service taker not found.")
+    from ..main import load_email_settings, render_email_template, send_email_message, record_activity
+
+    settings = load_email_settings(client.tenant_id)
+    if not settings.get("enabled"):
+        raise HTTPException(status_code=409, detail="Enable this tenant’s email connection in Settings first.")
+    if not client.email:
+        raise HTTPException(status_code=400, detail="Add an email address to this service taker first.")
+    balance = service_taker_account_balance(db, client)
+    if balance <= 0:
+        raise HTTPException(status_code=409, detail="This service taker has no outstanding balance.")
+    rendered = render_email_template(settings, "service_taker_balance_reminder", {
+        "contact_name": client.contact_name, "customer_name": client.company_name,
+        "company_name": settings.get("from_name") or "Hisbenew Industries",
+        "currency": client.currency or "USD", "account_balance": f"{balance:,.2f}",
+    })
+    try:
+        send_email_message({**settings, "cc": "", "bcc": ""}, [client.email],
+                           rendered["subject"], rendered["text"], rendered["html"])
+    except Exception:
+        logging.getLogger(__name__).exception("Balance reminder failed for service taker %s", client.id)
+        raise HTTPException(status_code=502, detail="Reminder could not be sent. Check the tenant email connection.")
+    record_activity(db, actor_user_id=actor.id, actor_user_name=actor.username or actor.name,
+                    action="sent", entity_type="balance reminder",
+                    summary=f"Sent balance reminder to service taker {client.id}",
+                    page="Service Takers", request_method="POST", request_path=request.url.path)
+    return {"status": "sent", "recipient": client.email, "account_balance_due": balance}
 
 
 @router.post("/admin/clients", status_code=201)
@@ -2978,6 +3069,7 @@ def admin_update_manufacturing_shipping(
 ):
     require_admin(request, db)
     order = get_admin_manufacturing_order(db, request_id)
+    previous_tracking = order.tracking_number
     if not order.shipping_requested:
         raise HTTPException(status_code=404, detail="This manufacturing request has no shipping request.")
     if order.status in {"Cancelled", "Rejected"} and payload.status not in {None, "Cancelled"}:
@@ -2995,7 +3087,9 @@ def admin_update_manufacturing_shipping(
     order.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(order)
-    return manufacturing_shipping_request_response(order)
+    result = manufacturing_shipping_request_response(order)
+    result["tracking_email"] = notify_local_order_tracking(db, order, previous_tracking) if payload.send_tracking_email else {"status": "skipped", "reason": "not_requested"}
+    return result
 
 
 @router.patch("/portal/local-orders/{request_id}/shipping")

@@ -1403,3 +1403,5 @@
     text-align: left;
   }
 }
+.local-orders-page label.local-order-email-choice { display: flex; align-items: center; gap: 8px; }
+.local-orders-page label.local-order-email-choice input { width: 16px; min-height: 16px; height: 16px; margin: 0; accent-color: #173a57; }

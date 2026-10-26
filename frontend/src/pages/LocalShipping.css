@@ -97,3 +97,6 @@
 }
 
 .local-shipping-status.is-delivered { background: #e3f3e9; color: #17633e; border-color: #b7dcc6; }
+
+.local-shipping-page label.local-order-email-choice { display: flex; align-items: center; gap: 8px; }
+.local-shipping-page label.local-order-email-choice input { width: 16px; min-height: 16px; height: 16px; margin: 0; accent-color: #173a57; }

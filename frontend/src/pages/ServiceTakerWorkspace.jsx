@@ -759,6 +759,21 @@ const visibleProducts = useMemo(
     setError("");
   };
 
+  const sendBalanceReminder = async (client) => {
+    setBusy(`balance-reminder-${client.id}`);
+    setError("");
+    setNotice("");
+    try {
+      const response = await api.post(`/service-takers/admin/clients/${client.id}/balance-reminder`, {}, { timeout: 60000 });
+      setData((current) => ({ ...current, clients: current.clients.map((row) => row.id === client.id ? { ...row, account_balance_due: response.data.account_balance_due } : row) }));
+      showSuccess(`Balance reminder sent to ${response.data.recipient}.`);
+    } catch (sendError) {
+      setError(errorMessage(sendError, "Balance reminder could not be sent."));
+    } finally {
+      setBusy("");
+    }
+  };
+
   const submitClient = async (event) => {
     event.preventDefault();
     if (!clientForm.fulfillment_enabled && !clientForm.manufacturing_enabled) {
@@ -1988,6 +2003,15 @@ const tabs = [
                       <span>Pick & pack {money(client.pick_pack_fee, client.currency)}</span>
                       <span>Extra item {money(client.additional_item_fee, client.currency)}</span>
                       <span>Label {money(client.label_fee, client.currency)}</span>
+                    </div>
+                    <div className="service-client-balance">
+                      <div><span>Total pending balance</span><strong>{money(client.account_balance_due || 0, client.currency)}</strong></div>
+                      <small>{client.email || "No email address"}</small>
+                      <button className="service-primary-button" type="button"
+                        disabled={Boolean(busy) || !client.email || Number(client.account_balance_due || 0) <= 0}
+                        onClick={() => sendBalanceReminder(client)}>
+                        {busy === `balance-reminder-${client.id}` ? "Sending…" : "Send balance reminder"}
+                      </button>
                     </div>
                     <footer>
                       <button

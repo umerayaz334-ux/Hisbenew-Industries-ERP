@@ -87,6 +87,7 @@ export default function LocalShipping() {
         shipping_cost: cost === "" ? 0 : Number(cost),
         courier: String(form.get("courier") || "").trim() || null,
         tracking_number: String(form.get("tracking_number") || "").trim() || null,
+        ...(request.request_type === "manufacturing" ? { send_tracking_email: form.get("send_tracking_email") === "on" } : {}),
       });
       if (!data || data.id !== request.id) throw new Error("The shipping details were not confirmed by the server.");
       setNotice(`Saved shipping details for ${request.request_no}.`);
@@ -166,6 +167,7 @@ export default function LocalShipping() {
                   <label>Shipping cost ({request.currency || "PKR"})<input defaultValue={request.shipping_cost || ""} min="0" name="shipping_cost" placeholder="Optional" step="0.01" type="number" /></label>
                   <label>Courier<input defaultValue={request.courier || ""} maxLength="160" name="courier" placeholder="e.g. TCS" /></label>
                   <label>Tracking number<input defaultValue={request.tracking_number || ""} maxLength="200" name="tracking_number" placeholder="Enter after dispatch" /></label>
+                  {request.request_type === "manufacturing" && <label className="local-order-email-choice"><input type="checkbox" name="send_tracking_email" />Send tracking email to service taker</label>}
                   <div className="local-shipping-form-actions"><strong>{Number(request.shipping_cost || 0) > 0 ? amount(request.shipping_cost, request.currency || "PKR") : "Cost not set"}</strong><button disabled={busyId !== null} type="submit">{busyId === `${request.request_type || "parcel"}-${request.id}` ? "Saving…" : "Save shipping details"}</button></div>
                 </form>
                 </div>

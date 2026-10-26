@@ -5241,3 +5241,11 @@
 @media (max-width: 600px) { .service-cost-fields { grid-template-columns: 1fr; gap: 10px; padding: 12px; } }
 
 .service-parcel-status.is-delivered { background: #e3f3e9; color: #17633e !important; }
+
+.service-client-balance { display: grid; gap: 10px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+.service-client-balance > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.service-client-balance span { color: #64748b; font-size: 12px; }
+.service-client-balance strong { color: #0f172a; font-size: 19px; font-variant-numeric: tabular-nums; }
+.service-client-balance small { color: #64748b; overflow-wrap: anywhere; }
+.service-client-balance button { width: 100%; min-height: 38px; }
+.service-client-balance button:disabled { opacity: .5; cursor: not-allowed; }

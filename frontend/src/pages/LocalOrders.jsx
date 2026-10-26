@@ -325,6 +325,7 @@ export default function LocalOrders() {
       deposit_required: order.deposit_required ?? "",
       courier: order.courier || "",
       tracking_number: order.tracking_number || "",
+      send_tracking_email: false,
       estimated_ready_at: order.estimated_ready_at ? order.estimated_ready_at.slice(0, 10) : "",
       update_message: "",
       admin_notes: order.admin_notes || "",
@@ -351,6 +352,7 @@ export default function LocalOrders() {
         ...(targetStage === "Completed" ? {
           courier: quoteForm.courier || order.courier || null,
           tracking_number: quoteForm.tracking_number || order.tracking_number || null,
+          send_tracking_email: quoteForm.send_tracking_email === true,
         } : {}),
         update_message: `Workflow advanced to ${targetStage} from company console.`,
       });
@@ -378,6 +380,7 @@ export default function LocalOrders() {
         deposit_required: quoteForm.deposit_required === "" ? null : Number(quoteForm.deposit_required),
         courier: quoteForm.courier || null,
         tracking_number: quoteForm.tracking_number || null,
+        send_tracking_email: quoteForm.send_tracking_email === true,
         estimated_ready_at: quoteForm.estimated_ready_at ? `${quoteForm.estimated_ready_at}T00:00:00` : null,
         update_message: quoteForm.update_message || null,
         admin_notes: quoteForm.admin_notes || null,
@@ -391,7 +394,16 @@ export default function LocalOrders() {
       ) {
         throw new Error("The optional charge did not save. Please try again.");
       }
-      setNotice("Quote & order status updated successfully.");
+      const trackingEmail = savedOrder.tracking_email;
+      setNotice(trackingEmail?.status === "failed"
+        ? "Order saved, but the tracking email failed. Check the tenant email connection."
+        : trackingEmail?.status === "sent"
+          ? "Order saved. Tracking and amounts due emailed to the service taker."
+          : trackingEmail?.reason === "email_disabled"
+            ? "Order saved. Enable this tenant’s email connection in Settings to send tracking emails."
+            : trackingEmail?.reason === "no_service_taker_email"
+              ? "Order saved. Add the service taker’s email address to send tracking emails."
+              : "Quote & order status updated successfully.");
       const nextData = await loadData(true);
       const refreshedOrders = nextData?.manufacturing_orders || [];
       const updated = refreshedOrders.find((order) => order.id === selectedOrder.id);
@@ -1186,6 +1198,11 @@ export default function LocalOrders() {
                         placeholder="Enter after dispatch"
                         value={quoteForm.tracking_number || ""}
                       />
+                    </label>
+                    <label className="local-order-email-choice">
+                      <input type="checkbox" checked={quoteForm.send_tracking_email === true}
+                        onChange={(event) => setQuoteForm((current) => ({ ...current, send_tracking_email: event.target.checked }))} />
+                      Send tracking email to service taker
                     </label>
                     <label className="service-wide-field">
                       Broadcast Update Message (Visible to Service Taker)

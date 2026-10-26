@@ -456,6 +456,20 @@ def save_access_privacy_settings(settings: dict) -> dict:
     return normalized
 
 DEFAULT_EMAIL_EVENTS = {
+    "service_taker_tracking": {
+        "label": "Service taker tracking update", "enabled": True, "recipients": "custom",
+        "subject": "Tracking update for order {{order_no}}",
+        "preheader": "Your tracking details and account balance.",
+        "heading": "Your order is on its way",
+        "body": "Hello {{contact_name}},\n\nTracking has been added or updated for order {{order_no}} — {{product_name}}.\nPackage: {{package_details}}\nCourier: {{courier}}\nTracking number: {{tracking_number}}\n\nThank you for choosing {{company_name}}.",
+    },
+    "service_taker_balance_reminder": {
+        "label": "Service taker balance reminder", "enabled": True, "recipients": "custom",
+        "subject": "Balance reminder: {{currency}} {{account_balance}} due",
+        "preheader": "A reminder of your outstanding account balance.",
+        "heading": "Your account balance",
+        "body": "Hello {{contact_name}},\n\nThis is a friendly reminder that your total outstanding balance is {{currency}} {{account_balance}}.\n\nPlease arrange payment when convenient. If you have already paid, please share your payment receipt for confirmation.\n\nThank you,\n{{company_name}}",
+    },
     "production_task_assigned": {
         "label": "Production task assigned",
         "description": "Sent when a worker is assigned to a production task.",
@@ -3792,24 +3806,36 @@ def normalize_email_settings(settings: dict | None = None) -> dict:
         event["custom_recipients"] = str(event.get("custom_recipients") or "")
         events[event_key] = event
     normalized["events"] = events
+    tracking = events["service_taker_tracking"]
+    tracking["body"] = "\n".join(line for line in str(tracking.get("body") or "").splitlines()
+                                  if "{{account_balance}}" not in line and "{{order_balance}}" not in line)
+    old_intro = "Tracking has been added or updated for order {{order_no}}."
+    if old_intro in str(tracking.get("body") or "") and "{{package_details}}" not in tracking["body"]:
+        tracking["body"] = tracking["body"].replace(old_intro, "Tracking has been added or updated for order {{order_no}} — {{product_name}}.\nPackage: {{package_details}}")
     return normalized
 
 
-def load_email_settings() -> dict:
-    if EMAIL_SETTINGS_FILE.exists():
+def tenant_email_settings_file(tenant_id: int | None = None) -> Path:
+    return EMAIL_SETTINGS_FILE if tenant_id is None else APP_DATA_DIR / f"email_settings_tenant_{int(tenant_id)}.json"
+
+
+def load_email_settings(tenant_id: int | None = None) -> dict:
+    settings_file = tenant_email_settings_file(tenant_id)
+    if settings_file.exists():
         try:
             return normalize_email_settings(
-                json.loads(EMAIL_SETTINGS_FILE.read_text(encoding="utf-8"))
+                json.loads(settings_file.read_text(encoding="utf-8"))
             )
         except (OSError, json.JSONDecodeError):
             pass
-    return normalize_email_settings()
+    defaults = {"from_email": "info@hisbenew.com"} if tenant_id is not None else {}
+    return normalize_email_settings(defaults)
 
 
-def save_email_settings(settings: dict) -> dict:
+def save_email_settings(settings: dict, tenant_id: int | None = None) -> dict:
     normalized = normalize_email_settings(settings)
     APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    EMAIL_SETTINGS_FILE.write_text(json.dumps(normalized, indent=2), encoding="utf-8")
+    tenant_email_settings_file(tenant_id).write_text(json.dumps(normalized, indent=2), encoding="utf-8")
     return normalized
 
 
@@ -3848,7 +3874,9 @@ def html_from_plain_text(value: str) -> str:
 
 def render_email_template(settings: dict, event_key: str, context: dict) -> dict:
     normalized = normalize_email_settings(settings)
-    event = normalized["events"].get(event_key) or next(iter(normalized["events"].values()))
+    event = normalized["events"].get(event_key)
+    if event is None:
+        raise HTTPException(status_code=400, detail="Unknown email template. Refresh the portal and select a template.")
     style = normalized["style"]
     subject = render_email_tokens(event.get("subject", ""), context).strip() or "ERP notification"
     preheader = render_email_tokens(event.get("preheader", ""), context).strip()
@@ -3901,6 +3929,9 @@ def render_email_template(settings: dict, event_key: str, context: dict) -> dict
 </html>
 """.strip()
 
+    if event_key in {"service_taker_tracking", "service_taker_balance_reminder"}:
+        from .customer_email import render_customer_email
+        html_body = render_customer_email(normalized, event_key, context, heading, preheader, body_text)
     return {
         "subject": subject,
         "preheader": preheader,
@@ -4048,7 +4079,7 @@ def email_recipients_for_event(settings: dict, event: dict, context: dict) -> li
 
 
 def send_configured_email_event(db: Session, event_key: str, context: dict) -> dict:
-    settings = load_email_settings()
+    settings = load_email_settings(db.info.get("tenant_id"))
     event = settings["events"].get(event_key)
     if not settings.get("enabled") or not event or not event.get("enabled"):
         return {"status": "skipped", "reason": "disabled"}
@@ -4160,6 +4191,11 @@ def sample_email_context(event_key: str, overrides: dict | None = None) -> dict:
         "due_date": "2026-07-14 18:00",
         "notes": "Finish edge polishing before packing.",
         "order_no": "ORD-1001",
+        "contact_name": "Alex", "company_name": "Hisbenew Industries",
+        "courier": "DHL", "tracking_number": "1234567890",
+        "currency": "USD", "account_balance": "250.00",
+        "package_details": "24 pieces · Individual boxes · Weight: 8.5 kg",
+        "packaging": "Individual boxes", "shipping_weight_kg": "8.5",
         "customer_name": "Wholesale Buyer",
         "customer_email": "buyer@example.com",
     }
@@ -4169,8 +4205,8 @@ def sample_email_context(event_key: str, overrides: dict | None = None) -> dict:
 
 @app.get("/admin/email-settings")
 def get_admin_email_settings(request: Request, db: Session = Depends(get_db)):
-    require_admin_user(request, db)
-    return load_email_settings()
+    user = require_admin_user(request, db)
+    return load_email_settings(getattr(request.state, "tenant_id", None) or user.tenant_id)
 
 
 @app.get("/admin/call-settings")
@@ -4208,7 +4244,7 @@ def update_admin_call_settings(
 @app.put("/admin/email-settings")
 def update_admin_email_settings(payload: dict, request: Request, db: Session = Depends(get_db)):
     admin_user = require_admin_user(request, db)
-    settings = save_email_settings(payload)
+    settings = save_email_settings(payload, getattr(request.state, "tenant_id", None) or admin_user.tenant_id)
     record_activity(
         db,
         actor_user_id=admin_user.id,
@@ -4225,8 +4261,8 @@ def update_admin_email_settings(payload: dict, request: Request, db: Session = D
 
 @app.post("/admin/email/preview")
 def preview_admin_email(payload: EmailPreviewRequest, request: Request, db: Session = Depends(get_db)):
-    require_admin_user(request, db)
-    settings = load_email_settings()
+    user = require_admin_user(request, db)
+    settings = load_email_settings(getattr(request.state, "tenant_id", None) or user.tenant_id)
     context = sample_email_context(payload.event_key, payload.context)
     return render_email_template(settings, payload.event_key, context)
 
@@ -4234,7 +4270,7 @@ def preview_admin_email(payload: EmailPreviewRequest, request: Request, db: Sess
 @app.post("/admin/email/test")
 def send_admin_test_email(payload: EmailTestRequest, request: Request, db: Session = Depends(get_db)):
     admin_user = require_admin_user(request, db)
-    settings = load_email_settings()
+    settings = load_email_settings(getattr(request.state, "tenant_id", None) or admin_user.tenant_id)
     context = sample_email_context(payload.event_key, payload.context)
     context["recipient_email"] = payload.recipient
     rendered = render_email_template(settings, payload.event_key, context)

@@ -213,6 +213,7 @@ class ServiceTakerShippingRequestAdminUpdate(BaseModel):
 
 
 class ServiceTakerManufacturingShippingAdminUpdate(BaseModel):
+    send_tracking_email: bool = False
     status: str | None = Field(default=None, pattern="^(Submitted|Processing|Shipped|Delivered|Cancelled)$")
     shipping_weight_kg: float | None = Field(default=None, ge=0)
     shipping_cost: float | None = Field(default=None, ge=0)
@@ -221,6 +222,7 @@ class ServiceTakerManufacturingShippingAdminUpdate(BaseModel):
 
 
 class ServiceTakerManufacturingAdminUpdate(BaseModel):
+    send_tracking_email: bool = False
     status: str | None = Field(
         default=None,
         pattern="^(Quote requested|Quoted|Rejected|Deposit pending|Confirmed|In production|Quality check|Ready|Completed|Cancelled)$",
