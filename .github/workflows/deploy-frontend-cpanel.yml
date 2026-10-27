@@ -21,26 +21,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Build Android install file
-        working-directory: mobile
-        run: |
-          flutter pub get
-          flutter build apk --release
-          mkdir -p ../frontend/public/downloads
-          cp build/app/outputs/flutter-apk/app-release.apk ../frontend/public/downloads/hisbenew-factory-erp.apk
-
+      # APKs are built and verified separately with the installed app's signing key.
+      # The web build publishes the exact signed asset pinned in mobile-release.json.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
