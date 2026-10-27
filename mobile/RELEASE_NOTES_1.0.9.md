@@ -9,7 +9,8 @@
 
 ## Verification
 
-- All 23 Flutter tests passed, including call-screen sizing, worker navigation, offline sync, and offline product photos.
+- The Flutter test suite passed in the hosted Android release build, including call-screen sizing, worker navigation, offline sync, and offline product photos.
 - Portal production build and call-delivery backend tests passed.
-- Android release packaging did not complete in this session, so this note does not certify an installable APK.
+- Universal Android APK verified as version 1.0.9, build 4008; package alignment and APK signatures passed.
+- Signed with the same installation certificate as 1.0.8 so existing installations can update.
 - Real-device call quality still needs confirmation on the worker phone and portal browser.
