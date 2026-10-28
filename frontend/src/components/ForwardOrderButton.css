@@ -1,0 +1,21 @@
+.order-forward-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 38px; height: 38px; padding: 8px; margin: 0 5px; color: #245c45; background: #f0f7f2; border: 1px solid #bfd7c7; border-radius: 9px; cursor: pointer; }
+.order-forward-icon:hover { background: #dfeee4; }
+.order-forward-icon { align-self: center; }
+.order-forward-icon:focus-visible { outline: 3px solid #85b4ff; outline-offset: 2px; }
+.order-forward-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); box-sizing: border-box; padding: 24px; color: #172b22; background: #fff; border: 0; border-radius: 16px; box-shadow: 0 24px 80px #0004; overflow: auto; }
+.order-forward-dialog::backdrop { background: #14251c99; }
+.order-forward-dialog { font-family: system-ui, sans-serif; }
+.order-forward-dialog form > p { margin: 2px 0; }
+.order-forward-dialog header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.order-forward-dialog h2 { margin: 0; font-size: 24px; }
+.order-forward-dialog p { line-height: 1.5; }
+.order-forward-dialog header button { padding: 4px 12px; font-size: 26px; border: 0; background: transparent; cursor: pointer; }
+.order-forward-dialog form { display: grid; gap: 10px; }
+.order-forward-dialog label { display: grid; gap: 6px; font-weight: 600; }
+.order-forward-dialog select, .order-forward-dialog textarea, .order-forward-dialog input { width: 100%; box-sizing: border-box; min-height: 42px; border: 1px solid #bdcfc5; border-radius: 8px; padding: 9px; font: inherit; color: #172b22; background: #fff; }
+.order-forward-dialog footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+.order-forward-dialog footer button { padding: 11px 18px; border-radius: 8px; border: 1px solid #b4c9bd; background: #fff; cursor: pointer; font: inherit; }
+.order-forward-dialog footer button[type=submit] { color: #fff; background: #245c45; }
+.order-forward-dialog button:disabled { opacity: .55; cursor: default; }
+.order-forward-dialog .order-forward-error { color: #a42929; }
+.order-forward-dialog .order-forward-success { color: #20603c; font-weight: 600; }

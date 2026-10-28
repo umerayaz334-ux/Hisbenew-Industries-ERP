@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import api from "../api/api";
 import { useConfirmDialog } from "./DialogProvider";
+import "../pages/Workers.css";
 
-export default function WorkerForwarding({ workers, onConnectionsChange }) {
+const ignoreConnections = () => {};
+
+export default function WorkerForwarding({ workers, onConnectionsChange = ignoreConnections, onDefaultChange }) {
   const confirmDialog = useConfirmDialog();
   const [connections, setConnections] = useState([]);
   const [workerId, setWorkerId] = useState("");
@@ -11,25 +14,30 @@ export default function WorkerForwarding({ workers, onConnectionsChange }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [defaultConnectionId, setDefaultConnectionId] = useState("");
 
   const refresh = async () => {
-    const { data } = await api.get("/order-forwarding/connections");
+    const [{ data }, settings] = await Promise.all([api.get("/order-forwarding/connections"), api.get("/order-forwarding/settings")]);
     setConnections(data);
     onConnectionsChange(data.filter((row) => row.outgoing && row.is_active));
+    setDefaultConnectionId(String(settings.data.default_connection_id || ""));
+    onDefaultChange?.(settings.data.default_connection_id);
   };
 
   useEffect(() => {
     let canceled = false;
-    api.get("/order-forwarding/connections").then(({ data }) => {
+    Promise.all([api.get("/order-forwarding/connections"), api.get("/order-forwarding/settings")]).then(([{ data }, settings]) => {
       if (!canceled) {
         setConnections(data);
         onConnectionsChange(data.filter((row) => row.outgoing && row.is_active));
+        setDefaultConnectionId(String(settings.data.default_connection_id || ""));
+        onDefaultChange?.(settings.data.default_connection_id);
       }
     }).catch((err) => {
       if (!canceled) setError(err.response?.data?.detail || "Forwarding connections could not be loaded.");
     });
     return () => { canceled = true; };
-  }, [onConnectionsChange]);
+  }, [onConnectionsChange, onDefaultChange]);
 
   const run = async (action) => {
     setBusy(true);
@@ -44,6 +52,21 @@ export default function WorkerForwarding({ workers, onConnectionsChange }) {
     <section className="workers-assignment-panel" aria-label="Cross-company order forwarding">
       <h2>Forward orders across companies</h2>
       <p>Workers keep their existing login. Create a code in the receiving company, then enter it in the company sending orders.</p>
+      <div className="workers-order-handoff-form">
+        <label>Default receiving worker
+          <select value={defaultConnectionId} onChange={(event) => setDefaultConnectionId(event.target.value)}>
+            <option value="">Choose each time</option>
+            {connections.filter((row) => row.outgoing && row.is_active).map((row) => <option key={row.id} value={row.id}>{row.worker_name} / {row.company_name}</option>)}
+          </select>
+        </label>
+        <button type="button" disabled={busy} onClick={() => run(async () => {
+          const value = defaultConnectionId ? Number(defaultConnectionId) : null;
+          await api.put("/order-forwarding/settings", { default_connection_id: value });
+          onDefaultChange?.(value);
+          setMessage("Default worker saved. Existing assignments stay with their current worker.");
+        })}>Save default worker</button>
+      </div>
+      <p>This worker is preselected when you open the share icon on Orders or Shipping. Changing the default only affects new assignments. Connect another approved worker below to select them instead.</p>
       <div className="workers-order-handoff-form">
         <label>
           Receive orders with this worker

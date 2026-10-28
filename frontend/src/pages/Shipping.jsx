@@ -1,3 +1,4 @@
+import ForwardOrderButton from "../components/ForwardOrderButton";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import JsBarcode from "jsbarcode";
@@ -3689,6 +3690,8 @@ function Shipping({ userRole }) {
                     </span>
 
                   </button>
+
+                  <ForwardOrderButton order={order} taskType="Shipping" onForwarded={() => loadShippingData({ quiet: true })} />
 
                   </div>
 

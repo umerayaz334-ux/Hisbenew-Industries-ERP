@@ -1,3 +1,4 @@
+import OrderForwardingSettings from "../components/OrderForwardingSettings";
 import { useEffect, useMemo, useState } from "react";
 import api, { API_BASE_URL } from "../api/api";
 import { renderEmailPreview } from "../utils/emailPreview";
@@ -263,14 +264,14 @@ function Settings({ authenticatedUser, onUpdateUser }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [activeSettingsTab, setActiveSettingsTab] = useState(() => ["templates", "emails"].includes(new URLSearchParams(window.location.search).get("tab")) ? new URLSearchParams(window.location.search).get("tab") : "profile");
+  const [activeSettingsTab, setActiveSettingsTab] = useState(() => ["templates", "emails", "forwarding"].includes(new URLSearchParams(window.location.search).get("tab")) ? new URLSearchParams(window.location.search).get("tab") : "profile");
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installState, setInstallState] = useState(() =>
     isStandaloneApp() ? "installed" : "browser"
   );
   useEffect(() => {
     const url = new URL(window.location.href);
-    if (activeSettingsTab === "templates" || activeSettingsTab === "emails") url.searchParams.set("tab", activeSettingsTab);
+    if (activeSettingsTab === "templates" || activeSettingsTab === "emails" || activeSettingsTab === "forwarding") url.searchParams.set("tab", activeSettingsTab);
     else url.searchParams.delete("tab");
     window.history.replaceState(window.history.state, "", url);
   }, [activeSettingsTab]);
@@ -364,7 +365,7 @@ function Settings({ authenticatedUser, onUpdateUser }) {
   const settingsTabs = useMemo(
     () => [
       { key: "profile", label: "Profile" },
-      ...(isAdmin ? [{ key: "calling", label: "Calling" }] : []),
+      ...(isAdmin ? [{ key: "calling", label: "Calling" }, { key: "forwarding", label: "Order forwarding" }] : []),
       ...(isAdmin ? [{ key: "emails", label: "Email settings" }, { key: "templates", label: "Email templates" }] : []),
       { key: "install", label: "App install" },
       { key: "sync", label: "Connection" },
@@ -1066,6 +1067,8 @@ function Settings({ authenticatedUser, onUpdateUser }) {
           </button>
         ))}
       </nav>
+
+      {isAdmin && activeSettingsTab === "forwarding" && <OrderForwardingSettings />}
 
       {isAdmin && activeSettingsTab === "calling" && (
         <section className="settings-call-panel settings-card">

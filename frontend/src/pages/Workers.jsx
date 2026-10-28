@@ -101,6 +101,7 @@ function Workers() {
   const confirmDialog = useConfirmDialog();
   const [workers, setWorkers] = useState([]);
   const [forwardingConnections, setForwardingConnections] = useState([]);
+  const [defaultConnectionId, setDefaultConnectionId] = useState(null);
   const [users, setUsers] = useState([]);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -321,7 +322,7 @@ function Workers() {
     return {
       task_type:
         orderNeedsPreparation(order) && !preparationTask ? "Preparation" : "Shipping",
-      worker_id: "",
+      worker_id: defaultConnectionId ? `forward:${defaultConnectionId}` : "",
       due_at: "",
       labor_cost: "",
       notes: "",
@@ -961,7 +962,7 @@ function Workers() {
         </div>
       </section>
 
-      <WorkerForwarding workers={workers} onConnectionsChange={setForwardingConnections} />
+      <WorkerForwarding workers={workers} onConnectionsChange={setForwardingConnections} onDefaultChange={setDefaultConnectionId} />
 
       <section className="workers-assignment-panel">
         <div className="workers-panel-heading workers-assignment-heading">

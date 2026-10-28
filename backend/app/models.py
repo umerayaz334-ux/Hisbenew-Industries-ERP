@@ -2320,6 +2320,14 @@ class WorkerForwardingConnection(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class WorkerForwardingPreference(Base):
+    __tablename__ = "worker_forwarding_preferences"
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), primary_key=True)
+    default_connection_id = Column(Integer, ForeignKey("worker_forwarding_connections.id"), nullable=True)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ForwardedOrderTask(Base):
     __tablename__ = "forwarded_order_tasks"
     id = Column(Integer, primary_key=True)

@@ -2,6 +2,22 @@ name: Deploy backend to Windows VPS
 
 on:
   workflow_dispatch:
+    inputs:
+      forwarding_mode:
+        description: Optional owner-authorized forwarding setup
+        type: choice
+        options: [none, inspect, setup]
+        default: none
+      source_company:
+        description: Sending company slug for optional setup
+        default: cuterex
+      target_company:
+        description: Receiving company slug for optional setup
+        default: hisbenew
+      worker_login:
+        description: Exact receiving worker login for optional setup
+      order_numbers:
+        description: Comma-separated order numbers for optional setup
 
 concurrency:
   group: backend-vps-production
@@ -101,3 +117,24 @@ jobs:
 
       - name: Deploy backend
         run: .\scripts\deploy-backend.ps1
+
+      - name: Optional owner-authorized forwarding setup
+        if: inputs.forwarding_mode != 'none' && inputs.forwarding_mode != ''
+        env:
+          FORWARDING_MODE: ${{ inputs.forwarding_mode }}
+          FORWARDING_SOURCE: ${{ inputs.source_company }}
+          FORWARDING_TARGET: ${{ inputs.target_company }}
+          FORWARDING_WORKER: ${{ inputs.worker_login }}
+          FORWARDING_ORDERS: ${{ inputs.order_numbers }}
+          SKIP_DATABASE_INITIALIZATION: "1"
+        run: |
+          $root = if ($env:ERP_ROOT) { $env:ERP_ROOT } else { 'C:\HisbenewERP' }
+          $backend = Join-Path $root 'backend'
+          $venv = if ($env:ERP_BACKEND_VENV) { $env:ERP_BACKEND_VENV } elseif (Test-Path (Join-Path $backend 'venv\Scripts\python.exe')) { Join-Path $backend 'venv' } else { Join-Path $backend '.venv' }
+          $python = Join-Path $venv 'Scripts\python.exe'
+          $script = Join-Path $env:GITHUB_WORKSPACE 'scripts\configure_order_forwarding.py'
+          Push-Location $backend
+          try {
+            & $python $script
+            if ($LASTEXITCODE -ne 0) { throw 'Forwarding setup did not complete; review inspection output.' }
+          } finally { Pop-Location }

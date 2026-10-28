@@ -14,7 +14,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, object_session
 
 from ..models import (ForwardedOrderTask, Order, OrderWorkflowTask, Tenant, User,
-                      Worker, WorkerForwardingConnection, WorkerForwardingInvite)
+                      Worker, WorkerForwardingConnection, WorkerForwardingInvite,
+                      WorkerForwardingPreference)
 
 OPEN = {"New", "Ready", "In Progress", "Pending Verification"}
 ADMINS = {"admin", "super_admin"}
@@ -94,11 +95,32 @@ def connections(request, db):
         source = db.query(Tenant).filter_by(id=row.source_tenant_id).first()
         target = db.query(Tenant).filter_by(id=row.target_tenant_id).first()
         result.append({"id": row.id, "worker_id": row.worker_id,
+            "target_tenant_id": row.target_tenant_id, "source_tenant_id": row.source_tenant_id,
             "worker_name": worker.name if worker else "Unavailable worker",
             "company_name": target.company_name if target else "Unavailable company",
             "source_company_name": source.company_name if source else "Unavailable company",
             "outgoing": row.source_tenant_id == tenant, "is_active": row.is_active})
     return result
+
+
+def preferences(request, db, connection_id=None, save=False):
+    user, tenant = actor(request, db, admin=True)
+    row = db.query(WorkerForwardingPreference).filter_by(tenant_id=tenant).first()
+    if save:
+        if connection_id is not None:
+            connection = db.query(WorkerForwardingConnection).filter_by(id=connection_id,
+                source_tenant_id=tenant, is_active=True).first()
+            if not connection:
+                raise HTTPException(400, "Choose an active worker connected to this company.")
+            foreign_worker(db, connection.worker_id, connection.target_tenant_id)
+        if row is None:
+            row = WorkerForwardingPreference(tenant_id=tenant, updated_by_user_id=user.id)
+            db.add(row)
+        row.default_connection_id = connection_id
+        row.updated_by_user_id = user.id
+        row.updated_at = datetime.utcnow()
+        db.commit()
+    return {"default_connection_id": row.default_connection_id if row else None}
 
 
 def revoke(request, db, connection_id):
@@ -110,6 +132,10 @@ def revoke(request, db, connection_id):
     if not row:
         raise HTTPException(404, "Connection not found.")
     row.is_active = False
+    preference = db.query(WorkerForwardingPreference).filter_by(
+        tenant_id=row.source_tenant_id, default_connection_id=row.id).first()
+    if preference:
+        preference.default_connection_id = None
     # Revocation stops future forwarding and cancels unfinished tasks immediately.
     for link in db.query(ForwardedOrderTask).filter_by(connection_id=row.id).all():
         task = db.query(OrderWorkflowTask).execution_options(skip_tenant_scope=True).filter(

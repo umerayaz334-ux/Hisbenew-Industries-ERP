@@ -2,6 +2,18 @@
 
 ## Use
 
+On **Orders**, click the share icon in an unfulfilled order's Actions column
+(or its detail header). On **Shipping → Pending dispatch**, the share icon is
+beside each order header, so expanding the dispatch card is unnecessary. The
+popup lets you select a connected receiving company, its approved worker,
+Preparation/Shipping, instructions and a due date.
+
+Open **Settings → Order forwarding** to connect or disconnect workers and change
+the default receiving worker. The default is preselected in share popups and on
+Workers. It affects new assignments only; existing tasks retain their worker.
+Disconnecting a connection clears it as the default and cancels unfinished tasks.
+The earlier Workers assignment flow below also remains available.
+
 1. In the receiving company (for example Hisbenew), open **Workers**.
 2. Under **Forward orders across companies**, select a worker with an active,
    linked worker login and create a forwarding code. Copy it to the sending

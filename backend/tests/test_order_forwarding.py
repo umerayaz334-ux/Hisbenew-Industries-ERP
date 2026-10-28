@@ -32,7 +32,7 @@ class ForwardingTests(unittest.TestCase):
             db.add_all([Worker(id=1, tenant_id=2, name="Receiving worker", role="Packing"), Worker(id=2, tenant_id=2, name="Other worker", role="Packing")])
             db.flush()
             db.add_all([User(id=i, tenant_id=i, name=f"Admin {i}", role="admin") for i in (1, 2, 3)])
-            db.add_all([User(id=4, tenant_id=2, name="Worker", role="worker", worker_id=1),
+            db.add_all([User(id=4, tenant_id=2, name="Worker", username="receiving", role="worker", worker_id=1),
                         User(id=5, tenant_id=2, name="Other", role="worker", worker_id=2)])
             db.add(Customer(id=1, tenant_id=1, name="Test customer", phone="private-phone", address="Private address"))
             db.add(Product(id=1, tenant_id=1, name="Knife", article_no="SKU", factory_stock=10, reserved_stock=2))
@@ -172,6 +172,49 @@ class ForwardingTests(unittest.TestCase):
             self.assertEqual(db.get(Product, 1).factory_stock, 10)
             self.assertEqual(db.get(Order, 1).shipping_status, "Packed")
             self.assertEqual(db.get(OrderWorkflowTask, task["id"]).status, "In Progress")
+
+    def test_default_worker_settings_are_tenant_scoped_and_do_not_reassign_existing_tasks(self):
+        task, first = self.forward()
+        self.assertIsNone(self.call("GET", "/order-forwarding/settings")["default_connection_id"])
+        self.call("PUT", "/order-forwarding/settings", body={"default_connection_id": first})
+        code = self.call("POST", "/order-forwarding/workers/2/code", user=2)["code"]
+        second = self.call("POST", "/order-forwarding/connections", body={"code": code})["id"]
+        self.call("PUT", "/order-forwarding/settings", body={"default_connection_id": second})
+        self.assertEqual(self.call("GET", "/order-forwarding/settings")["default_connection_id"], second)
+        self.assertIsNone(self.call("GET", "/order-forwarding/settings", user=3)["default_connection_id"])
+        self.call("PUT", "/order-forwarding/settings", user=3, body={"default_connection_id": second}, status=400)
+        self.call("GET", "/order-forwarding/settings", user=4, status=403)
+        self.call("PUT", "/order-forwarding/settings", user=4, body={"default_connection_id": second}, status=403)
+        with Session(self.engine) as db:
+            self.assertEqual(db.get(OrderWorkflowTask, task["id"]).assigned_worker_id, 1)
+        self.call("DELETE", f"/order-forwarding/connections/{second}", user=2)
+        self.assertIsNone(self.call("GET", "/order-forwarding/settings")["default_connection_id"])
+        self.call("PUT", "/order-forwarding/settings", body={"default_connection_id": second}, status=400)
+        self.call("PUT", "/order-forwarding/settings", body={"default_connection_id": None})
+
+    def test_authorized_setup_inspects_without_writing_then_assigns_idempotently(self):
+        import importlib.util
+        import io
+        from contextlib import redirect_stdout
+        from pathlib import Path
+        from app.models import WorkerForwardingPreference
+        spec = importlib.util.spec_from_file_location("configure_forwarding", Path(__file__).resolve().parents[2] / "scripts" / "configure_order_forwarding.py")
+        setup = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(setup)
+        env = {"FORWARDING_SOURCE": "company-1", "FORWARDING_TARGET": "company-2", "FORWARDING_WORKER": "receiving", "FORWARDING_ORDERS": "ORDER-1", "FORWARDING_MODE": "inspect"}
+        with patch("app.database.SessionLocal", lambda: Session(self.engine)), patch.dict("os.environ", env), redirect_stdout(io.StringIO()):
+            setup.run()
+        with Session(self.engine) as db:
+            self.assertEqual(db.query(OrderWorkflowTask).count(), 0)
+            self.assertEqual(db.query(WorkerForwardingPreference).count(), 0)
+        env["FORWARDING_MODE"] = "setup"
+        with patch("app.database.SessionLocal", lambda: Session(self.engine)), patch.dict("os.environ", env), redirect_stdout(io.StringIO()):
+            setup.run()
+            setup.run()
+        with Session(self.engine) as db:
+            task = db.query(OrderWorkflowTask).one()
+            self.assertEqual((task.tenant_id, task.assigned_worker_id, task.task_type), (2, 1, "Shipping"))
+            self.assertIsNotNone(db.query(WorkerForwardingPreference).one().default_connection_id)
 
 
 if __name__ == "__main__":

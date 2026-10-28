@@ -29,6 +29,21 @@ class ForwardOrder(BaseModel):
     labor_cost: float = Field(default=0, ge=0, allow_inf_nan=False)
 
 
+class ForwardingSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    default_connection_id: int | None = Field(default=None, gt=0)
+
+
+@router.get("/settings")
+def get_settings(request: Request, db: Session = Depends(forwarding_db)):
+    return service.preferences(request, db)
+
+
+@router.put("/settings")
+def save_settings(payload: ForwardingSettings, request: Request, db: Session = Depends(forwarding_db)):
+    return service.preferences(request, db, payload.default_connection_id, save=True)
+
+
 @router.post("/workers/{worker_id}/code")
 def issue_code(worker_id: int, request: Request, db: Session = Depends(forwarding_db)):
     return service.issue_invite(request, db, worker_id)

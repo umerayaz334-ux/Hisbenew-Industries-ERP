@@ -1,3 +1,4 @@
+import ForwardOrderButton from "../components/ForwardOrderButton";
 import Pagination, { usePagination } from "../components/Pagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
@@ -2559,6 +2560,7 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
                   </p>
                 </div>
                 <div className="orders-detail-actions">
+                  <ForwardOrderButton order={selectedOrder} onForwarded={() => fetchData({ quiet: true })} />
                   <button
                     className="orders-detail-edit"
                     onClick={() => handleEdit(selectedOrder)}
@@ -3188,6 +3190,7 @@ function Orders({ initialCustomerId = null, onInitialCustomerHandled = null }) {
                         {renderOrderProgressMini(order)}
                       </td>
                       <td className="orders-actions-cell" data-label="Actions">
+                        <ForwardOrderButton order={order} onForwarded={() => fetchData({ quiet: true })} />
                         <button
                           className="orders-text-action"
                           onClick={(event) => {
