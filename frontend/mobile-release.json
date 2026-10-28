@@ -1,14 +1,14 @@
 {
-  "defaultFile": "hisbenew-erp-1.0.9-4008-universal.apk",
-  "build": 4008,
-  "version": "1.0.9",
+  "defaultFile": "hisbenew-erp-1.0.10-4009-universal.apk",
+  "build": 4009,
+  "version": "1.0.10",
   "assets": [
     {
       "label": "Android install",
-      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.9-4008/hisbenew-erp-1.0.9-4008-universal.apk",
-      "file": "hisbenew-erp-1.0.9-4008-universal.apk",
-      "bytes": 60738508,
-      "sha256": "0ba16e67b5532885d83947174b159a8e647a9ccde4ee50f24775c9a84f6d7147"
+      "url": "https://github.com/umerayaz334-ux/Hisbenew-Industries-ERP/releases/download/android-1.0.10-4009/hisbenew-erp-1.0.10-4009-universal.apk",
+      "file": "hisbenew-erp-1.0.10-4009-universal.apk",
+      "bytes": 60820428,
+      "sha256": "933f46653c127ab272b94dc696a19bb7993dae7d7e5edae12cdc22f3141128a5"
     }
   ]
 }

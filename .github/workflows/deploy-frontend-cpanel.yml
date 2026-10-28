@@ -54,3 +54,6 @@ jobs:
           curl --fail --silent --show-error --retry 5 --retry-delay 10 https://app.hisbenew.com/
           curl --fail --silent --show-error --retry 5 --retry-delay 10 -I https://app.hisbenew.com/login
           curl --fail --silent --show-error --retry 5 --retry-delay 10 -I https://app.hisbenew.com/downloads/hisbenew-factory-erp.apk
+
+      - name: Verify live forwarding controls and signed APK manifest
+        run: node scripts/verify-live-forwarding.mjs

@@ -9,7 +9,7 @@ class TaskApi extends ErpApi {
   final calls = <String>[];
   @override
   Future<List<Map<String, dynamic>>> workerOrderTasks(ErpSession session) async => [{
-    'id': 12, 'order_no': 'C6Q6WP38M8', 'source_company_name': 'Cuterex',
+    'id': 12, 'order_no': 'DEMO-001', 'source_company_name': 'Cuterex',
     'task_type': 'Preparation', 'status': status, 'notes': 'Pack carefully', 'items': [],
   }];
   @override
@@ -29,7 +29,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: OrderTasksPage(model: model))));
     await tester.pumpAndSettle();
     expect(find.text('From Cuterex'), findsOneWidget);
-    expect(find.text('#C6Q6WP38M8'), findsOneWidget);
+    expect(find.text('#DEMO-001'), findsOneWidget);
     await tester.tap(find.text('Accept task'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Submit completed work'));

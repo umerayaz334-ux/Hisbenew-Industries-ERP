@@ -34,7 +34,7 @@ class ForwardingTests(unittest.TestCase):
             db.add_all([User(id=i, tenant_id=i, name=f"Admin {i}", role="admin") for i in (1, 2, 3)])
             db.add_all([User(id=4, tenant_id=2, name="Worker", role="worker", worker_id=1),
                         User(id=5, tenant_id=2, name="Other", role="worker", worker_id=2)])
-            db.add(Customer(id=1, tenant_id=1, name="Lillian", phone="private-phone", address="Private address"))
+            db.add(Customer(id=1, tenant_id=1, name="Test customer", phone="private-phone", address="Private address"))
             db.add(Product(id=1, tenant_id=1, name="Knife", article_no="SKU", factory_stock=10, reserved_stock=2))
             db.flush()
             db.add_all([Order(id=i, tenant_id=1, customer_id=1, order_no=f"ORDER-{i}", total_amount=999) for i in (1, 2)])
