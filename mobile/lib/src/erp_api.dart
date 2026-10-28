@@ -445,6 +445,10 @@ class ErpApi {
     return _cachedList(session, '/order-workflow/tasks?worker_id=${session.workerId}');
   }
 
+  Future<void> actOnOrderTask(ErpSession session, int taskId, String action, {Map<String, dynamic>? body}) async {
+    await _send(method: 'PATCH', url: '${session.baseUrl}/order-workflow/tasks/$taskId/$action', token: session.token, body: body);
+  }
+
   Future<List<Map<String, dynamic>>> workerPayments(ErpSession session) async {
     if (session.workerId <= 0) return const [];
     return _cachedList(session, '/worker-payments?worker_id=${session.workerId}');

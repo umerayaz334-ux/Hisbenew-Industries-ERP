@@ -1,3 +1,4 @@
+import 'order_tasks_page.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -237,6 +238,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     if (index == 5 && !_allow('Orders')) index = 0;
     if (index == 6 && !_allow('Products')) index = 0;
     if (index == 8 && !_allow('Manufacturing')) index = 0;
+    if (index == 9 && !_allow('My Tasks')) index = 0;
     if (index != _index) setState(() => _index = index);
   }
 
@@ -249,6 +251,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
     if (index == 5 && !_allow('Orders')) index = 0;
     if (index == 6 && !_allow('Products')) index = 0;
     if (index == 8 && !_allow('Manufacturing')) index = 0;
+    if (index == 9 && !_allow('My Tasks')) index = 0;
     setState(() {
       _index = index;
       _notifications = false;
@@ -267,6 +270,7 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
       2 => WorkerChat(key: key, model: widget.model, calls: _calls, refreshTick: tick),
       5 => OrdersPage(key: key, model: widget.model, refreshTick: tick),
       6 => ProductsPage(key: key, model: widget.model, refreshTick: tick),
+      9 => OrderTasksPage(key: key, model: widget.model, refreshTick: tick),
       8 => ManufacturingPage(key: key, model: widget.model, refreshTick: tick),
       _ => ProfilePage(key: key, model: widget.model),
     };
@@ -346,12 +350,13 @@ class _WorkerPortalState extends State<WorkerPortal> with WidgetsBindingObserver
                             onOpenManufacturing: () => _open(8),
                             onOpenChat: () => _open(2),
                             onOpenOrders: () => _open(5),
+                            onOpenTasks: () => _open(9),
                             onOpenProducts: () => _open(6),
                             unread: _unread,
                             topInset: showSync ? 0 : top,
                           ),
                         for (final index in _openPages)
-                          if (const {1, 2, 5, 6, 8}.contains(index))
+                          if (const {1, 2, 5, 6, 8, 9}.contains(index))
                             Padding(padding: EdgeInsets.only(top: showSync ? 0 : top), child: _keptPage(index)),
                         if (!home && !_notifications && pages.containsKey(_index))
                           Padding(padding: EdgeInsets.only(top: showSync ? 0 : top), child: pages[_index]!),
@@ -460,6 +465,7 @@ class _WorkerHome extends StatelessWidget {
     required this.onOpenManufacturing,
     required this.onOpenChat,
     required this.onOpenOrders,
+    required this.onOpenTasks,
     required this.onOpenProducts,
     required this.unread,
     required this.topInset,
@@ -479,6 +485,7 @@ class _WorkerHome extends StatelessWidget {
   final VoidCallback onOpenManufacturing;
   final VoidCallback onOpenChat;
   final VoidCallback onOpenOrders;
+  final VoidCallback onOpenTasks;
   final VoidCallback onOpenProducts;
   final int unread;
   final double topInset;
@@ -559,6 +566,10 @@ class _WorkerHome extends StatelessWidget {
                       ),
                     const SizedBox(height: 8),
                   ],
+                  if (model.canAccess('My Tasks')) Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: _QuickTile(icon: Icons.assignment_outlined, label: phrase(context, 'My Tasks', 'میرے کام'), onTap: onOpenTasks),
+                  ),
                   _SectionHead(title: phrase(context, 'To make', 'بنانا'), action: phrase(context, 'Make', 'بنائیں'), count: needs.length, onAction: onOpenManufacturing),
                   if (needs.isEmpty)
                     const WorkCard(child: Padding(padding: EdgeInsets.all(20), child: Text('Nothing to make right now.')))

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import { useConfirmDialog } from "../components/DialogProvider";
+import WorkerForwarding from "../components/WorkerForwarding";
 import WorkerLedgerModal from "../components/WorkerLedgerModal";
 import { formatUtcLocal } from "../utils/dateUtils";
 import "./Workers.css";
@@ -99,6 +100,7 @@ const getTaskEarning = (task) =>
 function Workers() {
   const confirmDialog = useConfirmDialog();
   const [workers, setWorkers] = useState([]);
+  const [forwardingConnections, setForwardingConnections] = useState([]);
   const [users, setUsers] = useState([]);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -123,6 +125,7 @@ function Workers() {
   const [taskBoardMessage, setTaskBoardMessage] = useState("");
   const [taskBoardError, setTaskBoardError] = useState("");
   const [orderHandoffForms, setOrderHandoffForms] = useState({});
+  const [orderHandoffSearch, setOrderHandoffSearch] = useState("");
   const [orderHandoffSaving, setOrderHandoffSaving] = useState("");
   const [orderHandoffCanceling, setOrderHandoffCanceling] = useState("");
   const [orderHandoffMessage, setOrderHandoffMessage] = useState("");
@@ -388,7 +391,15 @@ function Workers() {
     setOrderHandoffError("");
     setOrderHandoffMessage("");
     try {
-      await api.post(`/orders/${order.id}/workflow-tasks`, {
+      if (String(handoffForm.worker_id).startsWith("forward:")) {
+        await api.post(`/order-forwarding/orders/${order.id}`, {
+          connection_id: Number(handoffForm.worker_id.split(":")[1]),
+          task_type: taskType,
+          labor_cost: handoffForm.labor_cost === "" ? 0 : Number(handoffForm.labor_cost),
+          due_at: handoffForm.due_at ? new Date(handoffForm.due_at).toISOString() : null,
+          notes: handoffForm.notes.trim() || null,
+        });
+      } else await api.post(`/orders/${order.id}/workflow-tasks`, {
         task_type: taskType,
         worker_id: Number(handoffForm.worker_id),
         assigned_quantity: orderQuantity || null,
@@ -950,6 +961,8 @@ function Workers() {
         </div>
       </section>
 
+      <WorkerForwarding workers={workers} onConnectionsChange={setForwardingConnections} />
+
       <section className="workers-assignment-panel">
         <div className="workers-panel-heading workers-assignment-heading">
           <div>
@@ -1178,6 +1191,10 @@ function Workers() {
           <span>{unfulfilledOrders.length}</span>
         </div>
 
+        <label>
+          Find orders to assign or forward
+          <input type="search" value={orderHandoffSearch} onChange={(event) => setOrderHandoffSearch(event.target.value)} placeholder="Order number or customer; separate multiple orders with commas" style={{ width: "100%", marginBottom: "12px" }} />
+        </label>
         {orderHandoffMessage && (
           <p className="workers-task-success">{orderHandoffMessage}</p>
         )}
@@ -1189,7 +1206,11 @@ function Workers() {
           <div className="workers-task-empty">No unfulfilled orders waiting for workers.</div>
         ) : (
           <div className="workers-order-handoff-list">
-            {unfulfilledOrders.map((order) => {
+            {unfulfilledOrders.filter((order) => {
+              const terms = orderHandoffSearch.toLowerCase().split(",").map((term) => term.trim().replace(/^#/, "")).filter(Boolean);
+              const text = `${order.order_no} ${order.customer_name || ""}`.toLowerCase();
+              return terms.length === 0 || terms.some((term) => text.includes(term));
+            }).map((order) => {
               const handoffForm = getOrderHandoffForm(order);
               const orderTasks = orderWorkflowTasksByOrderId.get(Number(order.id)) || [];
               const selectedWorker = activeWorkers.find(
@@ -1271,6 +1292,11 @@ function Workers() {
                         value={handoffForm.worker_id}
                       >
                         <option value="">Select worker</option>
+                        {forwardingConnections.map((connection) => (
+                          <option key={`forward:${connection.id}`} value={`forward:${connection.id}`}>
+                            Forward to {connection.worker_name} / {connection.company_name}
+                          </option>
+                        ))}
                         {activeWorkers.map((worker) => (
                           <option key={worker.id} value={worker.id}>
                             {worker.name} / {worker.role || "Worker"}

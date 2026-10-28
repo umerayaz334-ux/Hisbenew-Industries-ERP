@@ -14,6 +14,7 @@ class WorkspaceDrawer extends StatelessWidget {
     const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Text('Workspace', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800))),
     for (final entry in <(int, String, String, IconData)>[
       (0, 'Dashboard', 'Dashboard', Icons.space_dashboard_outlined),
+      (9, 'My Tasks', 'My Tasks', Icons.assignment_outlined),
       (5, 'Orders', 'Orders', Icons.receipt_long_outlined),
       (1, 'Shipping', 'Shipping', Icons.local_shipping_outlined),
       (8, 'Manufacturing', 'Manufacturing', Icons.precision_manufacturing_outlined),

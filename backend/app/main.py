@@ -62,6 +62,8 @@ from .school import ensure_default_school_foundation, router as school_router
 from .service_takers import router as service_taker_router
 from .routers.deployment_router import router as deployment_router
 from .routers.backups_router import router as backups_router
+from .routers.order_forwarding_router import router as order_forwarding_router
+from .services import order_forwarding
 from .services.backup_service import start_backup_scheduler, stop_backup_scheduler
 from .security import (
     create_access_token,
@@ -190,6 +192,7 @@ app.include_router(service_taker_router)
 app.include_router(deployment_router)
 app.include_router(print_agent_router)
 app.include_router(backups_router)
+app.include_router(order_forwarding_router)
 app.router.add_event_handler("startup", realtime_hub.start)
 app.router.add_event_handler("shutdown", realtime_hub.stop)
 app.router.add_event_handler("startup", amazon_auto_sync_service.start)
@@ -7747,6 +7750,9 @@ def normalize_order_workflow_task_earning(
 
 
 def order_workflow_task_response(task: OrderWorkflowTask, privacy: dict | None = None):
+    forwarded = order_forwarding.forwarded_response(task, privacy)
+    if forwarded is not None:
+        return forwarded
     order = task.order
     customer = order.customer if order else None
     if order:
@@ -18867,6 +18873,11 @@ def get_order_workflow_tasks(
     db: Session = Depends(get_db),
 ):
     privacy = access_privacy_context(request, db)
+    user = get_authenticated_user(request, db)
+    if user.role == "worker":
+        if not user.worker_id or (worker_id is not None and worker_id != user.worker_id):
+            raise HTTPException(403, "Only your own worker tasks are available.")
+        worker_id = user.worker_id
     query = db.query(OrderWorkflowTask)
     if order_id is not None:
         query = query.filter(OrderWorkflowTask.order_id == order_id)
@@ -18880,7 +18891,10 @@ def get_order_workflow_tasks(
             query = query.filter(func.lower(OrderWorkflowTask.status) == normalized)
 
     tasks = query.order_by(OrderWorkflowTask.id.desc()).all()
-    return [order_workflow_task_response(task, privacy) for task in tasks]
+    result = [order_workflow_task_response(task, privacy) for task in tasks]
+    if user.role in {"admin", "super_admin"}:
+        result += order_forwarding.outgoing_tasks(db, privacy, order_id, worker_id, status)
+    return sorted(result, key=lambda task: task["id"], reverse=True)
 
 
 @app.post("/orders/{order_id}/workflow-tasks")
@@ -18902,6 +18916,8 @@ def create_order_workflow_task(
         raise HTTPException(status_code=400, detail="Worker is inactive")
 
     task_type = normalize_order_workflow_task_type(payload.task_type)
+    if order_forwarding.open_forward(db, order.id, task_type):
+        raise HTTPException(409, "This step is already forwarded. Cancel it before assigning again.")
     title = f"{task_type} for order {order.order_no}"
     now = datetime.utcnow()
     assigned_quantity, rate_per_piece, labor_cost = normalize_order_workflow_task_earning(
@@ -18972,6 +18988,9 @@ def cancel_order_workflow_task(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    forwarded = order_forwarding.transition(request, db, task_id, "cancel")
+    if forwarded is not None:
+        return forwarded
     privacy = access_privacy_context(request, db)
     task = db.query(OrderWorkflowTask).filter(OrderWorkflowTask.id == task_id).first()
     if not task:
@@ -18994,6 +19013,9 @@ def start_order_workflow_task(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    forwarded = order_forwarding.transition(request, db, task_id, "start")
+    if forwarded is not None:
+        return forwarded
     privacy = access_privacy_context(request, db)
     task = db.query(OrderWorkflowTask).filter(OrderWorkflowTask.id == task_id).first()
     if not task:
@@ -19030,6 +19052,9 @@ def complete_order_workflow_task(
     request: Request,
     db: Session = Depends(get_db),
 ):
+    forwarded = order_forwarding.transition(request, db, task_id, "complete", payload)
+    if forwarded is not None:
+        return forwarded
     privacy = access_privacy_context(request, db)
     task = db.query(OrderWorkflowTask).filter(OrderWorkflowTask.id == task_id).first()
     if not task:

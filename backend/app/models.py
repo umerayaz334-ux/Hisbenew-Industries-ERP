@@ -2299,6 +2299,41 @@ class OrderWorkflowTask(Base):
     assigned_worker = relationship("Worker")
 
 
+class WorkerForwardingInvite(Base):
+    __tablename__ = "worker_forwarding_invites"
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    worker_id = Column(Integer, ForeignKey("workers.id"), nullable=False, unique=True)
+    token_hash = Column(String, nullable=False, unique=True)
+    expires_at = Column(DateTime, nullable=False)
+
+
+class WorkerForwardingConnection(Base):
+    __tablename__ = "worker_forwarding_connections"
+    __table_args__ = (UniqueConstraint("source_tenant_id", "worker_id"),)
+    id = Column(Integer, primary_key=True)
+    source_tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    target_tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    worker_id = Column(Integer, ForeignKey("workers.id"), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ForwardedOrderTask(Base):
+    __tablename__ = "forwarded_order_tasks"
+    id = Column(Integer, primary_key=True)
+    source_tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    target_tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    connection_id = Column(Integer, ForeignKey("worker_forwarding_connections.id"), nullable=False)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
+    task_id = Column(Integer, ForeignKey("order_workflow_tasks.id"), nullable=False, unique=True)
+    active_key = Column(String, nullable=True, unique=True)
+    snapshot_json = Column(Text, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class OrderFollowUp(Base):
     __tablename__ = "order_follow_ups"
 
