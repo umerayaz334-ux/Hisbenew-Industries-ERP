@@ -545,18 +545,18 @@ DEFAULT_EMAIL_SETTINGS = {
     "enabled": False,
     "provider": "smtp",
     "from_name": "Hisbenew ERP",
-    "from_email": "",
+    "from_email": "info@hisbenew.com",
     "reply_to": "",
     "admin_recipients": "",
     "cc": "",
     "bcc": "",
     "smtp": {
-        "host": "",
-        "port": 587,
-        "username": "",
+        "host": "mail.hisbenew.com",
+        "port": 465,
+        "username": "info@hisbenew.com",
         "password": "",
-        "use_tls": True,
-        "use_ssl": False,
+        "use_tls": False,
+        "use_ssl": True,
     },
     "api": {
         "provider": "resend",
@@ -4277,13 +4277,28 @@ def send_admin_test_email(payload: EmailTestRequest, request: Request, db: Sessi
     context = sample_email_context(payload.event_key, payload.context)
     context["recipient_email"] = payload.recipient
     rendered = render_email_template(settings, payload.event_key, context)
-    result = send_email_message(
-        settings,
-        [payload.recipient],
-        rendered["subject"],
-        rendered["text"],
-        rendered["html"],
-    )
+    try:
+        result = send_email_message(
+            settings,
+            [payload.recipient],
+            rendered["subject"],
+            rendered["text"],
+            rendered["html"],
+        )
+    except smtplib.SMTPAuthenticationError:
+        raise HTTPException(status_code=502, detail="The mail server rejected the mailbox login. Check the full email address and the email account password.") from None
+    except ssl.SSLError:
+        raise HTTPException(status_code=502, detail="The secure mail connection failed. For port 465 select SSL / TLS, and check the mail server's certificate with your email provider.") from None
+    except (TimeoutError, socket.timeout):
+        raise HTTPException(status_code=504, detail="The mail server connection timed out. Ask your ERP hosting provider to check outbound access to your SMTP server and port.") from None
+    except smtplib.SMTPRecipientsRefused:
+        raise HTTPException(status_code=502, detail="The mail server rejected the test recipient. Check the recipient address and the mailbox sending permissions.") from None
+    except smtplib.SMTPSenderRefused:
+        raise HTTPException(status_code=502, detail="The mail server rejected the sender address. Use the authenticated mailbox address as the sender.") from None
+    except smtplib.SMTPException:
+        raise HTTPException(status_code=502, detail="The mail server could not send the message. Check the connection security and ask your email provider to check the mailbox sending permissions or limits.") from None
+    except OSError:
+        raise HTTPException(status_code=502, detail="The ERP could not connect to the mail server. Check the server hostname and ask your ERP hosting provider to check DNS and outbound SMTP access.") from None
     record_activity(
         db,
         actor_user_id=admin_user.id,
