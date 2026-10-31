@@ -14,6 +14,7 @@ import calendar
 import contextlib
 import csv
 from email.message import EmailMessage
+from email.utils import formataddr, formatdate, make_msgid
 from html import escape as html_escape
 import io
 import json
@@ -3975,7 +3976,9 @@ def send_email_message(settings: dict, recipients: list[str], subject: str, text
 
         message = EmailMessage()
         message["Subject"] = subject
-        message["From"] = f"{from_name} <{from_email}>"
+        message["From"] = formataddr((from_name, from_email))
+        message["Date"] = formatdate(localtime=False)
+        message["Message-ID"] = make_msgid(domain=from_email.rsplit("@", 1)[-1])
         message["To"] = ", ".join(recipients)
         if cc:
             message["Cc"] = ", ".join(cc)

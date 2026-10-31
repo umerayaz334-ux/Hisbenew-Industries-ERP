@@ -7,6 +7,9 @@ import ssl
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
+from email.message import EmailMessage
+from email.utils import formataddr, formatdate, make_msgid, parsedate_to_datetime
+from html import escape as html_escape
 
 
 class HTTPException(Exception):
@@ -16,6 +19,32 @@ class HTTPException(Exception):
 
 
 class EmailTestErrors(unittest.TestCase):
+    def test_smtp_message_has_valid_traceable_headers_and_alternatives(self):
+        source = Path(__file__).parents[1] / "app" / "main.py"
+        tree = ast.parse(source.read_text(encoding="utf-8-sig"))
+        node = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                    and n.name == "send_email_message")
+        settings = dict(from_email="info@hisbenew.com", from_name="Hisbenew, Industries",
+                        provider="smtp", smtp=dict(host="s11.hosterpk.com", port=587,
+                        use_ssl=False, use_tls=True, username="info@hisbenew.com", password="test"))
+        transport = Mock()
+        server = transport.SMTP.return_value.__enter__ = Mock(return_value=Mock())
+        transport.SMTP.return_value.__exit__ = Mock(return_value=False)
+        scope = dict(normalize_email_settings=lambda _: settings,
+                     parse_email_list=lambda value: value if isinstance(value, list) else [],
+                     EmailMessage=EmailMessage, formataddr=formataddr, formatdate=formatdate,
+                     make_msgid=make_msgid, smtplib=transport, ssl=ssl,
+                     html_from_plain_text=html_escape, HTTPException=HTTPException)
+        exec(compile(ast.Module(body=[node], type_ignores=[]), str(source), "exec"), scope)
+        scope["send_email_message"](settings, ["test@example.com"], "Test", "Plain", "<p>HTML</p>")
+        message = server.return_value.send_message.call_args.args[0]
+        self.assertEqual(message["From"].addresses[0].display_name, "Hisbenew, Industries")
+        self.assertIsNotNone(parsedate_to_datetime(message["Date"]))
+        self.assertTrue(str(message["Message-ID"]).endswith("@hisbenew.com>"))
+        self.assertEqual(message.get_body(preferencelist=("plain",)).get_content().strip(), "Plain")
+        self.assertIn("<p>HTML</p>", message.get_body(preferencelist=("html",)).get_content())
+        server.return_value.starttls.assert_called_once()
+
     def setUp(self):
         source = Path(__file__).parents[1] / "app" / "main.py"
         tree = ast.parse(source.read_text(encoding="utf-8-sig"))
