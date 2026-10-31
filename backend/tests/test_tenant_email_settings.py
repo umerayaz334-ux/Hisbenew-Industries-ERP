@@ -41,6 +41,14 @@ class TenantEmailSettingsTests(unittest.TestCase):
             self.assertEqual(load(2)["smtp"]["password"], "tenant-two")
             self.assertEqual(load()["smtp"]["password"], "global-secret")
             self.assertFalse(load(3)["enabled"])
+            save({"smtp": {"host": "mail.hisbenew.com", "username": "info@hisbenew.com",
+                           "password": "keep-me", "port": 465, "use_ssl": True, "use_tls": False}}, 4)
+            self.assertEqual(load(4)["smtp"]["host"], "s11.hosterpk.com")
+            self.assertEqual(load(4)["smtp"]["password"], "keep-me")
+            self.assertEqual(load(4)["smtp"]["port"], 465)
+            self.assertTrue(load(4)["smtp"]["use_ssl"])
+            save({"smtp": {"host": "mail.hisbenew.com", "username": "other@example.com"}}, 5)
+            self.assertEqual(load(5)["smtp"]["host"], "mail.hisbenew.com")
 
     def test_tracking_recipient_amounts_and_duplicate_suppression(self):
         source = Path(__file__).parents[1] / "app" / "service_takers" / "router.py"

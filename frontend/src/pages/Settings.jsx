@@ -161,7 +161,7 @@ const DEFAULT_EMAIL_SETTINGS = {
   cc: "",
   bcc: "",
   smtp: {
-    host: "mail.hisbenew.com",
+    host: "s11.hosterpk.com",
     port: 465,
     username: "info@hisbenew.com",
     password: "",
