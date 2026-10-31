@@ -1,6 +1,11 @@
 name: Diagnose live SMTP connection
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [diagnose, repair-and-test]
+        default: diagnose
 jobs:
   diagnose:
     runs-on: self-hosted
@@ -12,10 +17,13 @@ jobs:
         env:
           ERP_ROOT: ${{ vars.ERP_ROOT }}
           ERP_BACKEND_VENV: ${{ vars.ERP_BACKEND_VENV }}
+          SMTP_MODE: ${{ inputs.mode }}
         run: |
           $root = if ($env:ERP_ROOT) { $env:ERP_ROOT } else { 'C:\HisbenewERP' }
           $backend = Join-Path $root 'backend'
           $venv = if ($env:ERP_BACKEND_VENV) { $env:ERP_BACKEND_VENV } elseif (Test-Path (Join-Path $backend 'venv\Scripts\python.exe')) { Join-Path $backend 'venv' } else { Join-Path $backend '.venv' }
           $python = Join-Path $venv 'Scripts\python.exe'
-          & $python -u (Join-Path $env:GITHUB_WORKSPACE 'scripts\check_smtp_connection.py') $backend
+          $arguments = @('-u', (Join-Path $env:GITHUB_WORKSPACE 'scripts\check_smtp_connection.py'), $backend)
+          if ($env:SMTP_MODE -eq 'repair-and-test') { $arguments += '--repair-and-test' }
+          & $python @arguments
           if ($LASTEXITCODE -ne 0) { throw 'SMTP diagnostic failed' }
