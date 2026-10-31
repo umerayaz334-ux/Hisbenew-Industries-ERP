@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [diagnose, repair-and-test]
+        options: [diagnose, repair-and-test, enable-connection]
         default: diagnose
 jobs:
   diagnose:
@@ -25,5 +25,6 @@ jobs:
           $python = Join-Path $venv 'Scripts\python.exe'
           $arguments = @('-u', (Join-Path $env:GITHUB_WORKSPACE 'scripts\check_smtp_connection.py'), $backend)
           if ($env:SMTP_MODE -eq 'repair-and-test') { $arguments += '--repair-and-test' }
+          if ($env:SMTP_MODE -eq 'enable-connection') { $arguments += '--enable-connection' }
           & $python @arguments
           if ($LASTEXITCODE -ne 0) { throw 'SMTP diagnostic failed' }

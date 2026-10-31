@@ -55,6 +55,11 @@ if __name__ == "__main__":
         settings = json.loads(path.read_text(encoding="utf-8-sig"))
         smtp = settings.get("smtp", {})
         if smtp.get("username", "").lower().strip() == "info@hisbenew.com":
+            if "--enable-connection" in sys.argv and path.name == "email_settings_tenant_1.json":
+                settings["enabled"] = True
+                path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+                print("Enabled verified email connection for tenant 1; credentials preserved.", flush=True)
+                raise SystemExit(0)
             print("Saved connection:", path.name, "host:", smtp.get("host"),
                   "port:", smtp.get("port"), "SSL:", smtp.get("use_ssl"),
                   "STARTTLS:", smtp.get("use_tls"), "password present:", bool(smtp.get("password")), flush=True)
@@ -64,6 +69,8 @@ if __name__ == "__main__":
                     smtp.update(host="s11.hosterpk.com", port=587, use_ssl=False, use_tls=True)
                     path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
                     print("Saved secure SMTP correction:", path.name, flush=True)
+    if "--enable-connection" in sys.argv:
+        raise SystemExit("The verified tenant 1 mailbox was not found; no connection enabled.")
     if "--repair-and-test" in sys.argv:
         if not matches:
             raise SystemExit("No saved mailbox password found; no test sent.")

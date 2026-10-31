@@ -467,6 +467,7 @@ export default function ServiceTakerWorkspace({
   const [expandedPortalOrderIds, setExpandedPortalOrderIds] = useState([]);
   const [portalLocalStatusFilter, setPortalLocalStatusFilter] = useState("open");
   const [busy, setBusy] = useState("");
+  const [sendingReminderIds, setSendingReminderIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -760,7 +761,8 @@ const visibleProducts = useMemo(
   };
 
   const sendBalanceReminder = async (client) => {
-    setBusy(`balance-reminder-${client.id}`);
+    if (sendingReminderIds.includes(client.id)) return;
+    setSendingReminderIds((current) => [...current, client.id]);
     setError("");
     setNotice("");
     try {
@@ -770,7 +772,7 @@ const visibleProducts = useMemo(
     } catch (sendError) {
       setError(errorMessage(sendError, "Balance reminder could not be sent."));
     } finally {
-      setBusy("");
+      setSendingReminderIds((current) => current.filter((id) => id !== client.id));
     }
   };
 
@@ -2007,10 +2009,11 @@ const tabs = [
                     <div className="service-client-balance">
                       <div><span>Total pending balance</span><strong>{money(client.account_balance_due || 0, client.currency)}</strong></div>
                       <small>{client.email || "No email address"}</small>
-                      <button className="service-primary-button" type="button"
-                        disabled={Boolean(busy) || !client.email || Number(client.account_balance_due || 0) <= 0}
+                      <button className="service-secondary-button" type="button"
+                        aria-busy={sendingReminderIds.includes(client.id)}
+                        disabled={sendingReminderIds.includes(client.id) || !client.email || Number(client.account_balance_due || 0) <= 0}
                         onClick={() => sendBalanceReminder(client)}>
-                        {busy === `balance-reminder-${client.id}` ? "Sending…" : "Send balance reminder"}
+                        {sendingReminderIds.includes(client.id) ? "Sending…" : "Send balance reminder"}
                       </button>
                     </div>
                     <footer>
