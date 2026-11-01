@@ -222,7 +222,18 @@ export default function PrinterSettings() {
         {/* Card 1: Connection Source */}
         <section className="printer-settings-card">
           <h2>1. Connection Source</h2>
-          <p>Choose where the ERP sends direct print commands. Use <strong>This laptop</strong> if running the python print agent locally, or <strong>ERP server</strong> for cloud web sockets.</p>
+          <p>Connect the Windows laptop plugged into your printer. Choose <strong>This laptop</strong> for a direct connection, or <strong>Cloud print agent</strong> to send labels through the live ERP.</p>
+          <div className="printer-settings-info-box">
+            <strong>Start your printer connection</strong>
+            <p>First time on this laptop: download the setup file, right-click it and choose <strong>Run with PowerShell</strong>. After setup, the start button opens your printer helper. Allow the browser to open it and access local devices when asked.</p>
+            <div className="printer-settings-actions-row">
+              <a className="printer-settings-btn primary" href="hisbenew-printer://start" onClick={() => setNotice('Opening the printer helper. Allow the browser prompt. Connection status below updates automatically; if nothing opens, run the one-time setup first.')}>
+                Start printer connection
+              </a>
+              <a className="printer-settings-btn secondary" href="/downloads/Hisbenew-Printer-Connection.ps1" download>Download one-time setup</a>
+            </div>
+            <small>Windows with the Hisbenew printer tools installed. Starts both the local bridge and cloud agent; it does not send a test label.</small>
+          </div>
           
           <div className="printer-settings-mode-toggle">
             <button
@@ -237,7 +248,7 @@ export default function PrinterSettings() {
               onClick={() => setPrinterConnectionMode("server")}
               type="button"
             >
-              ERP Cloud Server
+              Cloud print agent
             </button>
           </div>
 
