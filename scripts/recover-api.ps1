@@ -46,15 +46,30 @@ if (-not $erpHealthy -and $erpListeners.Count -gt 0) {
 }
 if (-not $erpHealthy -and $erpListeners.Count -eq 0) {
     if (-not (Test-Path -LiteralPath $erpPython)) { throw 'Expected live Python executable missing.' }
-    # A persistent API must not inherit the Actions job's orphan-process marker.
-    $erpTrackingId = $env:RUNNER_TRACKING_ID
-    try {
-        $env:RUNNER_TRACKING_ID = ''
-        $erpCreated = Start-Process -FilePath $erpPython -ArgumentList @('-m','uvicorn','app.main:app','--host','0.0.0.0','--port','8000') -WorkingDirectory $erpBackend -WindowStyle Hidden -RedirectStandardOutput (Join-Path $erpOperations 'api.out.log') -RedirectStandardError (Join-Path $erpOperations 'api.err.log') -PassThru
-    } finally {
-        $env:RUNNER_TRACKING_ID = $erpTrackingId
+    # Launch through WMI, outside the runner's Windows process/job tree.
+    # Removing RUNNER_TRACKING_ID alone does not detach a Windows child process.
+    $erpLauncher = Join-Path $erpOperations 'start-api-detached.ps1'
+    @'
+$ErrorActionPreference = 'Stop'
+$env:RUNNER_TRACKING_ID = ''
+$erpPython = 'C:\HisbenewERP\backend\.venv\Scripts\python.exe'
+$erpLogs = 'C:\HisbenewERP\operations'
+try {
+    $erpApi = Start-Process -FilePath $erpPython -ArgumentList @('-m','uvicorn','app.main:app','--host','0.0.0.0','--port','8000') -WorkingDirectory 'C:\HisbenewERP\backend' -WindowStyle Hidden -RedirectStandardOutput (Join-Path $erpLogs 'api.out.log') -RedirectStandardError (Join-Path $erpLogs 'api.err.log') -Wait -PassThru
+    Add-Content -LiteralPath (Join-Path $erpLogs 'recovery.log') -Value "$([DateTime]::UtcNow.ToString('o')) Detached API exited with code $($erpApi.ExitCode)."
+} catch {
+    Add-Content -LiteralPath (Join-Path $erpLogs 'recovery.log') -Value "$([DateTime]::UtcNow.ToString('o')) Detached API launch failed: $($_.Exception.Message)"
+    throw
+}
+'@ | Set-Content -LiteralPath $erpLauncher -Encoding UTF8
+    $erpStartup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }
+    $erpCreated = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+        CommandLine = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -File `"$erpLauncher`""
+        CurrentDirectory = $erpBackend
+        ProcessStartupInformation = $erpStartup
     }
-    Write-Output "Restored missing API process: $($erpCreated.Id)"
+    if ($erpCreated.ReturnValue -ne 0) { throw "Detached API launch failed: $($erpCreated.ReturnValue)" }
+    Write-Output "Restored detached API launcher: $($erpCreated.ProcessId)"
 }
 for ($erpAttempt = 0; $erpAttempt -lt 12; $erpAttempt++) {
     try {
