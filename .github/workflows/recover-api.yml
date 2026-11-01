@@ -1,6 +1,11 @@
 name: Inspect and recover live API
 on:
   workflow_dispatch:
+    inputs:
+      install_recovery:
+        description: Install the explicitly approved automatic API recovery task
+        type: boolean
+        default: false
 jobs:
   recover:
     runs-on: self-hosted
@@ -10,3 +15,7 @@ jobs:
       - name: Inspect API and restore a missing backend process
         shell: powershell
         run: ./scripts/recover-api.ps1
+      - name: Install automatic recovery only when explicitly approved
+        if: inputs.install_recovery == true
+        shell: powershell
+        run: ./scripts/install-api-recovery.ps1
