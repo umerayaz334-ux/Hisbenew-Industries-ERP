@@ -1,0 +1,12 @@
+name: Inspect and recover live API
+on:
+  workflow_dispatch:
+jobs:
+  recover:
+    runs-on: self-hosted
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect API and restore a missing backend process
+        shell: powershell
+        run: ./scripts/recover-api.ps1
