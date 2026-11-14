@@ -1150,6 +1150,7 @@ class FulfillmentOrderItemOut(BaseModel):
     article_no: str
     product_name: str
     product_image_url: str | None = None
+    unit_weight_kg: float = 0
     quantity: int
     picked_quantity: int = 0
 

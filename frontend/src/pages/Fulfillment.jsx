@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import JsBarcode from "jsbarcode";
 import api, { getStaticUrl } from "../api/api";
+import EasyPostLabelModal from "../components/EasyPostLabelModal";
 import { formatUtcLocal, parseUtcLocal } from "../utils/dateUtils";
 import "./Fulfillment.css";
 
@@ -536,6 +537,8 @@ function Fulfillment({
   const [savingShipment, setSavingShipment] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
   const [shippingOrderId, setShippingOrderId] = useState(null);
+  const [labelModalOrderId, setLabelModalOrderId] = useState(null);
+  const [easypostLabels, setEasypostLabels] = useState({});
   const [receivingShipmentKey, setReceivingShipmentKey] = useState(null);
   const [isShipmentModalOpen, setIsShipmentModalOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
@@ -582,6 +585,21 @@ function Fulfillment({
       window.removeEventListener("keydown", closeActiveModal);
     };
   }, [isDiscrepancyModalOpen, isOrderModalOpen, isShipmentModalOpen]);
+
+  const loadEasypostSummary = useCallback(async () => {
+    if (isWarehouseUser) return;
+    try {
+      const response = await api.get("/shipping/easypost/summary");
+      setEasypostLabels(response.data?.orders || {});
+    } catch {
+      setEasypostLabels({});
+    }
+  }, [isWarehouseUser]);
+
+  useEffect(() => {
+    const timer = setTimeout(loadEasypostSummary, 0);
+    return () => clearTimeout(timer);
+  }, [loadEasypostSummary]);
 
   const loadFulfillment = useCallback(async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);
@@ -1197,6 +1215,23 @@ function Fulfillment({
     } finally {
       setShippingOrderId(null);
     }
+  };
+
+  const handleEasypostLabel = async (label, { markShipped = false, refunded = false } = {}) => {
+    await Promise.all([loadFulfillment({ quiet: true }), loadEasypostSummary()]);
+    const order = (dashboard.orders || []).find((row) => row.id === label.fulfillment_order_id);
+    if (refunded) {
+      setNotice({ type: "success", text: "EasyPost label voided. Refund requested from the carrier." });
+      return;
+    }
+    if (markShipped && order) {
+      await shipOrder({ ...order, label_file_url: label.label_file_url });
+      return;
+    }
+    setNotice({
+      type: "success",
+      text: `Label bought: ${label.carrier || "Carrier"} ${label.tracking_code || ""}`.trim(),
+    });
   };
 
   const uploadOrderLabel = async (orderId, file) => {
@@ -2065,6 +2100,20 @@ function Fulfillment({
                 {isWarehouseUser ? "Waiting for admin label" : "No label uploaded"}
               </span>
             )}
+            {!isWarehouseUser && !isShipped && (
+              <button
+                className={
+                  selectedOrder.label_file_url
+                    ? "fulfillment-secondary-action"
+                    : "fulfillment-primary-button fulfillment-buy-label"
+                }
+                onClick={() => setLabelModalOrderId(selectedOrder.id)}
+                type="button"
+              >
+                <Icon name="truck" />
+                {selectedOrder.label_file_url ? "Labels / rates" : "Buy label"}
+              </button>
+            )}
             {!isWarehouseUser && (
               <label className="fulfillment-upload-button">
                 Upload label
@@ -2078,13 +2127,39 @@ function Fulfillment({
               </label>
             )}
           </div>
+          {easypostLabels[String(selectedOrder.id)] && (
+            <div className="fulfillment-tracking-chip">
+              <Icon name="truck" />
+              <span>
+                <strong>
+                  {easypostLabels[String(selectedOrder.id)].carrier}{" "}
+                  {easypostLabels[String(selectedOrder.id)].tracking_code}
+                </strong>
+                <small>
+                  {String(easypostLabels[String(selectedOrder.id)].service || "")
+                    .replace(/_/g, " ")
+                    .replace(/([a-z])([A-Z])/g, "$1 $2")}
+                  {easypostLabels[String(selectedOrder.id)].mode === "test" ? " · test label" : ""}
+                </small>
+              </span>
+              {easypostLabels[String(selectedOrder.id)].tracking_url && (
+                <a
+                  href={easypostLabels[String(selectedOrder.id)].tracking_url}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Track
+                </a>
+              )}
+            </div>
+          )}
           {!isShipped && !canShip && (
             <div className="fulfillment-blockers">
               {!selectedOrder.label_file_url && (
                 <span>
                   {isWarehouseUser
                     ? "Admin label upload pending."
-                    : "Upload a label before shipping."}
+                    : "Buy or upload a label before shipping."}
                 </span>
               )}
               {shortages.length > 0 && <span>Resolve stock shortages before shipping.</span>}
@@ -2574,6 +2649,24 @@ function Fulfillment({
         renderModal("shipment-modal-title", renderShipmentForm(), () =>
           setIsShipmentModalOpen(false)
         )}
+      {!isWarehouseUser &&
+        labelModalOrderId &&
+        (() => {
+          const modalOrder = (dashboard.orders || []).find((row) => row.id === labelModalOrderId);
+          if (!modalOrder) return null;
+          const hasShortage = (modalOrder.pick_plan || []).some(
+            (line) => Number(line.shortage_quantity || 0) > 0
+          );
+          return (
+            <EasyPostLabelModal
+              canManage={["admin", "manager", "super_admin"].includes(userRole)}
+              canShipAfterBuy={!isOrderShipped(modalOrder) && !hasShortage}
+              onClose={() => setLabelModalOrderId(null)}
+              onLabelBought={handleEasypostLabel}
+              order={modalOrder}
+            />
+          );
+        })()}
       {isDiscrepancyModalOpen &&
         renderModal("discrepancy-modal-title", renderDiscrepancyForm(), () =>
           setIsDiscrepancyModalOpen(false)
@@ -2666,7 +2759,11 @@ function Fulfillment({
                             </small>
                           </span>
                           <span className="fulfillment-list-flag">
-                            {order.label_file_url ? "Label ready" : "No label"}
+                            {easypostLabels[String(order.id)]
+                              ? `${easypostLabels[String(order.id)].carrier || "Label"} label`
+                              : order.label_file_url
+                                ? "Label ready"
+                                : "No label"}
                           </span>
                         </button>
                       );

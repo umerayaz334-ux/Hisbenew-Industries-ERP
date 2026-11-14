@@ -2539,3 +2539,55 @@ def assign_tenant_ids_before_flush(session, flush_context, instances):
     for item in session.new:
         if isinstance(item, TENANT_SCOPED_MODELS) and getattr(item, "tenant_id", None) is None:
             item.tenant_id = tenant_id
+
+
+class EasyPostSettingsRecord(Base):
+    """Per-tenant EasyPost account settings. API keys are stored encrypted."""
+
+    __tablename__ = "easypost_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True, unique=True)
+    mode = Column(String, default="test", nullable=False)
+    test_api_key_encrypted = Column(Text, nullable=True)
+    live_api_key_encrypted = Column(Text, nullable=True)
+    from_address_json = Column(Text, nullable=True, default="{}")
+    defaults_json = Column(Text, nullable=True, default="{}")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EasyPostLabelRecord(Base):
+    """A label bought through EasyPost for a fulfillment (dispatch) order."""
+
+    __tablename__ = "easypost_labels"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
+    fulfillment_order_id = Column(Integer, ForeignKey("fulfillment_orders.id"), nullable=False, index=True)
+    easypost_shipment_id = Column(String, nullable=False, index=True)
+    mode = Column(String, default="test", nullable=False)
+    status = Column(String, default="purchased", index=True)
+    carrier = Column(String, nullable=True)
+    service = Column(String, nullable=True)
+    rate = Column(Float, default=0)
+    currency = Column(String, default="USD")
+    delivery_days = Column(Integer, nullable=True)
+    tracking_code = Column(String, nullable=True, index=True)
+    tracking_url = Column(String, nullable=True)
+    label_file_url = Column(String, nullable=True)
+    label_format = Column(String, nullable=True)
+    to_name = Column(String, nullable=True)
+    to_summary = Column(String, nullable=True)
+    weight_oz = Column(Float, nullable=True)
+    refund_status = Column(String, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+TENANT_SCOPED_MODELS = (
+    *TENANT_SCOPED_MODELS,
+    EasyPostSettingsRecord,
+    EasyPostLabelRecord,
+)

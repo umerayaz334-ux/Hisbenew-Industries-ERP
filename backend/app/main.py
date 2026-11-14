@@ -64,6 +64,7 @@ from .service_takers import router as service_taker_router
 from .routers.deployment_router import router as deployment_router
 from .routers.backups_router import router as backups_router
 from .routers.order_forwarding_router import router as order_forwarding_router
+from .routers.easypost_router import router as easypost_router
 from .services import order_forwarding
 from .services.backup_service import start_backup_scheduler, stop_backup_scheduler
 from .security import (
@@ -194,6 +195,7 @@ app.include_router(deployment_router)
 app.include_router(print_agent_router)
 app.include_router(backups_router)
 app.include_router(order_forwarding_router)
+app.include_router(easypost_router)
 app.router.add_event_handler("startup", realtime_hub.start)
 app.router.add_event_handler("shutdown", realtime_hub.stop)
 app.router.add_event_handler("startup", amazon_auto_sync_service.start)
@@ -8063,6 +8065,7 @@ def fulfillment_order_item_response(item: FulfillmentOrderItem):
         "article_no": product.article_no if product else "",
         "product_name": product.name if product else "",
         "product_image_url": product.image_url if product else None,
+        "unit_weight_kg": float(getattr(product, "unit_weight_kg", 0) or 0) if product else 0,
         "quantity": item.quantity or 0,
         "picked_quantity": item.picked_quantity or 0,
     }
