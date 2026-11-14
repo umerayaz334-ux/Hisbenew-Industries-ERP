@@ -274,19 +274,55 @@ export const getAuthHeaders = (baseHeaders = {}) => {
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
+/*
+ * Retry policy for an unreliable link to the API server.
+ * - Reads (GET/HEAD/OPTIONS) are safe to repeat: retry on dropped connections,
+ *   timeouts and gateway errors.
+ * - Writes (POST/PUT/PATCH/DELETE) may already have reached the server when the
+ *   connection drops, so they are only retried on 502/503, which mean the proxy
+ *   never reached the backend. This avoids duplicate orders, payments, shipments.
+ */
+const READ_METHODS = ["get", "head", "options"];
+const READ_RETRY_STATUSES = [502, 503, 504];
+const WRITE_RETRY_STATUSES = [502, 503];
+const MAX_READ_RETRIES = 3;
+const MAX_WRITE_RETRIES = 2;
+const READ_ATTEMPT_TIMEOUT_MS = 25000;
+
+const isReadMethod = (method) => READ_METHODS.includes(String(method || "get").toLowerCase());
+
+// 1s, 2s, 4s (+ up to 400ms jitter so many tabs do not retry in lockstep).
+const retryDelay = (retryNumber) => 1000 * 2 ** (retryNumber - 1) + Math.random() * 400;
+
+const notifyRetry = (retryNumber) => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("erp:network-retry", { detail: { attempt: retryNumber } }));
+};
+
 export const apiFetch = async (url, options = {}) => {
   const { retryAttempts, ...fetchOptions } = options;
-  const maxAttempts = Number(retryAttempts) > 0 ? Number(retryAttempts) : 3;
+  const isRead = isReadMethod(fetchOptions.method);
+  const defaultAttempts = 1 + (isRead ? MAX_READ_RETRIES : MAX_WRITE_RETRIES);
+  const maxAttempts = Number(retryAttempts) > 0 ? Number(retryAttempts) : defaultAttempts;
+  const retryStatuses = isRead ? READ_RETRY_STATUSES : WRITE_RETRY_STATUSES;
   let lastError = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    // Reads get a per-attempt timeout so a stalled connection is retried
+    // instead of hanging forever (fetch has no timeout of its own).
+    const controller = isRead && !fetchOptions.signal ? new AbortController() : null;
+    const timer = controller
+      ? window.setTimeout(() => controller.abort(), READ_ATTEMPT_TIMEOUT_MS)
+      : null;
     try {
       const response = await fetch(url, {
         ...fetchOptions,
+        ...(controller ? { signal: controller.signal } : {}),
         mode: fetchOptions.mode || "cors",
         credentials: fetchOptions.credentials || "omit",
         headers: getAuthHeaders(fetchOptions.headers || {}),
       });
+      if (timer) window.clearTimeout(timer);
 
       if (response.status === 401 && !isLoginRequest(url)) {
         let detail = "Your session expired. Please sign in again.";
@@ -301,16 +337,22 @@ export const apiFetch = async (url, options = {}) => {
       }
 
       // Retry transient gateway / restart failures from VPS deploys.
-      if ([502, 503, 504].includes(response.status) && attempt < maxAttempts) {
-        await sleep(700 * attempt);
+      if (retryStatuses.includes(response.status) && attempt < maxAttempts) {
+        notifyRetry(attempt);
+        await sleep(retryDelay(attempt));
         continue;
       }
 
       return response;
     } catch (error) {
+      if (timer) window.clearTimeout(timer);
       lastError = error;
-      if (attempt >= maxAttempts) break;
-      await sleep(700 * attempt);
+      // A caller-cancelled request is not a network failure.
+      if (error?.name === "AbortError" && !controller) throw error;
+      // Writes that failed without a response may have been applied: never repeat them.
+      if (!isRead || attempt >= maxAttempts) break;
+      notifyRetry(attempt);
+      await sleep(retryDelay(attempt));
     }
   }
 
@@ -324,6 +366,11 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   config.baseURL = getApiBaseUrl();
+  // Shorter per-attempt timeout for reads so a stalled connection is retried
+  // sooner; uploads and other writes keep the full 30s.
+  if (isReadMethod(config.method) && (!config.timeout || config.timeout === 30000)) {
+    config.timeout = READ_ATTEMPT_TIMEOUT_MS;
+  }
   config.headers = config.headers ?? {};
   Object.entries(getAuditHeaders()).forEach(([key, value]) => {
     if (config.headers[key] === undefined) {
@@ -347,10 +394,21 @@ api.interceptors.response.use(
     const status = error?.response?.status;
     const config = error?.config || {};
     const retryCount = Number(config.__retryCount || 0);
+    const isRead = isReadMethod(config.method);
+    const cancelled = axios.isCancel(error) || error?.code === "ERR_CANCELED";
+    // No response at all: dropped connection (ERR_NETWORK) or timeout (ECONNABORTED/ETIMEDOUT).
+    const noResponse = !error?.response && !cancelled;
+    const shouldRetry =
+      !isLoginRequest(config.url) &&
+      !config.__noRetry &&
+      (isRead
+        ? retryCount < MAX_READ_RETRIES && (noResponse || READ_RETRY_STATUSES.includes(status))
+        : retryCount < MAX_WRITE_RETRIES && WRITE_RETRY_STATUSES.includes(status));
 
-    if ([502, 503, 504].includes(status) && retryCount < 2 && !isLoginRequest(config.url)) {
+    if (shouldRetry) {
       config.__retryCount = retryCount + 1;
-      await sleep(700 * (retryCount + 1));
+      notifyRetry(config.__retryCount);
+      await sleep(retryDelay(config.__retryCount));
       return api.request(config);
     }
 
