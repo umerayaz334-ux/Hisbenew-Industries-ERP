@@ -35,8 +35,8 @@ def verify_address(request: Request, payload: dict = Body(...), db: Session = De
 
 
 @router.get("/summary")
-def label_summary(request: Request, db: Session = Depends(easypost_db)):
-    return service.summary(request, db)
+def label_summary(request: Request, kind: str = "fulfillment", db: Session = Depends(easypost_db)):
+    return service.summary(request, db, kind)
 
 
 @router.get("/orders/{order_id}/labels")
@@ -52,6 +52,23 @@ def order_rates(order_id: int, request: Request, payload: dict = Body(...), db: 
 @router.post("/orders/{order_id}/buy")
 def order_buy(order_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(easypost_db)):
     return service.buy(request, db, order_id, payload)
+
+
+# Shipping page (sales orders in Pending dispatch)
+
+@router.get("/sales-orders/{order_id}/labels")
+def sales_order_labels(order_id: int, request: Request, db: Session = Depends(easypost_db)):
+    return service.order_labels(request, db, order_id, kind="sales")
+
+
+@router.post("/sales-orders/{order_id}/rates")
+def sales_order_rates(order_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(easypost_db)):
+    return service.quote(request, db, order_id, payload, kind="sales")
+
+
+@router.post("/sales-orders/{order_id}/buy")
+def sales_order_buy(order_id: int, request: Request, payload: dict = Body(...), db: Session = Depends(easypost_db)):
+    return service.buy(request, db, order_id, payload, kind="sales")
 
 
 @router.post("/labels/{label_id}/refund")

@@ -2564,7 +2564,9 @@ class EasyPostLabelRecord(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
-    fulfillment_order_id = Column(Integer, ForeignKey("fulfillment_orders.id"), nullable=False, index=True)
+    # "fulfillment" = Dispatch queue order, "sales" = Shipping page pending order
+    order_kind = Column(String, default="fulfillment", nullable=False, index=True)
+    order_id = Column(Integer, nullable=False, index=True)
     easypost_shipment_id = Column(String, nullable=False, index=True)
     mode = Column(String, default="test", nullable=False)
     status = Column(String, default="purchased", index=True)

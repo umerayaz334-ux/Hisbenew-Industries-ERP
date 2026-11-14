@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import api, { getStaticUrl } from "../api/api";
+import CARRIER_LOGOS, { carrierLogoKey } from "./carrierLogos";
 import "./EasyPostLabelModal.css";
 
 const KG_TO_OZ = 35.27396;
@@ -15,15 +16,6 @@ const EMPTY_ADDRESS = {
   country: "US",
   phone: "",
   email: "",
-};
-
-const CARRIER_COLORS = {
-  USPS: "#1d4f91",
-  UPS: "#5a3a1a",
-  FEDEX: "#4d148c",
-  FEDEXDEFAULT: "#4d148c",
-  DHL: "#c8102e",
-  DHLEXPRESS: "#c8102e",
 };
 
 const TAG_LABELS = {
@@ -90,6 +82,12 @@ const parseShipTo = (text, fallbackName = "") => {
     if (zipIndex > 1 && /^[A-Za-z]{2}$/.test(lines[zipIndex - 1])) {
       lines.splice(zipIndex - 2, 3, `${lines[zipIndex - 2]}, ${lines[zipIndex - 1]} ${lines[zipIndex]}`);
       cityIndex = zipIndex - 2;
+    } else if (zipIndex === -1) {
+      const stateZipIndex = lines.findIndex((line) => /^[A-Za-z]{2}\s+\d{5}(-\d{4})?$/.test(line));
+      if (stateZipIndex > 0) {
+        lines.splice(stateZipIndex - 1, 2, `${lines[stateZipIndex - 1]}, ${lines[stateZipIndex]}`);
+        cityIndex = stateZipIndex - 1;
+      }
     } else if (zipIndex > 0) {
       const stateZip = lines[zipIndex - 1].match(/^(.*?)\s+([A-Za-z]{2})$/);
       if (stateZip) {
@@ -132,6 +130,29 @@ const addressOneLine = (address) =>
     .filter(Boolean)
     .join(", ");
 
+function CarrierLogo({ carrier }) {
+  const logo = CARRIER_LOGOS[carrierLogoKey(carrier)];
+  const name = prettyCarrier(carrier);
+  if (!logo) {
+    return (
+      <span className="ep-carrier is-text" title={name}>
+        {name.slice(0, 5)}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`ep-carrier ${logo.wide ? "is-wide" : ""}`}
+      style={{ background: logo.background, color: logo.color }}
+      title={name}
+    >
+      <svg aria-label={name} role="img" viewBox="0 0 24 24">
+        <path d={logo.path} fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
+
 function Svg({ name, size = 16 }) {
   const paths = {
     close: "M6 6l12 12M18 6L6 18",
@@ -156,60 +177,62 @@ function Svg({ name, size = 16 }) {
   );
 }
 
-function AddressFields({ value, onChange, compact = false }) {
+function AddressFields({ value, onChange, compact = false, requirePhone = false }) {
+  const [pasteText, setPasteText] = useState("");
   const set = (field) => (event) => onChange({ ...value, [field]: event.target.value });
+  const upper = (field) => (event) => onChange({ ...value, [field]: event.target.value.toUpperCase() });
+
+  const applyPaste = (text) => {
+    const parsed = parseShipTo(text, value.name);
+    const filled = Object.fromEntries(
+      Object.entries(parsed).filter(([field, fieldValue]) => fieldValue && !(field === "country" && fieldValue === "US"))
+    );
+    onChange({ ...value, ...filled, name: value.name || parsed.name });
+    setPasteText("");
+  };
+
+  const field = (name, label, props = {}, onFieldChange = set(name)) => (
+    <label className={`ep-field ep-col-${name}`}>
+      <span>{label}</span>
+      <input autoComplete="off" onChange={onFieldChange} value={value[name] || ""} {...props} />
+    </label>
+  );
+
   return (
-    <div className={`ep-address-grid ${compact ? "is-compact" : ""}`}>
-      <label className="ep-field is-wide">
-        <span>Full name</span>
-        <input autoComplete="off" onChange={set("name")} value={value.name || ""} />
-      </label>
-      <label className="ep-field is-wide">
-        <span>Company <em>optional</em></span>
-        <input autoComplete="off" onChange={set("company")} value={value.company || ""} />
-      </label>
-      <label className="ep-field is-full">
-        <span>Street address</span>
-        <input autoComplete="off" onChange={set("street1")} value={value.street1 || ""} />
-      </label>
-      <label className="ep-field is-full">
-        <span>Apt, suite, unit <em>optional</em></span>
-        <input autoComplete="off" onChange={set("street2")} value={value.street2 || ""} />
-      </label>
-      <label className="ep-field is-wide">
-        <span>City</span>
-        <input autoComplete="off" onChange={set("city")} value={value.city || ""} />
-      </label>
-      <label className="ep-field">
-        <span>State</span>
+    <div className={`ep-address ${compact ? "is-compact" : ""}`}>
+      <div className="ep-paste">
         <input
-          autoComplete="off"
-          maxLength={3}
-          onChange={(event) => onChange({ ...value, state: event.target.value.toUpperCase() })}
-          value={value.state || ""}
+          aria-label="Paste a full address"
+          onBlur={() => pasteText.trim() && applyPaste(pasteText)}
+          onChange={(event) => setPasteText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && pasteText.trim()) {
+              event.preventDefault();
+              applyPaste(pasteText);
+            }
+          }}
+          onPaste={(event) => {
+            const text = event.clipboardData.getData("text");
+            if (text.trim()) {
+              event.preventDefault();
+              applyPaste(text);
+            }
+          }}
+          placeholder="Paste a full address to fill the fields below"
+          value={pasteText}
         />
-      </label>
-      <label className="ep-field">
-        <span>ZIP</span>
-        <input autoComplete="off" inputMode="numeric" onChange={set("zip")} value={value.zip || ""} />
-      </label>
-      <label className="ep-field">
-        <span>Country</span>
-        <input
-          autoComplete="off"
-          maxLength={2}
-          onChange={(event) => onChange({ ...value, country: event.target.value.toUpperCase() })}
-          value={value.country || "US"}
-        />
-      </label>
-      <label className="ep-field is-wide">
-        <span>Phone <em>optional</em></span>
-        <input autoComplete="off" inputMode="tel" onChange={set("phone")} value={value.phone || ""} />
-      </label>
-      <label className="ep-field is-wide">
-        <span>Email <em>optional</em></span>
-        <input autoComplete="off" inputMode="email" onChange={set("email")} value={value.email || ""} />
-      </label>
+      </div>
+      <div className="ep-address-grid">
+        {field("name", "Name")}
+        {field("company", "Company")}
+        {field("phone", requirePhone ? "Phone (required)" : "Phone", { inputMode: "tel" })}
+        {field("street1", "Street address")}
+        {field("street2", "Apt / suite")}
+        {field("city", "City")}
+        {field("state", "State", { maxLength: 3 }, upper("state"))}
+        {field("zip", "ZIP", { inputMode: "numeric" })}
+        {field("country", "Country", { maxLength: 2 }, upper("country"))}
+      </div>
     </div>
   );
 }
@@ -218,7 +241,11 @@ function SettingsPanel({ settings, onSaved, onBack, canManage }) {
   const [mode, setMode] = useState(settings.mode);
   const [testKey, setTestKey] = useState("");
   const [liveKey, setLiveKey] = useState("");
-  const [fromAddress, setFromAddress] = useState({ ...EMPTY_ADDRESS, ...settings.from_address });
+  const [fromAddress, setFromAddress] = useState({
+    ...EMPTY_ADDRESS,
+    ...(addressComplete(settings.from_address) ? {} : settings.from_address_suggestion),
+    ...settings.from_address,
+  });
   const [defaults, setDefaults] = useState(settings.defaults);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
@@ -316,7 +343,11 @@ function SettingsPanel({ settings, onSaved, onBack, canManage }) {
       <section className="ep-card">
         <header className="ep-card-head">
           <h3>Ship from (return address)</h3>
-          <p>Used on every label unless you change it on an order.</p>
+          <p>
+            {addressComplete(settings.from_address)
+              ? "Used on every label unless you change it on an order."
+              : "Company and phone come from your company profile. Paste your warehouse address once and it is saved for every label."}
+          </p>
         </header>
         <AddressFields onChange={setFromAddress} value={fromAddress} />
       </section>
@@ -390,7 +421,17 @@ function SettingsPanel({ settings, onSaved, onBack, canManage }) {
   );
 }
 
-export default function EasyPostLabelModal({ order, onClose, onLabelBought, canShipAfterBuy, canManage }) {
+export default function EasyPostLabelModal({
+  order,
+  onClose,
+  onLabelBought,
+  canShipAfterBuy,
+  canManage,
+  kind = "fulfillment",
+  shipAfterBuyLabel = "Mark shipped after buying",
+}) {
+  const orderPath = `/shipping/easypost/${kind === "sales" ? "sales-orders" : "orders"}/${order.id}`;
+  const orderRef = order.fulfillment_order_no || order.order_no || `#${order.id}`;
   const [settings, setSettings] = useState(null);
   const [view, setView] = useState("label");
   const [loadError, setLoadError] = useState("");
@@ -429,12 +470,12 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
 
   const loadHistory = useCallback(async () => {
     try {
-      const { data } = await api.get(`/shipping/easypost/orders/${order.id}/labels`);
+      const { data } = await api.get(`${orderPath}/labels`);
       setHistory(data.labels || []);
     } catch {
       setHistory([]);
     }
-  }, [order.id]);
+  }, [orderPath]);
 
   useEffect(() => {
     let alive = true;
@@ -443,11 +484,17 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
       .then(({ data }) => {
         if (!alive) return;
         setSettings(data);
-        setFromAddress({ ...EMPTY_ADDRESS, ...data.from_address });
+        const savedFrom = addressComplete(data.from_address) && Boolean(data.from_address.phone);
+        setFromAddress({
+          ...EMPTY_ADDRESS,
+          ...(savedFrom ? {} : data.from_address_suggestion),
+          ...data.from_address,
+        });
+        if (!savedFrom) setEditFrom(true);
         setLabelFormat(data.defaults.label_format || "PDF");
         setMarkShipped(Boolean(data.defaults.mark_shipped_after_buy) && canShipRef.current);
-        const needsSetup = !data.keys[data.mode]?.configured || !addressComplete(data.from_address);
-        if (needsSetup) setView("settings");
+        // Only an API key needs the settings screen; everything else is filled inline.
+        if (!data.keys[data.mode]?.configured) setView("settings");
         const preset = (data.defaults.parcel_presets || [])[0];
         if (preset) {
           setParcel((current) =>
@@ -476,7 +523,8 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
     };
   }, [buying, onClose]);
 
-  const ready = Boolean(settings) && addressComplete(toAddress) && addressComplete(fromAddress) && weightOz > 0;
+  const fromReady = addressComplete(fromAddress) && Boolean(String(fromAddress.phone || "").trim());
+  const ready = Boolean(settings) && addressComplete(toAddress) && fromReady && weightOz > 0;
   const currentKey = JSON.stringify([toAddress, fromAddress, weightOz, parcel.length, parcel.width, parcel.height, labelFormat, signature]);
   const quoteStale = quote && quoteKey !== currentKey;
 
@@ -494,7 +542,7 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
           /* verification is advisory only */
         }
       }
-      const { data } = await api.post(`/shipping/easypost/orders/${order.id}/rates`, {
+      const { data } = await api.post(`${orderPath}/rates`, {
         to_address: toAddress,
         from_address: fromAddress,
         parcel: { weight_oz: weightOz, length: parcel.length, width: parcel.width, height: parcel.height },
@@ -503,6 +551,13 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
         signature,
       });
       setQuote(data);
+      // First successful quote: remember the ship-from address as the default.
+      if (canManage && (!addressComplete(settings.from_address) || !settings.from_address.phone) && fromReady) {
+        api
+          .put("/shipping/easypost/settings", { from_address: fromAddress })
+          .then(({ data: saved }) => setSettings(saved))
+          .catch(() => {});
+      }
       setQuoteKey(currentKey);
       const pick = settings.defaults.auto_select;
       const auto =
@@ -515,7 +570,7 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
     } finally {
       setQuoting(false);
     }
-  }, [currentKey, fromAddress, labelFormat, order.id, parcel, settings, signature, toAddress, verify, weightOz]);
+  }, [canManage, currentKey, fromAddress, fromReady, labelFormat, orderPath, parcel, settings, signature, toAddress, verify, weightOz]);
 
   // Fully automatic: as soon as everything is filled in, fetch rates once.
   useEffect(() => {
@@ -539,7 +594,7 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
     setBuying(true);
     setError("");
     try {
-      const { data } = await api.post(`/shipping/easypost/orders/${order.id}/buy`, {
+      const { data } = await api.post(`${orderPath}/buy`, {
         shipment_id: quote.shipment_id,
         rate_id: selectedRate.id,
         label_format: quote.label_format,
@@ -611,7 +666,9 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
             {!addressComplete(toAddress)
               ? "Finish the ship-to address."
               : !addressComplete(fromAddress)
-                ? "Add your ship-from address in settings."
+                ? "Add your ship-from address (left, bottom). It is saved for next time."
+                : !fromReady
+                  ? "Add a ship-from phone number. FedEx and UPS require it."
                 : "Enter the package weight."}
           </span>
         </div>
@@ -636,7 +693,7 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
           <Svg name="truck" size={30} />
           <strong>Ready for rates</strong>
           <button className="ep-btn is-primary" onClick={getRates} type="button">
-            Get rates
+            <Svg name="refresh" size={14} /> Check rates
           </button>
         </div>
       );
@@ -669,7 +726,6 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
         )}
         <div className="ep-rate-list" role="radiogroup" aria-label="Shipping rates">
           {visibleRates.map((rate) => {
-            const carrierKey = String(rate.carrier || "").toUpperCase();
             const selected = rate.id === selectedRateId;
             return (
               <button
@@ -684,9 +740,7 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
                 role="radio"
                 type="button"
               >
-                <span className="ep-carrier" style={{ "--carrier": CARRIER_COLORS[carrierKey] || "#3d4f58" }}>
-                  {prettyCarrier(rate.carrier).slice(0, 5)}
-                </span>
+                <CarrierLogo carrier={rate.carrier} />
                 <span className="ep-rate-main">
                   <strong>{prettyService(rate.service)}</strong>
                   <small>
@@ -772,7 +826,10 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
         </div>
       )}
       <p className="ep-success-note">
-        The label is saved on order {order.fulfillment_order_no}, so the warehouse can print it from the Dispatch queue.
+        The label is saved on order {orderRef}
+        {kind === "sales"
+          ? ". Carrier and tracking number are filled into the dispatch form."
+          : ", so the warehouse can print it from the Dispatch queue."}
       </p>
       <footer className="ep-footer">
         <span />
@@ -952,12 +1009,16 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
               <Svg name="pin" size={13} />
             </span>
             <h3>Ship from</h3>
-            <button className="ep-link-btn" onClick={() => setEditFrom((value) => !value)} type="button">
-              {editFrom ? "Done" : "Change for this order"}
-            </button>
+            {addressComplete(settings?.from_address) && settings?.from_address?.phone ? (
+              <button className="ep-link-btn" onClick={() => setEditFrom((value) => !value)} type="button">
+                {editFrom ? "Done" : "Change for this order"}
+              </button>
+            ) : (
+              <span className="ep-hint-pill">Saved for next time</span>
+            )}
           </header>
           {editFrom ? (
-            <AddressFields compact onChange={setFromAddress} value={fromAddress} />
+            <AddressFields compact onChange={setFromAddress} requirePhone value={fromAddress} />
           ) : (
             <p className="ep-from-line">
               {addressComplete(fromAddress) ? (
@@ -965,7 +1026,7 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
                   <strong>{fromAddress.name || fromAddress.company}</strong> {addressOneLine(fromAddress)}
                 </>
               ) : (
-                <button className="ep-link-btn" onClick={() => setView("settings")} type="button">
+                <button className="ep-link-btn" onClick={() => setEditFrom(true)} type="button">
                   Add a ship-from address
                 </button>
               )}
@@ -978,11 +1039,16 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
         <header className="ep-rates-head">
           <span className="ep-step">3</span>
           <h3>Choose a service</h3>
-          {quote && !quoting && (
-            <button className="ep-icon-btn" onClick={getRates} title="Refresh rates" type="button">
-              <Svg name="refresh" />
-            </button>
-          )}
+          <button
+            className="ep-btn is-check"
+            disabled={!ready || quoting}
+            onClick={getRates}
+            title={ready ? "Get live rates from all carriers" : "Fill in the addresses and weight first"}
+            type="button"
+          >
+            {quoting ? <span className="ep-spinner is-dark" /> : <Svg name="refresh" size={14} />}
+            {quoting ? "Checking…" : quote ? "Refresh rates" : "Check rates"}
+          </button>
         </header>
         <div className="ep-rates-scroll">{renderRates()}</div>
 
@@ -992,7 +1058,7 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
             <label className="ep-toggle is-inline">
               <input checked={markShipped} onChange={(event) => setMarkShipped(event.target.checked)} type="checkbox" />
               <span className="ep-toggle-track" />
-              <span>Mark shipped after buying</span>
+              <span>{shipAfterBuyLabel}</span>
             </label>
           )}
           {confirmLive && selectedRate && (
@@ -1073,7 +1139,7 @@ export default function EasyPostLabelModal({ order, onClose, onLabelBought, canS
             <div>
               <h2 id="ep-title">{view === "settings" ? "EasyPost settings" : "Buy shipping label"}</h2>
               <p>
-                {order.fulfillment_order_no}
+                {orderRef}
                 {order.customer_name ? ` · ${order.customer_name}` : ""}
               </p>
             </div>

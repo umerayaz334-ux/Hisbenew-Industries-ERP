@@ -27,7 +27,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ...config import BACKEND_DIR, UPLOAD_DIR
-from ...models import EasyPostLabelRecord, EasyPostSettingsRecord, FulfillmentOrder
+from ...models import EasyPostLabelRecord, EasyPostSettingsRecord, FulfillmentOrder, Order
 
 API_BASE = "https://api.easypost.com/v2"
 TIMEOUT = 45
@@ -224,6 +224,32 @@ def _call(method: str, path: str, key: str, payload: dict | None = None) -> dict
 
 # --------------------------------------------------------------- settings
 
+def _company_profile_address(db: Session) -> dict:
+    """Name / phone / email from the tenant profile, used to pre-fill ship-from."""
+    try:
+        from ...models import Tenant
+
+        tenant_id = db.info.get("tenant_id")
+        query = db.query(Tenant).execution_options(skip_tenant_scope=True)
+        tenant = query.filter(Tenant.id == tenant_id).first() if tenant_id is not None else None
+        if tenant is None:
+            from ...main import get_default_tenant
+
+            tenant = get_default_tenant(db)
+    except Exception:  # noqa: BLE001
+        return {}
+    return {
+        key: value
+        for key, value in {
+            "company": tenant.company_name,
+            "phone": tenant.phone,
+            "email": tenant.email,
+            "country": "US",
+        }.items()
+        if value
+    }
+
+
 def public_settings(request: Request, db: Session) -> dict:
     _user(request, db)
     row = _settings_row(db)
@@ -240,6 +266,7 @@ def public_settings(request: Request, db: Session) -> dict:
             for mode in MODES
         },
         "from_address": _loads(row.from_address_json if row else None, {}),
+        "from_address_suggestion": _company_profile_address(db),
         "defaults": defaults,
         "label_formats": list(LABEL_FORMATS),
         "label_sizes": list(LABEL_SIZES),
@@ -330,11 +357,36 @@ def verify_address(request: Request, db: Session, address: dict) -> dict:
 
 # ------------------------------------------------------------------ rates
 
-def _order(db: Session, order_id: int) -> FulfillmentOrder:
-    order = db.query(FulfillmentOrder).filter(FulfillmentOrder.id == order_id).first()
+ORDER_KINDS = ("fulfillment", "sales")
+
+
+def _order(request: Request, db: Session, kind: str, order_id: int):
+    """Load a Dispatch (fulfillment) order or a Shipping page (sales) order."""
+    if kind == "sales":
+        from ...main import require_admin_user, tenant_scope_id_for_request
+
+        user = require_admin_user(request, db)
+        query = db.query(Order).filter(Order.id == order_id)
+        tenant_id = tenant_scope_id_for_request(request, user)
+        if tenant_id is not None:
+            query = query.filter(Order.tenant_id == tenant_id)
+        order = query.first()
+    elif kind == "fulfillment":
+        order = db.query(FulfillmentOrder).filter(FulfillmentOrder.id == order_id).first()
+    else:
+        raise HTTPException(status_code=404, detail="Unknown order type.")
     if not order:
-        raise HTTPException(status_code=404, detail="Dispatch order not found.")
+        raise HTTPException(status_code=404, detail="Order not found.")
     return order
+
+
+def _order_reference(order) -> str:
+    return str(getattr(order, "fulfillment_order_no", None) or getattr(order, "order_no", "") or "")
+
+
+def _touch(order) -> None:
+    if hasattr(order, "updated_at"):
+        order.updated_at = datetime.utcnow()
 
 
 def _rate_out(rate: dict) -> dict:
@@ -371,9 +423,9 @@ def _tag_rates(rates: list[dict]) -> list[dict]:
     return rates
 
 
-def quote(request: Request, db: Session, order_id: int, payload: dict) -> dict:
+def quote(request: Request, db: Session, order_id: int, payload: dict, kind: str = "fulfillment") -> dict:
     _user(request, db)
-    order = _order(db, order_id)
+    order = _order(request, db, kind, order_id)
     mode, key = _active_key(db)
     row = _settings_row(db)
     defaults = {**DEFAULTS, **_loads(row.defaults_json if row else None, {})}
@@ -384,6 +436,11 @@ def quote(request: Request, db: Session, order_id: int, payload: dict) -> dict:
         missing = [field for field in ("street1", "city", "zip") if not address.get(field)]
         if missing:
             raise HTTPException(status_code=400, detail=f"{label} address is missing: {', '.join(missing)}.")
+    if not from_address.get("phone"):
+        raise HTTPException(status_code=400, detail="Add a ship-from phone number. FedEx and UPS require it.")
+    if not to_address.get("phone"):
+        # Carriers need a contact number; fall back to the sender's phone.
+        to_address["phone"] = from_address["phone"]
 
     parcel_in = payload.get("parcel") or {}
     try:
@@ -417,7 +474,7 @@ def quote(request: Request, db: Session, order_id: int, payload: dict) -> dict:
             "from_address": from_address,
             "parcel": parcel,
             "options": options,
-            "reference": order.fulfillment_order_no,
+            "reference": _order_reference(order),
         }
     }
     data = _call("POST", "/shipments", key, shipment_payload)
@@ -456,7 +513,9 @@ def _download_label(url: str, label_format: str) -> str:
 def _label_out(label: EasyPostLabelRecord) -> dict:
     return {
         "id": label.id,
-        "fulfillment_order_id": label.fulfillment_order_id,
+        "order_kind": label.order_kind,
+        "order_id": label.order_id,
+        "fulfillment_order_id": label.order_id if label.order_kind == "fulfillment" else None,
         "shipment_id": label.easypost_shipment_id,
         "mode": label.mode,
         "status": label.status,
@@ -477,9 +536,9 @@ def _label_out(label: EasyPostLabelRecord) -> dict:
     }
 
 
-def buy(request: Request, db: Session, order_id: int, payload: dict) -> dict:
+def buy(request: Request, db: Session, order_id: int, payload: dict, kind: str = "fulfillment") -> dict:
     user = _user(request, db)
-    order = _order(db, order_id)
+    order = _order(request, db, kind, order_id)
     mode, key = _active_key(db)
     shipment_id = str(payload.get("shipment_id") or "").strip()
     rate_id = str(payload.get("rate_id") or "").strip()
@@ -514,7 +573,8 @@ def buy(request: Request, db: Session, order_id: int, payload: dict) -> dict:
     to_address = data.get("to_address") or {}
     tracker = data.get("tracker") or {}
     label = EasyPostLabelRecord(
-        fulfillment_order_id=order.id,
+        order_kind=kind,
+        order_id=order.id,
         easypost_shipment_id=shipment_id,
         mode=mode,
         status="purchased",
@@ -536,10 +596,11 @@ def buy(request: Request, db: Session, order_id: int, payload: dict) -> dict:
     )
     db.add(label)
 
-    carrier_tag = f"{selected['carrier'] or 'Label'}-{data.get('tracking_code') or shipment_id}"
+    carrier_name = re.sub(r"Default$", "", str(selected["carrier"] or ""), flags=re.IGNORECASE) or "Label"
+    carrier_tag = f"{carrier_name}-{data.get('tracking_code') or shipment_id}"
     order.label_file_url = local_url
     order.label_file_name = f"{carrier_tag}.{label_format.lower()}"
-    order.updated_at = datetime.utcnow()
+    _touch(order)
     db.commit()
     db.refresh(label)
     return {"label": _label_out(label)}
@@ -559,38 +620,36 @@ def refund(request: Request, db: Session, label_id: int) -> dict:
     data = _call("POST", f"/shipments/{label.easypost_shipment_id}/refund", key)
     label.refund_status = data.get("refund_status") or "submitted"
     label.status = "refunded" if label.refund_status == "refunded" else "refund_submitted"
-    order = db.query(FulfillmentOrder).filter(FulfillmentOrder.id == label.fulfillment_order_id).first()
+    model = Order if label.order_kind == "sales" else FulfillmentOrder
+    order = db.query(model).filter(model.id == label.order_id).first()
     if order and order.label_file_url == label.label_file_url:
         order.label_file_url = None
         order.label_file_name = None
-        order.updated_at = datetime.utcnow()
+        _touch(order)
     db.commit()
     db.refresh(label)
     return {"label": _label_out(label)}
 
 
-def order_labels(request: Request, db: Session, order_id: int) -> dict:
+def order_labels(request: Request, db: Session, order_id: int, kind: str = "fulfillment") -> dict:
     _user(request, db)
-    _order(db, order_id)
+    _order(request, db, kind, order_id)
     labels = (
         db.query(EasyPostLabelRecord)
-        .filter(EasyPostLabelRecord.fulfillment_order_id == order_id)
+        .filter(EasyPostLabelRecord.order_kind == kind, EasyPostLabelRecord.order_id == order_id)
         .order_by(EasyPostLabelRecord.created_at.desc())
         .all()
     )
     return {"labels": [_label_out(label) for label in labels]}
 
 
-def summary(request: Request, db: Session) -> dict:
-    """Latest active label per order — used for tracking chips in the queue."""
+def summary(request: Request, db: Session, kind: str = "fulfillment") -> dict:
+    """Latest active label per order — used for tracking chips in the queues."""
     _user(request, db)
     labels = (
         db.query(EasyPostLabelRecord)
-        .filter(EasyPostLabelRecord.status == "purchased")
+        .filter(EasyPostLabelRecord.status == "purchased", EasyPostLabelRecord.order_kind == kind)
         .order_by(EasyPostLabelRecord.created_at.asc())
         .all()
     )
-    by_order = {}
-    for label in labels:
-        by_order[str(label.fulfillment_order_id)] = _label_out(label)
-    return {"orders": by_order}
+    return {"orders": {str(label.order_id): _label_out(label) for label in labels}}

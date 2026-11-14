@@ -1,4 +1,5 @@
 import ForwardOrderButton from "../components/ForwardOrderButton";
+import EasyPostLabelModal from "../components/EasyPostLabelModal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import JsBarcode from "jsbarcode";
@@ -660,6 +661,9 @@ function Shipping({ userRole }) {
   const [processingOrderId, setProcessingOrderId] = useState(null);
 
   const [uploadingLabelOrderId, setUploadingLabelOrderId] = useState(null);
+  const [easypostOrder, setEasypostOrder] = useState(null);
+  const [easypostLabels, setEasypostLabels] = useState({});
+  const canBuyEasypostLabels = ["admin", "manager", "super_admin"].includes(userRole);
 
   const [updatingShippingId, setUpdatingShippingId] = useState(null);
 
@@ -1916,6 +1920,63 @@ function Shipping({ userRole }) {
     }
   };
 
+  const loadEasypostLabels = async () => {
+    if (!canBuyEasypostLabels) return;
+    try {
+      const response = await api.get("/shipping/easypost/summary", { params: { kind: "sales" } });
+      setEasypostLabels(response.data?.orders || {});
+    } catch {
+      setEasypostLabels({});
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(loadEasypostLabels, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRole]);
+
+  const openEasypostLabel = (order) => {
+    const orderWeightKg =
+      Number(formData[order.order_id]?.package_weight_kg) ||
+      Number(order.shipping_weight_override_kg) ||
+      0;
+    setEasypostOrder({
+      id: order.order_id,
+      order_no: order.order_no,
+      customer_name: order.shipping_name || order.order_contact_name || order.customer_name || "",
+      ship_to: [order.customer_address, order.shipping_phone].filter(Boolean).join(String.fromCharCode(10)),
+      items: orderWeightKg
+        ? [{ unit_weight_kg: orderWeightKg, quantity: 1 }]
+        : order.items || [],
+      total_units: (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    });
+  };
+
+  const handleEasypostLabel = async (label, { refunded = false } = {}) => {
+    await Promise.all([loadShippingData({ quiet: true }), loadEasypostLabels()]);
+    if (refunded) {
+      setNotice("EasyPost label voided. Refund requested from the carrier.");
+      return;
+    }
+    const carrier = String(label.carrier || "").replace(/default$/i, "");
+    const courier = ["FedEx", "DHL", "UPS", "USPS"].find(
+      (name) => name.toLowerCase() === carrier.toLowerCase()
+    ) || carrier;
+    setFormData((previous) => ({
+      ...previous,
+      [label.order_id]: {
+        ...previous[label.order_id],
+        courier_name: courier,
+        dispatch_agent: "EasyPost",
+        tracking_number: label.tracking_code || "",
+      },
+    }));
+    setNotice(
+      `Label bought: ${courier} ${label.tracking_code || ""}. Courier and tracking are filled in. Click Mark as Shipped when the parcel leaves.`
+    );
+  };
+
   const handleShippingLabelUpload = async (orderId, event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -3091,8 +3152,18 @@ function Shipping({ userRole }) {
 
   }, [filteredShippingRecords, visibleHistoryCount]);
 
-  const renderShippingLabelControl = (orderId, fileUrl, fileName, context) => (
+  const renderShippingLabelControl = (orderId, fileUrl, fileName, context, order = null) => (
     <div className={`shipping-label-control is-${context}`}>
+      {order && canBuyEasypostLabels && (
+        <button
+          className={`shipping-buy-label-btn ${fileUrl ? "is-secondary" : ""}`}
+          onClick={() => openEasypostLabel(order)}
+          type="button"
+        >
+          <Icon name="truck" size={14} />
+          <span>{easypostLabels[String(orderId)] ? "Labels / rates" : "Buy label"}</span>
+        </button>
+      )}
       <label className="shipping-label-upload-compact">
         <input
           accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.txt,.csv,.xls,.xlsx,.doc,.docx,.zip,.btw"
@@ -3164,6 +3235,16 @@ function Shipping({ userRole }) {
   return (
 
     <div className="shipping-page">
+      {easypostOrder && (
+        <EasyPostLabelModal
+          canManage={canBuyEasypostLabels}
+          canShipAfterBuy={false}
+          kind="sales"
+          onClose={() => setEasypostOrder(null)}
+          onLabelBought={handleEasypostLabel}
+          order={easypostOrder}
+        />
+      )}
 
       <header className="shipping-page-header">
 
@@ -3779,7 +3860,34 @@ function Shipping({ userRole }) {
                           order.order_id,
                           order.label_file_url,
                           order.label_file_name,
-                          "dispatch"
+                          "dispatch",
+                          order
+                        )}
+                        {easypostLabels[String(order.order_id)] && (
+                          <div className="shipping-easypost-chip">
+                            <Icon name="truck" size={14} />
+                            <span>
+                              <strong>
+                                {String(easypostLabels[String(order.order_id)].carrier || "").replace(/default$/i, "")}{" "}
+                                {easypostLabels[String(order.order_id)].tracking_code}
+                              </strong>
+                              <small>
+                                {String(easypostLabels[String(order.order_id)].service || "")
+                                  .replace(/_/g, " ")
+                                  .replace(/([a-z])([A-Z])/g, "$1 $2")}
+                                {easypostLabels[String(order.order_id)].mode === "test" ? " · test label" : ""}
+                              </small>
+                            </span>
+                            {easypostLabels[String(order.order_id)].tracking_url && (
+                              <a
+                                href={easypostLabels[String(order.order_id)].tracking_url}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                Track
+                              </a>
+                            )}
+                          </div>
                         )}
 
                       </div>
