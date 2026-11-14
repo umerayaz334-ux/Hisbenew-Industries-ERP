@@ -423,6 +423,20 @@ def _tag_rates(rates: list[dict]) -> list[dict]:
     return rates
 
 
+# Carrier responses that only mean "this carrier does not serve this shipment"
+# (or an unused, half-configured account). They are noise in the popup.
+NOT_APPLICABLE_MESSAGES = (
+    "originating outside of canada",
+    "only support shipments from us origins to international",
+    "merchant_id is required",
+)
+
+
+def _carrier_not_applicable(item: dict) -> bool:
+    message = str(item.get("message") or "").lower()
+    return any(fragment in message for fragment in NOT_APPLICABLE_MESSAGES)
+
+
 def quote(request: Request, db: Session, order_id: int, payload: dict, kind: str = "fulfillment") -> dict:
     _user(request, db)
     order = _order(request, db, kind, order_id)
@@ -482,7 +496,7 @@ def quote(request: Request, db: Session, order_id: int, payload: dict, kind: str
     messages = [
         f"{item.get('carrier')}: {item.get('message')}"
         for item in data.get("messages") or []
-        if isinstance(item, dict) and item.get("message")
+        if isinstance(item, dict) and item.get("message") and not _carrier_not_applicable(item)
     ]
     return {
         "shipment_id": data.get("id"),

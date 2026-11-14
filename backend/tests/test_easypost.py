@@ -39,6 +39,11 @@ class EasyPostServiceTests(unittest.TestCase):
         payload = {"error": {"message": "Invalid", "errors": [{"field": "zip", "message": "is required"}]}}
         self.assertEqual(easypost._error_message(payload, 422), "Invalid zip: is required")
 
+    def test_not_applicable_carrier_notes_are_hidden(self):
+        self.assertTrue(easypost._carrier_not_applicable({"message": "shipment.options.merchant_id is required"}))
+        self.assertTrue(easypost._carrier_not_applicable({"message": "['Unable to get rates for shipments originating outside of Canada.']"}))
+        self.assertFalse(easypost._carrier_not_applicable({"message": "Invalid ZIP code"}))
+
 
 if __name__ == "__main__":
     unittest.main()
