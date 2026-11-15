@@ -1937,18 +1937,22 @@ function Shipping({ userRole }) {
   }, [userRole]);
 
   const openEasypostLabel = (order) => {
+    // Same weight the dispatch form uses: typed value, then override, then the estimate.
+    const data = formData[order.order_id] || {};
+    const estimate =
+      order.usa_shipping_estimates?.[data.shipping_service || "duty_paid"] || order.usa_shipping || {};
     const orderWeightKg =
-      Number(formData[order.order_id]?.package_weight_kg) ||
+      Number(data.package_weight_kg) ||
       Number(order.shipping_weight_override_kg) ||
+      (estimate.weight_complete ? Number(estimate.calculation_weight_kg) : 0) ||
       0;
     setEasypostOrder({
       id: order.order_id,
       order_no: order.order_no,
       customer_name: order.shipping_name || order.order_contact_name || order.customer_name || "",
       ship_to: [order.customer_address, order.shipping_phone].filter(Boolean).join(String.fromCharCode(10)),
-      items: orderWeightKg
-        ? [{ unit_weight_kg: orderWeightKg, quantity: 1 }]
-        : order.items || [],
+      package_weight_kg: orderWeightKg || null,
+      items: order.items || [],
       total_units: (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
     });
   };

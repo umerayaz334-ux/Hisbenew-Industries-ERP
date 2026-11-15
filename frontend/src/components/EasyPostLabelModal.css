@@ -207,7 +207,18 @@
 
 .ep-package-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .ep-dims { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.ep-weight { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 260px; }
+.ep-weight { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.ep-weight .ep-field { width: 140px; }
+.ep-unit-switch {
+  display: inline-flex; height: 38px; padding: 3px; border: 1px solid var(--ep-line-strong);
+  border-radius: 9px; background: var(--ep-canvas);
+}
+.ep-unit-switch button {
+  min-width: 42px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent;
+  color: var(--ep-muted); font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.ep-unit-switch button.is-active { background: var(--ep-surface); color: var(--ep-accent); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.ep-weight-conversion { align-self: center; padding-bottom: 2px; color: var(--ep-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .ep-hint { margin: 0; color: var(--ep-faint); font-size: 12px; }
 
 .ep-more summary, .ep-carrier-notes summary, .ep-history summary {

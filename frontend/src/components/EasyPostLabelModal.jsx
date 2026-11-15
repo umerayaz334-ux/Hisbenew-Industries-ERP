@@ -5,6 +5,33 @@ import CARRIER_LOGOS, { carrierLogoKey } from "./carrierLogos";
 import "./EasyPostLabelModal.css";
 
 const KG_TO_OZ = 35.27396;
+const WEIGHT_UNITS = { kg: KG_TO_OZ, lb: 16, oz: 1 };
+const WEIGHT_UNIT_KEY = "erpEasypostWeightUnit";
+
+const readWeightUnit = () => {
+  try {
+    const saved = window.localStorage.getItem(WEIGHT_UNIT_KEY);
+    return WEIGHT_UNITS[saved] ? saved : "kg";
+  } catch {
+    return "kg";
+  }
+};
+
+// Round for display in a unit: kg and lb to 0.01, oz to 0.1.
+const formatWeight = (oz, unit) => {
+  if (!oz) return "";
+  const value = oz / WEIGHT_UNITS[unit];
+  const rounded = unit === "oz" ? Math.round(value * 10) / 10 : Math.round(value * 100) / 100;
+  return String(rounded);
+};
+
+const describeWeight = (oz) => {
+  if (!oz) return "";
+  const pounds = Math.floor(oz / 16);
+  const ounces = Math.round((oz % 16) * 10) / 10;
+  const kg = Math.round((oz / KG_TO_OZ) * 100) / 100;
+  return `${kg} kg = ${pounds ? `${pounds} lb ` : ""}${ounces} oz`;
+};
 const EMPTY_ADDRESS = {
   name: "",
   company: "",
@@ -440,13 +467,26 @@ export default function EasyPostLabelModal({
   const [editTo, setEditTo] = useState(false);
   const [editFrom, setEditFrom] = useState(false);
   const [verify, setVerify] = useState(null);
-  const [parcel, setParcel] = useState(() => {
-    const kg = (order.items || []).reduce(
+  const [weightUnit, setWeightUnit] = useState(readWeightUnit);
+  // Where the starting weight came from, for the hint under the field.
+  const [weightSource] = useState(() => {
+    if (Number(order.package_weight_kg) > 0) return "order";
+    const itemsKg = (order.items || []).reduce(
       (sum, item) => sum + Number(item.unit_weight_kg || 0) * Number(item.quantity || 0),
       0
     );
-    const oz = kg > 0 ? kg * KG_TO_OZ * 1.05 : 0; // +5% for packing material
-    return { lb: oz ? Math.floor(oz / 16) : "", oz: oz ? Math.ceil(oz % 16) : "", length: "", width: "", height: "", preset: "" };
+    return itemsKg > 0 ? "products" : "none";
+  });
+  const [parcel, setParcel] = useState(() => {
+    // The order's package weight (what the dispatch form uses) wins; otherwise
+    // add up product weights plus 5% for packing material.
+    const packageKg = Number(order.package_weight_kg) || 0;
+    const itemsKg = (order.items || []).reduce(
+      (sum, item) => sum + Number(item.unit_weight_kg || 0) * Number(item.quantity || 0),
+      0
+    );
+    const oz = packageKg > 0 ? packageKg * KG_TO_OZ : itemsKg * KG_TO_OZ * 1.05;
+    return { weight: formatWeight(oz, readWeightUnit()), length: "", width: "", height: "", preset: "" };
   });
   const [labelFormat, setLabelFormat] = useState("PDF");
   const [signature, setSignature] = useState(false);
@@ -466,7 +506,19 @@ export default function EasyPostLabelModal({
   const autoQuoted = useRef(false);
   const canShipRef = useRef(canShipAfterBuy);
 
-  const weightOz = Number(parcel.lb || 0) * 16 + Number(parcel.oz || 0);
+  const weightOz = Math.max(0, Number(parcel.weight || 0)) * WEIGHT_UNITS[weightUnit];
+
+  const changeWeightUnit = (unit) => {
+    if (unit === weightUnit) return;
+    // Keep the same physical weight, shown in the new unit.
+    setParcel((current) => ({ ...current, weight: formatWeight(weightOz, unit) }));
+    setWeightUnit(unit);
+    try {
+      window.localStorage.setItem(WEIGHT_UNIT_KEY, unit);
+    } catch {
+      /* preference is optional */
+    }
+  };
 
   const loadHistory = useCallback(async () => {
     try {
@@ -954,30 +1006,41 @@ export default function EasyPostLabelModal({
             </div>
             <div className="ep-weight">
               <label className="ep-field">
-                <span>Weight lb</span>
+                <span>Weight</span>
                 <input
                   inputMode="decimal"
                   min="0"
-                  onChange={(event) => setParcel((current) => ({ ...current, lb: event.target.value }))}
+                  onChange={(event) => setParcel((current) => ({ ...current, weight: event.target.value }))}
+                  placeholder="0"
+                  step="0.01"
                   type="number"
-                  value={parcel.lb}
+                  value={parcel.weight}
                 />
               </label>
-              <label className="ep-field">
-                <span>oz</span>
-                <input
-                  inputMode="decimal"
-                  min="0"
-                  onChange={(event) => setParcel((current) => ({ ...current, oz: event.target.value }))}
-                  type="number"
-                  value={parcel.oz}
-                />
-              </label>
+              <div className="ep-unit-switch" role="radiogroup" aria-label="Weight unit">
+                {Object.keys(WEIGHT_UNITS).map((unit) => (
+                  <button
+                    aria-checked={weightUnit === unit}
+                    className={weightUnit === unit ? "is-active" : ""}
+                    key={unit}
+                    onClick={() => changeWeightUnit(unit)}
+                    role="radio"
+                    type="button"
+                  >
+                    {unit}
+                  </button>
+                ))}
+              </div>
+              {weightOz > 0 && <span className="ep-weight-conversion">{describeWeight(weightOz)}</span>}
             </div>
           </div>
           <p className="ep-hint">
             {order.total_units ? `${order.total_units} unit${order.total_units > 1 ? "s" : ""}. ` : ""}
-            Weight is filled in from product weights plus 5% for packing. Change it if your scale shows something different.
+            {weightSource === "order"
+              ? "Weight is taken from the order's package weight. Change it if your scale shows something different."
+              : weightSource === "products"
+                ? "Weight is filled in from product weights plus 5% for packing. Change it if your scale shows something different."
+                : "No weight on this order or its products. Enter the parcel weight from your scale."}
           </p>
           <details className="ep-more">
             <summary>Label options</summary>
