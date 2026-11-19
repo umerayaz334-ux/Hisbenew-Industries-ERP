@@ -222,6 +222,7 @@ class ServiceTakerManufacturingShippingAdminUpdate(BaseModel):
 
 
 class ServiceTakerManufacturingAdminUpdate(BaseModel):
+    quantity: int = Field(default=1, ge=1, le=100000)
     send_tracking_email: bool = False
     status: str | None = Field(
         default=None,

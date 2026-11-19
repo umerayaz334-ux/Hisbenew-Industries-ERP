@@ -1413,6 +1413,13 @@ def admin_update_manufacturing_request(
     original_status = order.status
     previous_tracking = order.tracking_number
     price_changed = False
+    quantity_changed = "quantity" in fields and payload.quantity != order.quantity
+    previous_quantity = order.quantity
+    if quantity_changed:
+        if order.status in {"Completed", "Cancelled"}:
+            raise HTTPException(status_code=409, detail="Quantity cannot be changed on completed or cancelled orders.")
+        order.quantity = payload.quantity
+        price_changed = True
     if "quoted_unit_price" in fields:
         order.quoted_unit_price = float(payload.quoted_unit_price or 0)
         price_changed = True
@@ -1473,6 +1480,9 @@ def admin_update_manufacturing_request(
     set_manufacturing_status_dates(order, order.status)
     status_changed = order.status != original_status
     message = clean_text(payload.update_message)
+    if quantity_changed:
+        quantity_message = f"Quantity changed from {previous_quantity} to {order.quantity} units."
+        message = f"{message} {quantity_message}" if message else quantity_message
     if not message and status_changed:
         message = f"Status changed to {order.status}."
     elif not message and price_changed:

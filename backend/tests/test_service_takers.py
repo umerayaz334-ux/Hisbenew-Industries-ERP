@@ -544,6 +544,50 @@ class ServiceTakerTests(unittest.TestCase):
         self.assertEqual(confirmed["paid_total"], 25)
         self.assertEqual(confirmed["payments"][0]["status"], "Confirmed")
 
+    def test_quote_quantity_updates_totals_and_client_view(self):
+        client = self.create_service_taker()
+        admin_request = self.request(self.admin_id)
+        client_request = self.request(client["user_id"])
+        order = portal_create_manufacturing_request(
+            ServiceTakerManufacturingRequestCreate(product_name="Custom product", quantity=5),
+            client_request, self.db,
+        )
+        admin_update_manufacturing_request(
+            order["id"], ServiceTakerManufacturingAdminUpdate(
+                quoted_unit_price=10, other_cost=5, deposit_required=20,
+            ), admin_request, self.db,
+        )
+        updated = admin_update_manufacturing_request(
+            order["id"], ServiceTakerManufacturingAdminUpdate(quantity=8), admin_request, self.db,
+        )
+        self.assertEqual(updated["quantity"], 8)
+        self.assertEqual(updated["quoted_total"], 85)
+        self.assertEqual(updated["balance_due"], 85)
+        self.assertEqual(updated["deposit_required"], 20)
+        visible = next(row for row in portal_dashboard(client_request, self.db)["manufacturing_orders"] if row["id"] == order["id"])
+        self.assertEqual(visible["quantity"], 8)
+        self.assertEqual(visible["quoted_total"], 85)
+        self.assertTrue(self.db.query(ServiceTakerManufacturingUpdate).filter_by(
+            manufacturing_order_id=order["id"], message="Quantity changed from 5 to 8 units."
+        ).first())
+        unchanged = admin_update_manufacturing_request(
+            order["id"], ServiceTakerManufacturingAdminUpdate(admin_notes="Keep quantity"), admin_request, self.db,
+        )
+        self.assertEqual(unchanged["quantity"], 8)
+        admin_update_manufacturing_request(
+            order["id"], ServiceTakerManufacturingAdminUpdate(status="Completed"), admin_request, self.db,
+        )
+        with self.assertRaises(HTTPException) as error:
+            admin_update_manufacturing_request(
+                order["id"], ServiceTakerManufacturingAdminUpdate(quantity=9), admin_request, self.db,
+            )
+        self.assertEqual(error.exception.status_code, 409)
+
+    def test_quote_quantity_validation(self):
+        for quantity in (0, -1, 1.5, 100001, None):
+            with self.subTest(quantity=quantity), self.assertRaises(ValidationError):
+                ServiceTakerManufacturingAdminUpdate(quantity=quantity)
+
     def test_shipping_requested_with_manufacturing_order_appears_in_local_and_client_shipping(self):
         client = create_client(
             ServiceTakerCreate(

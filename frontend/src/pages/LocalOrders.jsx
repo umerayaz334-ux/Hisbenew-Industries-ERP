@@ -318,6 +318,7 @@ export default function LocalOrders() {
   const handleSelectOrder = (order) => {
     setSelectedOrder(order);
     setQuoteForm({
+      quantity: order.quantity,
       status: order.status || "Quote requested",
       quoted_unit_price: order.quoted_unit_price ?? "",
       other_cost: order.other_cost ?? "",
@@ -373,6 +374,7 @@ export default function LocalOrders() {
     setBusy("save-quote");
     try {
       const payload = {
+        quantity: Number(quoteForm.quantity),
         status: quoteForm.status,
         quoted_unit_price: quoteForm.quoted_unit_price === "" ? null : Number(quoteForm.quoted_unit_price),
         other_cost: quoteForm.other_cost === "" ? null : Number(quoteForm.other_cost),
@@ -387,6 +389,9 @@ export default function LocalOrders() {
       };
       const response = await api.patch(`/service-takers/admin/local-orders/${selectedOrder.id}`, payload);
       const savedOrder = response.data;
+      if (Number(savedOrder?.quantity) !== payload.quantity) {
+        throw new Error("The quantity did not save. Please refresh and try again.");
+      }
       if (
         !savedOrder ||
         Math.abs(Number(savedOrder.other_cost || 0) - Number(payload.other_cost || 0)) > 0.01 ||
@@ -1082,6 +1087,15 @@ export default function LocalOrders() {
                 >
                   <h4>Pricing & Administration</h4>
                   <div className="service-form-grid">
+                    <label>
+                      Quantity (Units)
+                      <input
+                        type="number" min="1" max="100000" step="1" required
+                        disabled={selectedOrder.status === "Completed"}
+                        value={quoteForm.quantity ?? ""}
+                        onChange={(event) => setQuoteForm((current) => ({ ...current, quantity: event.target.value }))}
+                      />
+                    </label>
                     <label>
                       Status
                       <select

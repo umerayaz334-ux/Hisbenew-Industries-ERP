@@ -1129,6 +1129,7 @@ const visibleProducts = useMemo(
       edge_type: order.edge_type || "",
       packaging: order.packaging || "",
       quoted_unit_price: order.quoted_unit_price || "",
+      quantity: order.quantity,
       other_cost: order.other_cost || "",
       other_cost_label: order.other_cost_label || "",
       deposit_required: order.deposit_required || "",
@@ -1221,6 +1222,7 @@ const visibleProducts = useMemo(
         `/service-takers/admin/local-orders/${selectedManufacturing.id}`,
         {
           ...manufacturingAdminForm,
+          quantity: Number(manufacturingAdminForm.quantity),
           quoted_unit_price: Number(manufacturingAdminForm.quoted_unit_price || 0),
           other_cost: Number(manufacturingAdminForm.other_cost || 0),
           other_cost_label: manufacturingAdminForm.other_cost_label.trim() || null,
@@ -4257,6 +4259,15 @@ const tabs = [
                     ))}
                   </div>
                 </div>
+                <label>
+                  Quantity (Units)
+                  <input
+                    type="number" min="1" max="100000" step="1" required
+                    disabled={["Completed", "Cancelled"].includes(selectedManufacturing.status)}
+                    value={manufacturingAdminForm.quantity ?? ""}
+                    onChange={(event) => setManufacturingAdminForm((current) => ({ ...current, quantity: event.target.value }))}
+                  />
+                </label>
                 <label>
                   Unit Quote ({isRupeeCurrency(selectedManufacturing.currency) ? "Rs" : selectedManufacturing.currency || 'USD'})
                   <input
