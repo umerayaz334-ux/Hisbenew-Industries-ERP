@@ -680,11 +680,14 @@ function Sidebar({
       ["Service Account", "Account", "account"],
     ].filter(([page]) => normalizedVisibleAllowedPages.includes(page));
     return (
-      <nav aria-label="Service portal navigation" className="service-taker-bottom-nav" style={{ gridTemplateColumns: `repeat(${serviceNavigation.length}, minmax(0, 1fr))` }}>
+      <nav aria-label="Service portal navigation" className={`service-taker-bottom-nav ${collapsed ? "is-collapsed" : ""}`} style={{ gridTemplateColumns: `repeat(${serviceNavigation.length}, minmax(0, 1fr))` }}>
+        <button className="service-taker-collapse-toggle" type="button" onClick={onToggleCollapse} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d={collapsed ? "m9 5 7 7-7 7" : "m15 5-7 7 7 7"}/></svg></button>
         <div className="service-taker-nav-brand"><span>HI</span><div><strong>Hisbenew Industries</strong></div></div>
         <div className="service-taker-nav-links">
           {serviceNavigation.map(([page, label, icon]) => (
             <a
+              aria-label={label}
+              title={label}
               aria-current={activePage === page ? "page" : undefined}
               className={activePage === page ? "is-active" : ""}
               href={getPageHref(page)}
@@ -698,7 +701,7 @@ function Sidebar({
         </div>
         <div className="service-taker-nav-footer">
           <div className="service-taker-nav-profile"><span>{String(authenticatedUser?.name || authenticatedUser?.username || "S").trim().slice(0, 1).toUpperCase()}</span><div><strong>{authenticatedUser?.name || authenticatedUser?.username || "Service taker"}</strong><small>Client portal</small></div></div>
-          <button onClick={handleMobileLogout} type="button">Log out</button>
+          <button onClick={handleMobileLogout} type="button" aria-label="Log out" title="Log out"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M9 4H4v16h5M9 12h12m-5-5 5 5-5 5"/></svg><span>Log out</span></button>
         </div>
       </nav>
     );

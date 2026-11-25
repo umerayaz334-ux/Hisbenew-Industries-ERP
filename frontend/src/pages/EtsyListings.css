@@ -2,3 +2,5 @@
 
 /* Familiar marketplace form styling, with manual publishing as the default. */
 .etsy-workspace{--etsy-ink:#222;--etsy-accent:#222;background:#faf9f7}.etsy-heading h1{font-family:Georgia,serif;font-weight:400}.etsy-eyebrow{color:#c44900!important}.etsy-connection{background:#fff3e9;border-color:#f4dac5}.etsy-dot{background:#f1641e}.etsy-tabs button.active{background:#fff0e5;color:#963c09}.etsy-workspace button{border-radius:22px}.etsy-draft.active{border-color:#f1641e;background:#fff6ef!important}.etsy-copy-panel{border:1px solid #e5ddd6;padding:20px;border-radius:12px;margin-bottom:24px}.etsy-copy-panel>p{line-height:1.7}.etsy-copy-item{margin:18px 0}.etsy-copy-item .etsy-row{margin-bottom:8px}.etsy-copy-panel>button{margin:4px}.etsy-manual-notes{padding:18px;background:#faf7f2;border-radius:10px;margin-bottom:24px}.etsy-manual-notes h3{font-size:15px;margin-top:0}
+
+.etsy-layout > .etsy-editor { min-width: 0; }

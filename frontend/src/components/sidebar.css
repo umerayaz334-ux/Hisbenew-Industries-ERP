@@ -2232,3 +2232,20 @@ a.menu-button:focus-visible, a.mobile-tab-button:focus-visible, a.mobile-menu-it
   .service-taker-bottom-nav a svg { width: 23px; height: 23px; }
   .service-taker-bottom-nav a span { font-size: 11px; }
 }
+
+.service-taker-collapse-toggle { display: none; }
+@media (min-width: 901px) {
+  .service-taker-bottom-nav { transition: width 180ms ease; overflow-y: auto; }
+  .service-taker-collapse-toggle { display: flex; align-items: center; justify-content: center; align-self: flex-end; min-height: 36px; width: 36px; flex-shrink: 0; border: 1px solid #e4e8f1; border-radius: 9px; background: white; color: #4359b4; cursor: pointer; }
+  .service-taker-bottom-nav.is-collapsed { width: 78px; max-width: 78px; padding: 16px 10px; gap: 20px; }
+  .service-taker-bottom-nav.is-collapsed .service-taker-collapse-toggle { align-self: center; }
+  .service-taker-bottom-nav.is-collapsed .service-taker-nav-brand { justify-content: center; padding: 0 0 18px; }
+  .service-taker-bottom-nav.is-collapsed .service-taker-nav-brand > div,
+  .service-taker-bottom-nav.is-collapsed .service-taker-nav-profile > div,
+  .service-taker-bottom-nav.is-collapsed .service-taker-nav-links a > span,
+  .service-taker-bottom-nav.is-collapsed .service-taker-nav-footer > button > span { display: none; }
+  .service-taker-bottom-nav.is-collapsed a { justify-content: center; padding: 0; }
+  .service-taker-bottom-nav.is-collapsed .service-taker-nav-profile { justify-content: center; padding: 0; }
+  .service-taker-nav-footer > button { display: flex; align-items: center; gap: 8px; }
+  .service-taker-bottom-nav.is-collapsed .service-taker-nav-footer > button { justify-content: center; padding: 0; }
+}

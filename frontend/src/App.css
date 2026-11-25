@@ -840,3 +840,7 @@ body {
 @media (max-width: 900px) {
   .app-layout.service-taker-navigation .service-taker-bottom-nav a { font-size: 13px; }
 }
+
+@media (min-width: 901px) {
+  .app-layout.service-taker-navigation.sidebar-collapsed { --app-sidebar-width: 78px; }
+}
