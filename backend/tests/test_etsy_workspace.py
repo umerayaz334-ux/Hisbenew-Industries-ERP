@@ -74,6 +74,18 @@ class EtsyWorkspaceTests(unittest.TestCase):
         saved = save_draft(draft["id"], SaveDraft(revision=returned["revision"], data=self.content), self.request(self.friend), self.db)
         self.assertGreater(saved["revision"], returned["revision"])
 
+    def test_manual_listing_can_be_approved_without_api_references(self):
+        self.content = {"createDraftListing": {"title": "Wooden box", "description": "Handmade box", "price": 20, "quantity": 1},
+                        "manualListing": {"category": "Home / Storage", "currency": "GBP", "shipping_instructions": "Royal Mail"}}
+        draft = self.create()
+        self.assertEqual(draft["issues"], [])
+        submitted = transition(draft["id"], Transition(revision=draft["revision"], action="submit"), self.request(self.friend), self.db)
+        approved = transition(draft["id"], Transition(revision=submitted["revision"], action="approve"), self.request(self.admin), self.db)
+        self.assertEqual(approved["status"], "Approved")
+        self.assertEqual(approved["data"]["manualListing"]["currency"], "GBP")
+        self.assertFalse(workspace(self.request(self.admin), self.db)["connection"]["connected"])
+        self.assertTrue(validate_data({"createDraftListing": {"title": "  ", "price": 0, "quantity": 1}}, True))
+
     def test_other_users_and_tenants_cannot_read_or_edit_drafts(self):
         draft = self.create()
         for user in [self.other, self.outside]:

@@ -33,6 +33,10 @@ for name, path_fields in {
     item["properties"].update(path_fields)
     item["required"] = list(set(item.get("required", [])) | set(path_fields))
     SCHEMAS[name] = {"type": "object", "properties": {"entries": {"type": "array", "items": item}}}
+SCHEMAS["manualListing"] = {"type": "object", "properties": {
+    key: {"type": "string"} for key in (
+        "category", "attributes", "currency", "shipping_instructions", "processing_instructions",
+        "return_instructions", "production_partner_details", "variation_instructions", "listing_notes")}}
 CATALOG["draft_schemas"] = SCHEMAS
 PRIVATE_DIR = APP_DATA_DIR / "etsy_listing_assets"
 EDITABLE = {"Draft", "Changes requested"}
@@ -112,18 +116,20 @@ def validate_data(data, complete=False):
     errors = []
     if len(json.dumps(data)) > 2 * 1024 * 1024:
         return ["Listing content exceeds 2 MB."]
-    if set(data) - set(OPERATIONS):
+    if set(data) - set(SCHEMAS):
         errors.append("Unknown listing section")
     for name, values in data.items():
-        if name in OPERATIONS:
-            check_value(values, SCHEMAS[name], name, errors, complete)
+        if name in SCHEMAS:
+            check_value(values, SCHEMAS[name], name, errors, False)
     if errors:
         return list(dict.fromkeys(errors))
     listing = data.get("createDraftListing", {})
     if listing is None:
         listing = {}
     if complete:
-        check_value(listing, OPERATIONS["createDraftListing"]["schema"], "Listing", errors, True)
+        for key in ("title", "description"):
+            if not str(listing.get(key) or "").strip():
+                errors.append(f"{key}: required for review")
         for key in ("quantity", "price"):
             if not isinstance(listing.get(key), (int, float)) or listing[key] <= 0:
                 errors.append(f"{key}: must be greater than zero")
@@ -166,7 +172,7 @@ def workspace(request: Request, db: Session = Depends(get_db)):
     if not admin:
         query = query.filter_by(owner_id=user.id)
     return {"is_admin": admin, "catalog": CATALOG, "connection": {"connected": False,
-            "message": "Etsy publishing is not connected. Draft preparation and review are available."},
+            "message": "Manual listing is ready. An Etsy API connection is optional."},
             "drafts": [response(row, db) for row in query.order_by(EtsyDraft.updated_at.desc()).limit(200)]}
 
 

@@ -45,12 +45,14 @@ const catalog = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
     await page.getByRole('button', {name: 'Save draft', exact: true}).click();
     await page.getByText('Draft saved to ERP.', {exact: true}).waitFor();
     assert.equal(saved.data.createDraftListing.title, 'Handmade wooden keepsake box — revised');
-    const sections = ['Photos & files', 'Price & variations', 'Category attributes', 'Shipping & returns', 'Personalization', 'Safety & guarantees', 'Translations', 'Review & history'];
+    const sections = ['Photos & files', 'Price & variations', 'Category attributes', 'Shipping & returns', 'Personalization', 'Safety & guarantees', 'Translations', 'Copy to Etsy & review'];
     for (const name of sections) {
       await page.getByRole('button', {name, exact: true}).click();
       await page.getByRole('heading', {name, exact: true}).waitFor();
     }
-    assert.equal(await page.getByRole('button', {name: /Publish to Etsy/}).isDisabled(), true);
+    assert.equal(await page.getByRole('button', {name: /Publish to Etsy/}).count(), 0);
+    assert.equal(await page.getByLabel('Title to copy', {exact: true}).inputValue(), row.data.createDraftListing.title);
+    assert.ok(await page.getByRole('button', {name: /^Copy /}).count() > 0);
     await page.getByRole('button', {name: 'Product details', exact: true}).click();
     fs.mkdirSync('docs/etsy-workspace', {recursive: true});
     await page.screenshot({path: 'docs/etsy-workspace/desktop.png', fullPage: true});
@@ -60,7 +62,7 @@ const catalog = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
     admin = false;
     await page.reload();
     await page.getByRole('button', {name: /Handmade wooden keepsake box/}).click();
-    await page.getByRole('button', {name: 'Review & history', exact: true}).click();
+    await page.getByRole('button', {name: 'Copy to Etsy & review', exact: true}).click();
     assert.equal(await page.getByRole('button', {name: /Publish to Etsy|Approve draft/}).count(), 0);
     await page.getByRole('button', {name: 'Submit for review', exact: true}).click();
     await page.getByText('Listing status updated.', {exact: true}).waitFor();
