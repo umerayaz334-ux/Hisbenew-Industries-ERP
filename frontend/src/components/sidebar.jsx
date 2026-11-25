@@ -20,6 +20,8 @@ const menuItems = [
   { name: "Warehouse Shipments", label: "Shipments", icon: "truck" },
   { name: "Warehouse Stock", label: "Stock / Boxes", icon: "inventory" },
   { name: "Service Takers", label: "Service Takers", icon: "fulfillment" },
+  { name: "Etsy Listings", label: "Etsy Listings", icon: "box" },
+  { name: "Service Etsy Listings", label: "Etsy Listings", icon: "box" },
   { name: "Service Dashboard", label: "Dashboard", icon: "dashboard" },
   { name: "Service Products", label: "Products & Inventory", icon: "box" },
   { name: "Service Inbound", label: "Inbound", icon: "inventory" },
@@ -82,6 +84,7 @@ const roleAllowedPages = {
     "Warehouse Shipments",
     "Warehouse Stock",
     "Service Takers",
+    "Etsy Listings",
     "Follow Ups",
     "Products",
     "Inventory",
@@ -153,6 +156,7 @@ const roleAllowedPages = {
   worker: ["Dashboard", "My Tasks", "Worker Accounts", "Manufacturing", "Production", "Messages", "Settings"],
   service_taker: [
     "Service Dashboard",
+    "Service Etsy Listings",
     "Service Products",
     "Service Inbound",
     "Service Shipments",
@@ -181,7 +185,9 @@ const mainMenuOrder = [
   "Warehouse Shipments",
   "Warehouse Stock",
   "Service Takers",
+  "Etsy Listings",
   "Service Dashboard",
+  "Service Etsy Listings",
   "Service Products",
   "Service Inbound",
   "Service Shipments",
@@ -546,15 +552,16 @@ function Sidebar({
         .map((page) => menuItemByName.get(page))
         .filter(
           (item) => item && normalizedVisibleAllowedPages.includes(item.name) &&
-            (!manufacturingOnlyServiceTaker || ["Service Dashboard", "Service Manufacturing", "Service Manufacturing Shipping", "Service Charges"].includes(item.name))
+            (!manufacturingOnlyServiceTaker || ["Service Dashboard", "Service Etsy Listings", "Service Manufacturing", "Service Manufacturing Shipping", "Service Charges"].includes(item.name))
         );
   const visibleMenuCount = visibleMenuItems.length;
   const mobilePrimaryPageOrder =
     manufacturingOnlyServiceTaker
-      ? ["Service Dashboard", "Service Manufacturing", "Service Manufacturing Shipping", "Service Charges"]
+      ? ["Service Dashboard", "Service Etsy Listings", "Service Manufacturing", "Service Manufacturing Shipping", "Service Charges"]
       : userRole === "service_taker"
       ? [
           "Service Dashboard",
+          "Service Etsy Listings",
           "Service Products",
           "Service Inbound",
           "Service Shipments",
@@ -665,6 +672,7 @@ function Sidebar({
   if (directServiceTakerNavigation) {
     const serviceNavigation = [
       ["Service Dashboard", "Home", "dashboard"],
+      ["Service Etsy Listings", "Etsy Listings", "box"],
       ["Service Shipments", "Shipping", "truck"],
       ["Service Manufacturing", "Orders", "clipboard"],
       ["Service Manufacturing Shipping", "Shipping", "truck"],

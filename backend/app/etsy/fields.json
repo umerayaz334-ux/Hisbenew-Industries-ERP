@@ -1,0 +1,1048 @@
+{
+  "checked_on": "2026-11-25",
+  "source": "https://www.etsy.com/openapi/generated/oas/3.0.0.json",
+  "operations": {
+    "createDraftListing": {
+      "path": "/v3/application/shops/{shop_id}/listings",
+      "method": "post",
+      "schema": {
+        "type": "object",
+        "required": [
+          "quantity",
+          "title",
+          "description",
+          "price",
+          "who_made",
+          "when_made",
+          "taxonomy_id"
+        ],
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "description": "The positive non-zero number of products available for purchase in the listing. Note: The listing quantity is the sum of available offering quantities. You can request the quantities for individual offerings from the ListingInventory resource using the [getListingInventory](/documentation/reference#operation/getListingInventory) endpoint.",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string",
+            "description": "The listing's title string. When creating or updating a listing, valid title strings contain only letters, numbers, punctuation marks, mathematical symbols, whitespace characters, \u2122, \u00a9, and \u00ae. (regex: /[^\\p{L}\\p{Nd}\\p{P}\\p{Sm}\\p{Zs}\u2122\u00a9\u00ae]/u) You can only use the %, :, & and + characters once each."
+          },
+          "description": {
+            "type": "string",
+            "description": "A description string of the product for sale in the listing."
+          },
+          "price": {
+            "type": "number",
+            "description": "The positive non-zero price of the product. (Sold product listings are private) Note: The price is the minimum possible price. The [`getListingInventory`](/documentation/reference/#operation/getListingInventory) method requests exact prices for available offerings.",
+            "format": "float"
+          },
+          "who_made": {
+            "type": "string",
+            "description": "An enumerated string indicating who made the product. Helps buyers locate the listing under the Handmade heading. Requires 'is_supply' and 'when_made'.",
+            "enum": [
+              "i_did",
+              "someone_else",
+              "collective"
+            ]
+          },
+          "when_made": {
+            "type": "string",
+            "description": "An enumerated string for the era in which the maker made the product in this listing. Helps buyers locate the listing under the Vintage heading. Requires 'is_supply' and 'who_made'.",
+            "enum": [
+              "made_to_order",
+              "2020_2026",
+              "2010_2019",
+              "2007_2009",
+              "before_2007",
+              "2000_2006",
+              "1990s",
+              "1980s",
+              "1970s",
+              "1960s",
+              "1950s",
+              "1940s",
+              "1930s",
+              "1920s",
+              "1910s",
+              "1900s",
+              "1800s",
+              "1700s",
+              "before_1700"
+            ]
+          },
+          "taxonomy_id": {
+            "type": "integer",
+            "description": "The numerical taxonomy ID of the listing. See [SellerTaxonomy](/documentation/reference#tag/SellerTaxonomy) and [BuyerTaxonomy](/documentation/reference#tag/BuyerTaxonomy) for more information.",
+            "format": "int64",
+            "minimum": 1
+          },
+          "shipping_profile_id": {
+            "type": "integer",
+            "description": "The numeric ID of the [shipping profile](/documentation/reference#operation/getShopShippingProfile) associated with the listing. Required when listing type is `physical`.",
+            "format": "int64",
+            "nullable": true,
+            "minimum": 1
+          },
+          "return_policy_id": {
+            "type": "integer",
+            "description": "The numeric ID of the [Return Policy](/documentation/reference#operation/getShopReturnPolicies).",
+            "format": "int64",
+            "nullable": true,
+            "minimum": 1
+          },
+          "materials": {
+            "type": "array",
+            "description": "A list of material strings for materials used in the product. Valid materials strings contain only letters, numbers, and whitespace characters. (regex: /[^\\p{L}\\p{Nd}\\p{Zs}]/u) Default value is null.",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "shop_section_id": {
+            "type": "integer",
+            "description": "The numeric ID of the [shop section](/documentation/reference#tag/Shop-Section) for this listing. Default value is null.",
+            "format": "int64",
+            "nullable": true,
+            "minimum": 1
+          },
+          "processing_min": {
+            "type": "integer",
+            "description": "The minimum number of days required to process this listing. Default value is null.",
+            "format": "int64",
+            "nullable": true
+          },
+          "processing_max": {
+            "type": "integer",
+            "description": "The maximum number of days required to process this listing. Default value is null.",
+            "format": "int64",
+            "nullable": true
+          },
+          "readiness_state_id": {
+            "type": "integer",
+            "description": "The numeric ID of the [processing profile](/documentation/reference#operation/getShopReadinessStateDefinition) associated with the listing. Returned only when the listing is `active` and of type `physical`, and the endpoint is either shop-scoped (path contains `shop_id`) or a single-listing request such as `getListing`. For every other case this field can be null.",
+            "format": "int64",
+            "nullable": true,
+            "minimum": 1
+          },
+          "tags": {
+            "type": "array",
+            "description": "A comma-separated list of tag strings for the listing. When creating or updating a listing, valid tag strings contain only letters, numbers, whitespace characters, -, ', \u2122, \u00a9, and \u00ae. (regex: /[^\\p{L}\\p{Nd}\\p{Zs}\\-'\u2122\u00a9\u00ae]/u) Default value is null.",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "styles": {
+            "type": "array",
+            "description": "An array of style strings for this listing, each of which is free-form text string such as \"Formal\", or \"Steampunk\". When creating or updating a listing, the listing may have up to two styles. Valid style strings contain only letters, numbers, and whitespace characters. (regex: /[^\\p{L}\\p{Nd}\\p{Zs}]/u) Each style string is limited to 45 characters. Default value is null.",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "item_weight": {
+            "type": "number",
+            "description": "The numeric weight of the product measured in units set in 'item_weight_unit'. Default value is null. If set, the value must be greater than 0.",
+            "format": "float",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1.79769313486e+308
+          },
+          "item_length": {
+            "type": "number",
+            "description": "The numeric length of the product measured in units set in 'item_dimensions_unit'. Default value is null. If set, the value must be greater than 0.",
+            "format": "float",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1.79769313486e+308
+          },
+          "item_width": {
+            "type": "number",
+            "description": "The numeric width of the product measured in units set in 'item_dimensions_unit'. Default value is null. If set, the value must be greater than 0.",
+            "format": "float",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1.79769313486e+308
+          },
+          "item_height": {
+            "type": "number",
+            "description": "The numeric height of the product measured in units set in 'item_dimensions_unit'. Default value is null. If set, the value must be greater than 0.",
+            "format": "float",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1.79769313486e+308
+          },
+          "item_weight_unit": {
+            "type": "string",
+            "description": "A string defining the units used to measure the weight of the product. Default value is null.",
+            "nullable": true,
+            "enum": [
+              "oz",
+              "lb",
+              "g",
+              "kg"
+            ]
+          },
+          "item_dimensions_unit": {
+            "type": "string",
+            "description": "A string defining the units used to measure the dimensions of the product. Default value is null.",
+            "nullable": true,
+            "enum": [
+              "in",
+              "ft",
+              "mm",
+              "cm",
+              "m",
+              "yd",
+              "inches"
+            ]
+          },
+          "production_partner_ids": {
+            "type": "array",
+            "description": "An array of unique IDs of production partner ids.",
+            "nullable": true,
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          "image_ids": {
+            "type": "array",
+            "description": "An array of numeric image IDs of the images in a listing, which can include up to 20 images.",
+            "nullable": true,
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          "ecgt_garan_brand": {
+            "type": "string",
+            "description": "The brand or trademark name for the EU commercial guarantee (required under GPSR/ECGT for eligible EU traders). Maximum 25 characters. See the [Etsy Seller Handbook](https://help.etsy.com/hc/articles/43191692248343) for details. If any one of ecgt_garan_brand, ecgt_garan_model, ecgt_garan_years, or ecgt_garan_guarantee_details is provided and non-empty, all four are required. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "ecgt_garan_years": {
+            "type": "integer",
+            "description": "Duration of the EU commercial guarantee in whole years (minimum 3, maximum 99). Required together with ecgt_garan_brand, ecgt_garan_model, and ecgt_garan_guarantee_details. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "format": "int64",
+            "nullable": true
+          },
+          "ecgt_garan_model": {
+            "type": "string",
+            "description": "The product model or reference number for the EU commercial guarantee label. Maximum 20 characters. Required together with ecgt_garan_brand, ecgt_garan_years, and ecgt_garan_guarantee_details. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "ecgt_garan_guarantee_details": {
+            "type": "string",
+            "description": "Free-text description of the EU commercial guarantee terms and coverage. Maximum 255 characters. Required together with ecgt_garan_brand, ecgt_garan_model, and ecgt_garan_years. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "ecgt_other_commercial_guarantee_details": {
+            "type": "string",
+            "description": "Free-text details of any additional commercial guarantee or warranty beyond the primary EU commercial guarantee. Maximum 255 characters. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "ecgt_after_sales_service_info": {
+            "type": "string",
+            "description": "After-sales service, repairability, or eco-friendly delivery information required under EU GPSR/ECGT regulations. Maximum 255 characters. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "ecgt_software_update_details": {
+            "type": "string",
+            "description": "Details of software update availability and the duration of such updates, as required under EU ECGT regulations for digital content. Maximum 255 characters. Silently ignored for physical listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "gpsr_manufacturer_type": {
+            "type": "string",
+            "description": "Who the manufacturer of this product is, for GPSR (EU General Product Safety Regulation) purposes. Either `seller` (your shop is the manufacturer) or `economic_operator` (a manufacturer record from the [Shop Economic Operators](/documentation/reference#tag/Shop-Economic-Operators) endpoints, identified by `gpsr_manufacturer_id`). `seller` is rejected when `who_made` is `someone_else`; use `economic_operator` for items made by a third party. Send `null` to clear. Optional for now; it becomes required for listings from eligible traders that sell into the EU 60 days after these fields were announced. See the [GPSR Economic Operators Tutorial](/documentation/tutorials/gpsr-economic-operators) for eligibility and the full flow.",
+            "nullable": true,
+            "enum": [
+              "seller",
+              "economic_operator"
+            ]
+          },
+          "gpsr_manufacturer_id": {
+            "type": "integer",
+            "description": "The `economic_operator_id` of the manufacturer, from the [Shop Economic Operators](/documentation/reference#tag/Shop-Economic-Operators) endpoints. Required when `gpsr_manufacturer_type` is `economic_operator`, and rejected when the type is anything else. The operator must belong to this shop and not be deleted. The manufacturer may be located anywhere in the world. If you change `gpsr_manufacturer_type` to `seller` without sending this field, the stored id is cleared for you.",
+            "format": "int64",
+            "nullable": true
+          },
+          "gpsr_responsible_person_type": {
+            "type": "string",
+            "description": "Who the EU responsible person for this product is, for GPSR purposes. Either `seller` (your shop; only valid when the shop's legal address, or the address on file, is in the European Union) or `economic_operator` (a record from the [Shop Economic Operators](/documentation/reference#tag/Shop-Economic-Operators) endpoints, identified by `gpsr_responsible_person_id`, which must have an address in the European Union). Send `null` to clear. Optional for now; it becomes required for listings from eligible traders that sell into the EU 60 days after these fields were announced. See the [GPSR Economic Operators Tutorial](/documentation/tutorials/gpsr-economic-operators) for eligibility and the full flow.",
+            "nullable": true,
+            "enum": [
+              "seller",
+              "economic_operator"
+            ]
+          },
+          "gpsr_responsible_person_id": {
+            "type": "integer",
+            "description": "The `economic_operator_id` of the EU responsible person, from the [Shop Economic Operators](/documentation/reference#tag/Shop-Economic-Operators) endpoints. Required when `gpsr_responsible_person_type` is `economic_operator`, and rejected when the type is anything else. The operator must belong to this shop and not be deleted, and its address must be in the European Union. If you change `gpsr_responsible_person_type` to `seller` without sending this field, the stored id is cleared for you.",
+            "format": "int64",
+            "nullable": true
+          },
+          "gpsr_serial_number": {
+            "type": "string",
+            "description": "An optional serial number, batch number, or lot identifier that lets the product be traced for GPSR purposes. Maximum 255 characters. Send `null` to clear.",
+            "nullable": true
+          },
+          "gpsr_safety_warnings": {
+            "type": "string",
+            "description": "Optional free-text safety warnings and safety information for the product regarding GPSR purposes, shown to buyers as product safety information on the listing page (for example age restrictions, choking hazards, or care and handling instructions). Maximum 102,400 characters. Send `null` to clear.",
+            "nullable": true
+          },
+          "is_supply": {
+            "type": "boolean",
+            "description": "When true, tags the listing as a supply product, else indicates that it's a finished product. Helps buyers locate the listing under the Supplies heading. Requires 'who_made' and 'when_made'."
+          },
+          "is_customizable": {
+            "type": "boolean",
+            "description": "When true, a buyer may contact the seller for a customized order. The default value is true when a shop accepts custom orders. Does not apply to shops that do not accept custom orders."
+          },
+          "should_auto_renew": {
+            "type": "boolean",
+            "description": "When true, renews a listing for four months upon expiration."
+          },
+          "is_taxable": {
+            "type": "boolean",
+            "description": "When true, applicable [shop](/documentation/reference#tag/Shop) tax rates apply to this listing at checkout."
+          },
+          "type": {
+            "type": "string",
+            "description": "An enumerated type string that indicates whether the listing is physical or a digital download.",
+            "enum": [
+              "physical",
+              "download",
+              "both"
+            ]
+          }
+        }
+      }
+    },
+    "uploadListingFile": {
+      "path": "/v3/application/shops/{shop_id}/listings/{listing_id}/files",
+      "method": "post",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "listing_file_id": {
+            "type": "integer",
+            "description": "The unique numeric ID of a file associated with a digital listing.",
+            "format": "int64",
+            "minimum": 1
+          },
+          "file": {
+            "type": "string",
+            "description": "A binary file to upload.",
+            "format": "binary",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "description": "The file name string of a file to upload"
+          },
+          "rank": {
+            "type": "integer",
+            "description": "The positive non-zero numeric position in the images displayed in a listing, with rank 1 images appearing in the left-most position in a listing.",
+            "format": "int64",
+            "minimum": 1,
+            "default": 1
+          }
+        }
+      }
+    },
+    "uploadListingImage": {
+      "path": "/v3/application/shops/{shop_id}/listings/{listing_id}/images",
+      "method": "post",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "type": "string",
+            "description": "The file name string of a file to upload",
+            "format": "binary",
+            "nullable": true
+          },
+          "listing_image_id": {
+            "type": "integer",
+            "description": "The numeric ID of the primary [listing image](/documentation/reference#tag/ShopListing-Image) for this transaction.",
+            "format": "int64",
+            "minimum": 1
+          },
+          "rank": {
+            "type": "integer",
+            "description": "The positive non-zero numeric position in the images displayed in a listing, with rank 1 images appearing in the left-most position in a listing.",
+            "format": "int64",
+            "minimum": 0,
+            "default": 1
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "When true, this request replaces the existing image at a given rank.",
+            "default": false
+          },
+          "is_watermarked": {
+            "type": "boolean",
+            "description": "When true, indicates that the uploaded image has a watermark.",
+            "default": false
+          },
+          "alt_text": {
+            "type": "string",
+            "description": "Alt text for the listing image. Max length 500 characters.",
+            "default": ""
+          }
+        }
+      }
+    },
+    "updateListingInventory": {
+      "path": "/v3/application/listings/{listing_id}/inventory",
+      "method": "put",
+      "schema": {
+        "type": "object",
+        "required": [
+          "products"
+        ],
+        "properties": {
+          "products": {
+            "type": "array",
+            "description": "A JSON array of products available in a listing, even if only one product. All field names in the JSON blobs are lowercase.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sku": {
+                  "type": "string",
+                  "description": "The SKU string for the product",
+                  "nullable": true
+                },
+                "property_values": {
+                  "type": "array",
+                  "description": "A list of property value entries for this product. Note: parenthesis characters (`(` and `)`) are not allowed.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "property_id": {
+                        "type": "integer",
+                        "description": "The unique ID of an Etsy [listing property](/documentation/reference#operation/getListingInventory).",
+                        "format": "int64",
+                        "minimum": 1
+                      },
+                      "value_ids": {
+                        "type": "array",
+                        "description": "An array of unique IDs of Etsy [listing property](/documentation/reference#operation/getListingInventory) values.",
+                        "items": {
+                          "type": "integer",
+                          "format": "int64",
+                          "minimum": 1
+                        }
+                      },
+                      "scale_id": {
+                        "type": "integer",
+                        "description": "The numeric ID of a single Etsy.com measurement scale. For example, for shoe size, there are three `scale_id`s available - `UK`, `US/Canada`, and `EU`, where `US/Canada` has `scale_id` 19.",
+                        "format": "int64",
+                        "nullable": true,
+                        "minimum": 1
+                      },
+                      "property_name": {
+                        "type": "string",
+                        "description": "The name of the property, in the requested locale language."
+                      },
+                      "values": {
+                        "type": "array",
+                        "description": "A list of property value entries for this product. Note: parenthesis characters (`(` and `)`) are not allowed.",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "property_id",
+                      "value_ids",
+                      "values"
+                    ]
+                  }
+                },
+                "offerings": {
+                  "type": "array",
+                  "description": "A list of product offering entries for this product.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "price": {
+                        "type": "number",
+                        "description": "The price of the product.",
+                        "format": "float"
+                      },
+                      "quantity": {
+                        "type": "integer",
+                        "description": "How many of this product are available?",
+                        "format": "int64"
+                      },
+                      "is_enabled": {
+                        "type": "boolean",
+                        "description": "True if the offering is shown to buyers"
+                      },
+                      "readiness_state_id": {
+                        "type": "integer",
+                        "description": "The numeric ID of the [processing profile](/documentation/reference#operation/getShopReadinessStateDefinition) associated with the listing. Returned only when the listing is `active` and of type `physical`, and the endpoint is either shop-scoped (path contains `shop_id`) or a single-listing request such as `getListing`. For every other case this field can be null.",
+                        "format": "int64",
+                        "nullable": true,
+                        "minimum": 1
+                      }
+                    },
+                    "required": [
+                      "price",
+                      "quantity",
+                      "is_enabled",
+                      "readiness_state_id"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "offerings"
+              ]
+            }
+          },
+          "price_on_property": {
+            "type": "array",
+            "description": "An array of unique [listing property](/documentation/reference#operation/getListingInventory) ID integers for the properties that change product prices, if any. For example, if you charge specific prices for different sized products in the same listing, then this array contains the property ID for size.",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "quantity_on_property": {
+            "type": "array",
+            "description": "An array of unique [listing property](/documentation/reference#operation/getListingInventory) ID integers for the properties that change the quantity of the products, if any. For example, if you stock specific quantities of different colored products in the same listing, then this array contains the property ID for color.",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "sku_on_property": {
+            "type": "array",
+            "description": "An array of unique [listing property](/documentation/reference#operation/getListingInventory) ID integers for the properties that change the product SKU, if any. For example, if you use specific skus for different colored products in the same listing, then this array contains the property ID for color.",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "readiness_state_on_property": {
+            "type": "array",
+            "description": "An array of unique [listing property](/documentation/reference#operation/getListingInventory) ID integers for the properties that change processing profile, if any. For example, if you need specific processing profiles for different colored products in the same listing, then this array contains the property ID for color.",
+            "nullable": true,
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "updateListingPersonalization": {
+      "path": "/v3/application/shops/{shop_id}/listings/{listing_id}/personalization",
+      "method": "post",
+      "schema": {
+        "type": "object",
+        "required": [
+          "personalization_questions"
+        ],
+        "properties": {
+          "personalization_questions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "question_id": {
+                  "type": "integer",
+                  "description": "The ID of the personalization question. This field is optional. Include it when updating an existing question; omit it when creating a new question. Note: This value may change if the personalization question is updated.",
+                  "format": "int64",
+                  "nullable": true,
+                  "minimum": 1
+                },
+                "question_text": {
+                  "type": "string",
+                  "description": "The title of the personalization question. Must be between 1 and 45 characters. See https://developers.etsy.com/documentation/tutorials/personalization-migration#writing-listing-personalization-data"
+                },
+                "instructions": {
+                  "type": "string",
+                  "description": "Optional instructions for a personalization question. This field is not allowed for 'dropdown' questions. See https://developers.etsy.com/documentation/tutorials/personalization-migration#writing-listing-personalization-data",
+                  "nullable": true
+                },
+                "question_type": {
+                  "type": "string",
+                  "description": "The type of the personalization question. Note: Currently, only a single question with type 'text_input' is supported. See https://developers.etsy.com/documentation/tutorials/personalization-migration for details about new question types.",
+                  "enum": [
+                    "text_input",
+                    "dropdown",
+                    "unlabeled_upload",
+                    "labeled_upload"
+                  ]
+                },
+                "required": {
+                  "type": "boolean",
+                  "description": "When true, the personalization question is required."
+                },
+                "max_allowed_files": {
+                  "type": "integer",
+                  "description": "The maximum number of files the buyer may upload in response to a personalization question. This field is optional and only applicable to 'unlabeled_upload' and 'labeled_upload' questions.",
+                  "format": "int64",
+                  "nullable": true
+                },
+                "max_allowed_characters": {
+                  "type": "integer",
+                  "description": "The maximum number of characters the buyer may enter in response to a personalization question. This field is optional and only applicable to 'text_input' questions.",
+                  "format": "int64",
+                  "nullable": true
+                },
+                "options": {
+                  "type": "array",
+                  "description": "The list of options for a personalization question. For 'dropdown' questions, this list contains the options for the dropdown. For 'labeled_upload' questions, this list contains the labels for the files that the buyer may upload, and must match the max_allowed_files value..",
+                  "nullable": true,
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "option_id": {
+                        "type": "integer",
+                        "description": "The ID of the option. This field is optional. Include it when updating an existing option; omit it when creating a new option. Note: This value may change if the option or question is updated.",
+                        "format": "int64",
+                        "nullable": true,
+                        "minimum": 1
+                      },
+                      "label": {
+                        "type": "string",
+                        "description": "The option label. Note: For 'dropdown' questions, max length is 20 characters. For 'labeled_upload' questions, max length is 45 characters."
+                      }
+                    },
+                    "required": [
+                      "label"
+                    ]
+                  }
+                },
+                "add_on_price": {
+                  "type": "number",
+                  "description": "The add-on price for a question. This field is optional and only supported for optional questions of type text_input.",
+                  "format": "float",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "question_text",
+                "question_type",
+                "required"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "updateListingProperty": {
+      "path": "/v3/application/shops/{shop_id}/listings/{listing_id}/properties/{property_id}",
+      "method": "put",
+      "schema": {
+        "type": "object",
+        "required": [
+          "value_ids",
+          "values"
+        ],
+        "properties": {
+          "value_ids": {
+            "type": "array",
+            "description": "An array of unique IDs of multiple Etsy [listing property](/documentation/reference#operation/getListingProperties) values. For example, if your listing is composed of different materials, then the value ID list contains value IDs for each material.",
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          "values": {
+            "type": "array",
+            "description": "An array of value strings for multiple Etsy [listing property](/documentation/reference#operation/getListingProperties) values. For example, if your listing is painted in different colors, then the values array contains the color strings for each color. Note: parenthesis characters (`(` and `)`) are not allowed.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scale_id": {
+            "type": "integer",
+            "description": "The numeric ID of a single Etsy.com measurement scale. For example, for shoe size, there are three `scale_id`s available - `UK`, `US/Canada`, and `EU`, where `US/Canada` has `scale_id` 19.",
+            "format": "int64",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "updateListingTranslation": {
+      "path": "/v3/application/shops/{shop_id}/listings/{listing_id}/translations/{language}",
+      "method": "put",
+      "schema": {
+        "type": "object",
+        "required": [
+          "title",
+          "description"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "The title of the Listing of this Translation."
+          },
+          "description": {
+            "type": "string",
+            "description": "The description of the Listing of this Translation."
+          },
+          "tags": {
+            "type": "array",
+            "description": "The tags of the Listing of this Translation.",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "updateListing": {
+      "path": "/v3/application/shops/{shop_id}/listings/{listing_id}",
+      "method": "patch",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "image_ids": {
+            "type": "array",
+            "description": "An array of numeric image IDs of the images in a listing, which can include up to 20 images.",
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          "title": {
+            "type": "string",
+            "description": "The listing's title string. When creating or updating a listing, valid title strings contain only letters, numbers, punctuation marks, mathematical symbols, whitespace characters, \u2122, \u00a9, and \u00ae. (regex: /[^\\p{L}\\p{Nd}\\p{P}\\p{Sm}\\p{Zs}\u2122\u00a9\u00ae]/u) You can only use the %, :, & and + characters once each."
+          },
+          "description": {
+            "type": "string",
+            "description": "A description string of the product for sale in the listing."
+          },
+          "materials": {
+            "type": "array",
+            "description": "A list of material strings for materials used in the product. Valid materials strings contain only letters, numbers, and whitespace characters. (regex: /[^\\p{L}\\p{Nd}\\p{Zs}]/u) Default value is null.",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "should_auto_renew": {
+            "type": "boolean",
+            "description": "When true, renews a listing for four months upon expiration."
+          },
+          "shipping_profile_id": {
+            "type": "integer",
+            "description": "The numeric ID of the [shipping profile](/documentation/reference#operation/getShopShippingProfile) associated with the listing. Required when listing type is `physical`.",
+            "format": "int64",
+            "nullable": true,
+            "minimum": 1
+          },
+          "return_policy_id": {
+            "type": "integer",
+            "description": "The numeric ID of the [Return Policy](/documentation/reference#operation/getShopReturnPolicies). Required for active physical listings. This requirement does not apply to listings of EU-based shops.",
+            "format": "int64",
+            "nullable": true,
+            "minimum": 1
+          },
+          "shop_section_id": {
+            "type": "integer",
+            "description": "The numeric ID of the [shop section](/documentation/reference#tag/Shop-Section) for this listing. Default value is null.",
+            "format": "int64",
+            "nullable": true
+          },
+          "item_weight": {
+            "type": "number",
+            "description": "The numeric weight of the product measured in units set in 'item_weight_unit'. Default value is null. If set, the value must be greater than 0.",
+            "format": "float",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1.79769313486e+308
+          },
+          "item_length": {
+            "type": "number",
+            "description": "The numeric length of the product measured in units set in 'item_dimensions_unit'. Default value is null. If set, the value must be greater than 0.",
+            "format": "float",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1.79769313486e+308
+          },
+          "item_width": {
+            "type": "number",
+            "description": "The numeric width of the product measured in units set in 'item_dimensions_unit'. Default value is null. If set, the value must be greater than 0.",
+            "format": "float",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1.79769313486e+308
+          },
+          "item_height": {
+            "type": "number",
+            "description": "The numeric height of the product measured in units set in 'item_dimensions_unit'. Default value is null. If set, the value must be greater than 0.",
+            "format": "float",
+            "nullable": true,
+            "minimum": 0,
+            "maximum": 1.79769313486e+308
+          },
+          "item_weight_unit": {
+            "type": "string",
+            "description": "A string defining the units used to measure the weight of the product. Default value is null.",
+            "nullable": true,
+            "enum": [
+              "",
+              "oz",
+              "lb",
+              "g",
+              "kg"
+            ]
+          },
+          "item_dimensions_unit": {
+            "type": "string",
+            "description": "A string defining the units used to measure the dimensions of the product. Default value is null.",
+            "nullable": true,
+            "enum": [
+              "",
+              "in",
+              "ft",
+              "mm",
+              "cm",
+              "m",
+              "yd",
+              "inches"
+            ]
+          },
+          "is_taxable": {
+            "type": "boolean",
+            "description": "When true, applicable [shop](/documentation/reference#tag/Shop) tax rates apply to this listing at checkout."
+          },
+          "taxonomy_id": {
+            "type": "integer",
+            "description": "The numerical taxonomy ID of the listing. See [SellerTaxonomy](/documentation/reference#tag/SellerTaxonomy) and [BuyerTaxonomy](/documentation/reference#tag/BuyerTaxonomy) for more information.",
+            "format": "int64",
+            "minimum": 1
+          },
+          "tags": {
+            "type": "array",
+            "description": "A comma-separated list of tag strings for the listing. When creating or updating a listing, valid tag strings contain only letters, numbers, whitespace characters, -, ', \u2122, \u00a9, and \u00ae. (regex: /[^\\p{L}\\p{Nd}\\p{Zs}\\-'\u2122\u00a9\u00ae]/u) Default value is null.",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "who_made": {
+            "type": "string",
+            "description": "An enumerated string indicating who made the product. Helps buyers locate the listing under the Handmade heading. Requires 'is_supply' and 'when_made'.",
+            "enum": [
+              "i_did",
+              "someone_else",
+              "collective"
+            ]
+          },
+          "when_made": {
+            "type": "string",
+            "description": "An enumerated string for the era in which the maker made the product in this listing. Helps buyers locate the listing under the Vintage heading. Requires 'is_supply' and 'who_made'.",
+            "enum": [
+              "made_to_order",
+              "2020_2026",
+              "2010_2019",
+              "2007_2009",
+              "before_2007",
+              "2000_2006",
+              "1990s",
+              "1980s",
+              "1970s",
+              "1960s",
+              "1950s",
+              "1940s",
+              "1930s",
+              "1920s",
+              "1910s",
+              "1900s",
+              "1800s",
+              "1700s",
+              "before_1700"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "description": "When _updating_ a listing, this value can be either `active` or `inactive`. Note: Setting a `draft` listing to `active` will also publish the listing on etsy.com and requires that the listing have an image set. Setting a `sold_out` listing to active will update the quantity to 1 and renew the listing on etsy.com.",
+            "enum": [
+              "active",
+              "inactive"
+            ]
+          },
+          "is_supply": {
+            "type": "boolean",
+            "description": "When true, tags the listing as a supply product, else indicates that it's a finished product. Helps buyers locate the listing under the Supplies heading. Requires 'who_made' and 'when_made'."
+          },
+          "production_partner_ids": {
+            "type": "array",
+            "description": "An array of unique IDs of production partner ids.",
+            "nullable": true,
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          "type": {
+            "type": "string",
+            "description": "An enumerated type string that indicates whether the listing is physical or a digital download.",
+            "nullable": true,
+            "enum": [
+              "physical",
+              "download",
+              "both"
+            ]
+          },
+          "ecgt_garan_brand": {
+            "type": "string",
+            "description": "The brand or trademark name for the EU commercial guarantee (required under GPSR/ECGT for eligible EU traders). Maximum 25 characters. See the [Etsy Seller Handbook](https://help.etsy.com/hc/articles/43191692248343) for details. If any one of ecgt_garan_brand, ecgt_garan_model, ecgt_garan_years, or ecgt_garan_guarantee_details is provided and non-empty, all four are required. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "ecgt_garan_years": {
+            "type": "integer",
+            "description": "Duration of the EU commercial guarantee in whole years (minimum 3, maximum 99). Required together with ecgt_garan_brand, ecgt_garan_model, and ecgt_garan_guarantee_details. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "format": "int64",
+            "nullable": true
+          },
+          "ecgt_garan_model": {
+            "type": "string",
+            "description": "The product model or reference number for the EU commercial guarantee label. Maximum 20 characters. Required together with ecgt_garan_brand, ecgt_garan_years, and ecgt_garan_guarantee_details. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "ecgt_garan_guarantee_details": {
+            "type": "string",
+            "description": "Free-text description of the EU commercial guarantee terms and coverage. Maximum 255 characters. Required together with ecgt_garan_brand, ecgt_garan_model, and ecgt_garan_years. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "ecgt_other_commercial_guarantee_details": {
+            "type": "string",
+            "description": "Free-text details of any additional commercial guarantee or warranty beyond the primary EU commercial guarantee. Maximum 255 characters. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "ecgt_after_sales_service_info": {
+            "type": "string",
+            "description": "After-sales service, repairability, or eco-friendly delivery information required under EU GPSR/ECGT regulations. Maximum 255 characters. Silently ignored for digital listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "ecgt_software_update_details": {
+            "type": "string",
+            "description": "Details of software update availability and the duration of such updates, as required under EU ECGT regulations for digital content. Maximum 255 characters. Silently ignored for physical listings and for sellers who are not eligible EU traders.",
+            "nullable": true
+          },
+          "gpsr_manufacturer_type": {
+            "type": "string",
+            "description": "Who the manufacturer of this product is, for GPSR (EU General Product Safety Regulation) purposes. Either `seller` (your shop is the manufacturer) or `economic_operator` (a manufacturer record from the [Shop Economic Operators](/documentation/reference#tag/Shop-Economic-Operators) endpoints, identified by `gpsr_manufacturer_id`). `seller` is rejected when `who_made` is `someone_else`; use `economic_operator` for items made by a third party. Send `null` to clear. Optional for now; it becomes required for listings from eligible traders that sell into the EU 60 days after these fields were announced. See the [GPSR Economic Operators Tutorial](/documentation/tutorials/gpsr-economic-operators) for eligibility and the full flow.",
+            "nullable": true,
+            "enum": [
+              "seller",
+              "economic_operator"
+            ]
+          },
+          "gpsr_manufacturer_id": {
+            "type": "integer",
+            "description": "The `economic_operator_id` of the manufacturer, from the [Shop Economic Operators](/documentation/reference#tag/Shop-Economic-Operators) endpoints. Required when `gpsr_manufacturer_type` is `economic_operator`, and rejected when the type is anything else. The operator must belong to this shop and not be deleted. The manufacturer may be located anywhere in the world. If you change `gpsr_manufacturer_type` to `seller` without sending this field, the stored id is cleared for you.",
+            "format": "int64",
+            "nullable": true
+          },
+          "gpsr_responsible_person_type": {
+            "type": "string",
+            "description": "Who the EU responsible person for this product is, for GPSR purposes. Either `seller` (your shop; only valid when the shop's legal address, or the address on file, is in the European Union) or `economic_operator` (a record from the [Shop Economic Operators](/documentation/reference#tag/Shop-Economic-Operators) endpoints, identified by `gpsr_responsible_person_id`, which must have an address in the European Union). Send `null` to clear. Optional for now; it becomes required for listings from eligible traders that sell into the EU 60 days after these fields were announced. See the [GPSR Economic Operators Tutorial](/documentation/tutorials/gpsr-economic-operators) for eligibility and the full flow.",
+            "nullable": true,
+            "enum": [
+              "seller",
+              "economic_operator"
+            ]
+          },
+          "gpsr_responsible_person_id": {
+            "type": "integer",
+            "description": "The `economic_operator_id` of the EU responsible person, from the [Shop Economic Operators](/documentation/reference#tag/Shop-Economic-Operators) endpoints. Required when `gpsr_responsible_person_type` is `economic_operator`, and rejected when the type is anything else. The operator must belong to this shop and not be deleted, and its address must be in the European Union. If you change `gpsr_responsible_person_type` to `seller` without sending this field, the stored id is cleared for you.",
+            "format": "int64",
+            "nullable": true
+          },
+          "gpsr_serial_number": {
+            "type": "string",
+            "description": "An optional serial number, batch number, or lot identifier that lets the product be traced for GPSR purposes. Maximum 255 characters. Send `null` to clear.",
+            "nullable": true
+          },
+          "gpsr_safety_warnings": {
+            "type": "string",
+            "description": "Optional free-text safety warnings and safety information for the product regarding GPSR purposes, shown to buyers as product safety information on the listing page (for example age restrictions, choking hazards, or care and handling instructions). Maximum 102,400 characters. Send `null` to clear.",
+            "nullable": true
+          }
+        }
+      }
+    },
+    "updateVariationImages": {
+      "path": "/v3/application/shops/{shop_id}/listings/{listing_id}/variation-images",
+      "method": "post",
+      "schema": {
+        "type": "object",
+        "required": [
+          "variation_images"
+        ],
+        "properties": {
+          "variation_images": {
+            "type": "array",
+            "description": "A list of variation image data.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "property_id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 1
+                },
+                "value_id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 1
+                },
+                "image_id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "property_id",
+                "value_id",
+                "image_id"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "uploadListingVideo": {
+      "path": "/v3/application/shops/{shop_id}/listings/{listing_id}/videos",
+      "method": "post",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "video_id": {
+            "type": "integer",
+            "description": "The unique ID of a video associated with a listing.",
+            "format": "int64",
+            "minimum": 1
+          },
+          "video": {
+            "type": "string",
+            "description": "A video file to upload.",
+            "format": "binary",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "description": "The file name string for the video to upload."
+          }
+        }
+      }
+    }
+  }
+}

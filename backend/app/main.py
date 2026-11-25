@@ -61,6 +61,7 @@ from .integrations.amazon.models import (
 )
 from .school import ensure_default_school_foundation, router as school_router
 from .service_takers import router as service_taker_router
+from .etsy.router import router as etsy_router
 from .routers.deployment_router import router as deployment_router
 from .routers.backups_router import router as backups_router
 from .routers.order_forwarding_router import router as order_forwarding_router
@@ -191,6 +192,7 @@ def serve_optimized_upload_image(file_path: str, request: Request, w: int | None
 app.include_router(school_router)
 app.include_router(amazon_router)
 app.include_router(service_taker_router)
+app.include_router(etsy_router)
 app.include_router(deployment_router)
 app.include_router(print_agent_router)
 app.include_router(backups_router)
@@ -220,7 +222,9 @@ ALL_ERP_PAGES = [
     "Warehouse Shipments",
     "Warehouse Stock",
     "Service Takers",
+    "Etsy Listings",
     "Service Dashboard",
+    "Service Etsy Listings",
     "Service Products",
     "Service Inbound",
     "Service Shipments",
@@ -261,6 +265,7 @@ TENANT_MODULE_EXCLUDED_PAGES = {"Add Company", "Companies"}
 
 SERVICE_TAKER_PORTAL_PAGES = [
     "Service Dashboard",
+    "Service Etsy Listings",
     "Service Products",
     "Service Inbound",
     "Service Shipments",
@@ -760,6 +765,7 @@ def normalize_allowed_pages(role: str, pages: list[str] | None) -> list[str]:
         "Amazon Finances",
         "Amazon Pricing",
         "Service Takers",
+        "Etsy Listings",
         "Local Orders",
         "Local Shipping",
     ):

@@ -91,6 +91,7 @@ const emptyClient = () => ({
   label_fee: "",
   fulfillment_enabled: true,
   manufacturing_enabled: true,
+  etsy_listing_enabled: false,
   notes: "",
 });
 
@@ -778,7 +779,7 @@ const visibleProducts = useMemo(
 
   const submitClient = async (event) => {
     event.preventDefault();
-    if (!clientForm.fulfillment_enabled && !clientForm.manufacturing_enabled) {
+    if (!editingClientId && !clientForm.fulfillment_enabled && !clientForm.manufacturing_enabled && !clientForm.etsy_listing_enabled) {
       setError("Select at least one portal service.");
       return;
     }
@@ -1558,6 +1559,7 @@ const visibleProducts = useMemo(
       label_fee: client.label_fee ?? "",
       fulfillment_enabled: client.fulfillment_enabled ?? true,
       manufacturing_enabled: client.manufacturing_enabled ?? false,
+      etsy_listing_enabled: client.etsy_listing_enabled ?? false,
       notes: client.notes || "",
     });
     setModal("client");
@@ -4872,6 +4874,7 @@ const tabs = [
               <legend>Portal services</legend>
               <div>
                 {[
+                  ["etsy_listing_enabled", "Etsy listing access", "Prepare and submit listings for admin review. Turn off to revoke access immediately."],
                   [
                     "fulfillment_enabled",
                     "Fulfillment",
@@ -4889,11 +4892,6 @@ const tabs = [
                       onChange={(event) => {
                         const checked = event.target.checked;
                         setClientForm((current) => {
-                          const otherField =
-                            field === "fulfillment_enabled"
-                              ? "manufacturing_enabled"
-                              : "fulfillment_enabled";
-                          if (!checked && !current[otherField]) return current;
                           return { ...current, [field]: checked };
                         });
                       }}

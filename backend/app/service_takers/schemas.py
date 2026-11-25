@@ -34,6 +34,7 @@ class ServiceTakerPinChange(BaseModel):
 
 
 class ServiceTakerCreate(BaseModel):
+    etsy_listing_enabled: bool = False
     company_name: str = Field(min_length=1, max_length=200)
     contact_name: str = Field(min_length=1, max_length=200)
     username: str = Field(min_length=1, max_length=100)
@@ -51,6 +52,7 @@ class ServiceTakerCreate(BaseModel):
 
 
 class ServiceTakerUpdate(BaseModel):
+    etsy_listing_enabled: bool | None = None
     company_name: str | None = Field(default=None, min_length=1, max_length=200)
     contact_name: str | None = Field(default=None, min_length=1, max_length=200)
     username: str | None = Field(default=None, min_length=1, max_length=100)

@@ -107,6 +107,7 @@ tmp/portable/
 
 backend/static/optimized/
 backend/backups/
+backend/etsy_listing_assets/
 backend/shipping_rates/uploads/
 backend/fedex_settings.json
 backend/fedex_tracking_cache.json

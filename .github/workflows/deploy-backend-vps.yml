@@ -67,7 +67,7 @@ jobs:
           DATABASE_URL: "sqlite://"
         run: |
           python -m pip install httpx
-          python -m unittest tests.test_order_forwarding -q
+          python -m unittest tests.test_order_forwarding tests.test_etsy_workspace tests.test_service_takers -q
 
 
 

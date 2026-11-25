@@ -58,7 +58,7 @@ const MODULE_SECTION_DEFINITIONS = [
     key: "service-takers",
     title: "Service Takers",
         description: 'Client portal features for products, local orders, inbound, shipments, and charges.',
-    pages: ['Service Takers', 'Service Dashboard', 'Service Products', 'Service Inbound', 'Service Shipments', 'Service Manufacturing', 'Service Charges'],
+    pages: ['Service Takers', 'Etsy Listings', 'Service Dashboard', 'Service Etsy Listings', 'Service Products', 'Service Inbound', 'Service Shipments', 'Service Manufacturing', 'Service Charges'],
   },
   {
     key: "amazon",

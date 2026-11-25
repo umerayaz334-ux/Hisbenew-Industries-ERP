@@ -71,6 +71,8 @@ const pageImporters = {
   "Label Printer": () => import("./pages/LabelPrinter"),
   "Printer Settings": () => import("./pages/PrinterSettings"),
   "Service Takers": () => import("./pages/ServiceTakers"),
+  "Etsy Listings": () => import("./pages/EtsyListings"),
+  "Service Etsy Listings": () => import("./pages/EtsyListings"),
   "Service Dashboard": () => import("./pages/ServiceTakerPortal"),
   "Service Products": () => import("./pages/ServiceTakerPortal"),
   "Service Inbound": () => import("./pages/ServiceTakerPortal"),
@@ -135,6 +137,7 @@ const Fulfillment = lazy(pageImporters["Warehouse / Fulfillment"]);
 const LabelPrinter = lazy(pageImporters["Label Printer"]);
 const PrinterSettings = lazy(pageImporters["Printer Settings"]);
 const ServiceTakers = lazy(pageImporters["Service Takers"]);
+const EtsyListings = lazy(pageImporters["Etsy Listings"]);
 const ServiceTakerPortal = lazy(pageImporters["Service Dashboard"]);
 const LocalOrders = lazy(pageImporters["Local Orders"]);
 const LocalShipping = lazy(pageImporters["Local Shipping"]);
@@ -217,6 +220,8 @@ const pagePaths = {
   "Label Printer": "/portal/label-printer",
   "Printer Settings": "/portal/printer-settings",
   "Service Takers": "/portal/service-takers",
+  "Etsy Listings": "/portal/etsy-listings",
+  "Service Etsy Listings": "/portal/service-taker/etsy-listings",
   "Service Dashboard": "/portal/service-taker/dashboard",
   "Service Products": "/portal/service-taker/products",
   "Service Inbound": "/portal/service-taker/inbound",
@@ -252,6 +257,7 @@ const pagePaths = {
 
 const serviceTakerPages = [
   "Service Dashboard",
+  "Service Etsy Listings",
   "Service Products",
   "Service Inbound",
   "Service Shipments",
@@ -278,6 +284,7 @@ const rolePages = {
     "Warehouse Shipments",
     "Warehouse Stock",
     "Service Takers",
+    "Etsy Listings",
     "Follow Ups",
     "Products",
     "Inventory",
@@ -1356,6 +1363,7 @@ function App() {
     }
     if (activePage === "Shipping Balance") return <ShippingBalance />;
     if (activePage === "Service Takers") return <ServiceTakers />;
+    if (["Etsy Listings", "Service Etsy Listings"].includes(activePage)) return <EtsyListings />;
     if (activePage === "Local Orders") return <LocalOrders />;
     if (activePage === "Local Shipping") return <LocalShipping />;
     if (serviceTakerPages.includes(activePage)) {

@@ -85,8 +85,11 @@ SERVICE_TAKER_CHARGES_PAGE = "Service Charges"
 def service_taker_allowed_pages(
     fulfillment_enabled: bool,
     manufacturing_enabled: bool,
+    etsy_listing_enabled: bool = False,
 ) -> list[str]:
     pages = ['Service Dashboard']
+    if etsy_listing_enabled:
+        pages.append('Service Etsy Listings')
     if fulfillment_enabled or manufacturing_enabled:
         pages.append(SERVICE_TAKER_PRODUCTS_PAGE)
     if fulfillment_enabled:
@@ -112,6 +115,7 @@ def service_taker_service_access(user: User | None) -> dict:
     return {
         "fulfillment_enabled": fulfillment_enabled,
         "manufacturing_enabled": manufacturing_enabled,
+        "etsy_listing_enabled": "Service Etsy Listings" in allowed_pages,
     }
 
 
@@ -331,6 +335,7 @@ def client_response(db: Session, client: ServiceTaker) -> dict:
         "label_fee": float(client.label_fee or 0),
         "fulfillment_enabled": service_access["fulfillment_enabled"],
         "manufacturing_enabled": service_access["manufacturing_enabled"],
+        "etsy_listing_enabled": service_access["etsy_listing_enabled"],
         "notes": client.notes,
         "is_active": bool(client.is_active and user and user.is_active),
         "product_count": products.count(),
@@ -1792,7 +1797,7 @@ def create_client(
     db: Session = Depends(get_db),
 ):
     require_admin(request, db)
-    if not payload.fulfillment_enabled and not payload.manufacturing_enabled:
+    if not payload.fulfillment_enabled and not payload.manufacturing_enabled and not payload.etsy_listing_enabled:
         raise HTTPException(status_code=400, detail="Select at least one portal service.")
     username = payload.username.strip()
     ensure_username_available(db, username)
@@ -1807,6 +1812,7 @@ def create_client(
             service_taker_allowed_pages(
                 payload.fulfillment_enabled,
                 payload.manufacturing_enabled,
+                payload.etsy_listing_enabled,
             )
         ),
         customer_privacy_settings=json.dumps({}),
@@ -1852,7 +1858,7 @@ def update_client(
         user.username = username
     if "pin" in fields and payload.pin:
         user.pin = hash_pin(payload.pin)
-    if "fulfillment_enabled" in fields or "manufacturing_enabled" in fields:
+    if fields & {"fulfillment_enabled", "manufacturing_enabled", "etsy_listing_enabled"}:
         current_access = service_taker_service_access(user)
         fulfillment_enabled = (
             payload.fulfillment_enabled
@@ -1864,10 +1870,9 @@ def update_client(
             if "manufacturing_enabled" in fields
             else current_access["manufacturing_enabled"]
         )
-        if not fulfillment_enabled and not manufacturing_enabled:
-            raise HTTPException(status_code=400, detail="Select at least one portal service.")
+        etsy_listing_enabled = payload.etsy_listing_enabled if "etsy_listing_enabled" in fields else current_access["etsy_listing_enabled"]
         user.allowed_pages = json.dumps(
-            service_taker_allowed_pages(fulfillment_enabled, manufacturing_enabled)
+            service_taker_allowed_pages(fulfillment_enabled, manufacturing_enabled, etsy_listing_enabled)
         )
     for field in (
         "company_name",
