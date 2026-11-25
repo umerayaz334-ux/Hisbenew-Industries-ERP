@@ -3,6 +3,11 @@ name: Deploy frontend to cPanel
 on:
   # Localhost mode: do not deploy automatically on push.
   workflow_dispatch:
+    inputs:
+      use_live_site_host:
+        description: Use app.hisbenew.com as the FTP host after a hosting migration
+        type: boolean
+        default: false
 
 concurrency:
   group: frontend-cpanel-production
@@ -39,10 +44,25 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Check deployment host routing
+        env:
+          SAVED_FTP_HOST: ${{ secrets.CPANEL_FTP_SERVER }}
+        run: |
+          node --input-type=module <<'JS'
+          import dns from 'node:dns/promises';
+          const addresses = async (host) => {
+            try { return (await dns.lookup(host, { all: true })).map(row => row.address); }
+            catch { return []; }
+          };
+          const saved = await addresses(process.env.SAVED_FTP_HOST);
+          const live = await addresses('app.hisbenew.com');
+          console.log(JSON.stringify({savedHostResolved: saved.length > 0, liveSiteResolved: live.length > 0, savedHostMatchesLiveSite: saved.some(address => live.includes(address))}));
+          JS
+
       - name: Deploy dist to cPanel
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
-          server: ${{ secrets.CPANEL_FTP_SERVER }}
+          server: ${{ inputs.use_live_site_host && 'app.hisbenew.com' || secrets.CPANEL_FTP_SERVER }}
           username: ${{ secrets.CPANEL_FTP_USERNAME }}
           password: ${{ secrets.CPANEL_FTP_PASSWORD }}
           protocol: ${{ vars.CPANEL_FTP_PROTOCOL || 'ftps' }}
