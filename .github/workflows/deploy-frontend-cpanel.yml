@@ -1,7 +1,12 @@
 name: Deploy frontend to cPanel
 
 on:
-  # Localhost mode: do not deploy automatically on push.
+  push:
+    branches: [codex/cross-tenant-order-forwarding-20261028]
+    paths:
+      - 'frontend/**'
+      - 'scripts/verify-live-forwarding.mjs'
+      - '.github/workflows/deploy-frontend-cpanel.yml'
   workflow_dispatch:
     inputs:
       use_live_site_host:
@@ -67,7 +72,7 @@ jobs:
           password: ${{ secrets.CPANEL_FTP_PASSWORD }}
           protocol: ${{ vars.CPANEL_FTP_PROTOCOL || 'ftps' }}
           local-dir: frontend/dist/
-          server-dir: ${{ vars.CPANEL_PUBLIC_HTML_DIR || 'public_html/' }}
+          server-dir: ${{ vars.CPANEL_PUBLIC_HTML_DIR || 'hisbenew.com/' }}
 
       - name: Verify live frontend
         run: |

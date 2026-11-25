@@ -43,10 +43,15 @@ class TenantEmailSettingsTests(unittest.TestCase):
             self.assertFalse(load(3)["enabled"])
             save({"smtp": {"host": "mail.hisbenew.com", "username": "info@hisbenew.com",
                            "password": "keep-me", "port": 465, "use_ssl": True, "use_tls": False}}, 4)
-            self.assertEqual(load(4)["smtp"]["host"], "s11.hosterpk.com")
+            self.assertEqual(load(4)["smtp"]["host"], "mail.hisbenew.com")
             self.assertEqual(load(4)["smtp"]["password"], "keep-me")
             self.assertEqual(load(4)["smtp"]["port"], 465)
             self.assertTrue(load(4)["smtp"]["use_ssl"])
+            migrated = load(4)
+            migrated["smtp"]["host"] = "s12.hosterpk.com"
+            save(migrated, 4)
+            self.assertEqual(load(4)["smtp"]["host"], "s12.hosterpk.com")
+            self.assertEqual(load(4)["smtp"]["password"], "keep-me")
             save({"smtp": {"host": "mail.hisbenew.com", "username": "other@example.com"}}, 5)
             self.assertEqual(load(5)["smtp"]["host"], "mail.hisbenew.com")
 

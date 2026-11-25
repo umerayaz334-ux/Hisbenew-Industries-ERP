@@ -3804,14 +3804,6 @@ def normalize_email_settings(settings: dict | None = None) -> dict:
         normalized["smtp"]["port"] = 587
     normalized["smtp"]["use_tls"] = bool(normalized["smtp"].get("use_tls"))
     normalized["smtp"]["use_ssl"] = bool(normalized["smtp"].get("use_ssl"))
-    # The mailbox domain currently aliases the website rather than the mail host.
-    # Upgrade only this known mailbox; preserve other tenants' SMTP connections.
-    if (
-        str(normalized["smtp"].get("host") or "").strip().lower() == "mail.hisbenew.com"
-        and str(normalized["smtp"].get("username") or "").strip().lower() == "info@hisbenew.com"
-    ):
-        normalized["smtp"]["host"] = "s11.hosterpk.com"
-
     incoming_events = normalized.get("events") if isinstance(normalized.get("events"), dict) else {}
     events = {}
     for event_key, default_event in DEFAULT_EMAIL_EVENTS.items():
