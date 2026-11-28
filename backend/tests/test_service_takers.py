@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -15,6 +15,7 @@ from app.models import User
 from app.service_takers.models import (
     ServiceTaker,
     ServiceTakerInventoryTransaction,
+    ServiceTakerManufacturingOrder,
     ServiceTakerProduct,
     ServiceTakerManufacturingPayment,
     ServiceTakerManufacturingUpdate,
@@ -386,6 +387,40 @@ class ServiceTakerTests(unittest.TestCase):
         self.assertNotEqual(first_dashboard["client"]["id"], second["id"])
         self.assertEqual(len(first_dashboard["clients"]), 1)
         self.assertEqual(self.db.query(ServiceTaker).count(), 2)
+
+    def test_portal_dashboard_batches_manufacturing_history_queries(self):
+        client = self.create_service_taker()
+
+        def load_dashboard(order_numbers):
+            self.db.add_all(
+                ServiceTakerManufacturingOrder(
+                    service_taker_id=client["id"],
+                    request_no=f"TEST-{index}",
+                    product_name="Test product",
+                )
+                for index in order_numbers
+            )
+            self.db.commit()
+            queries = []
+
+            def count_query(conn, cursor, statement, parameters, context, executemany):
+                queries.append(statement)
+
+            event.listen(self.engine, "before_cursor_execute", count_query)
+            try:
+                with self.session_factory() as session:
+                    dashboard = portal_dashboard(self.request(client["user_id"]), session)
+            finally:
+                event.remove(self.engine, "before_cursor_execute", count_query)
+            return dashboard, len(queries)
+
+        first, first_queries = load_dashboard(range(1))
+        many, many_queries = load_dashboard(range(1, 20))
+
+        self.assertEqual(len(first["manufacturing_orders"]), 1)
+        self.assertEqual(len(many["manufacturing_orders"]), 20)
+        self.assertEqual(many["client"], many["clients"][0])
+        self.assertEqual(many_queries, first_queries)
 
     def test_cancelled_orders_release_stock_and_have_no_charges(self):
         client_record = self.create_service_taker()

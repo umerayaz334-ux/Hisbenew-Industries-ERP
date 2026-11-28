@@ -737,6 +737,10 @@ function App() {
 
   useEffect(() => {
     if (!authenticatedUser) return;
+    if (authenticatedUser.role === "service_taker") {
+      setTenantModules([]);
+      return;
+    }
     let cancelled = false;
     api
       .get("/modules")
@@ -751,10 +755,10 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [authenticatedUser?.tenant_id, authenticatedUser?.impersonatedBySuperAdmin]);
+  }, [authenticatedUser?.tenant_id, authenticatedUser?.impersonatedBySuperAdmin, authenticatedUser?.role]);
 
   const hasSchoolPortalAccess = useMemo(() => {
-    if (!authenticatedUser) return false;
+    if (!authenticatedUser || authenticatedUser.role === "service_taker") return false;
     if (authenticatedUser.role === "super_admin" && !authenticatedUser.impersonatedBySuperAdmin) return true;
     if (!Array.isArray(tenantModules) || tenantModules.length === 0) return true;
     const schoolMod = tenantModules.find(

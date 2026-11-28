@@ -6,7 +6,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..config import UPLOAD_DIR
 from ..database import SessionLocal
@@ -860,18 +860,35 @@ def dashboard_response(
     )
     inbounds = (
         db.query(ServiceTakerInbound)
+        .options(
+            joinedload(ServiceTakerInbound.service_taker),
+            selectinload(ServiceTakerInbound.items).joinedload(ServiceTakerInboundItem.product),
+        )
         .filter(ServiceTakerInbound.service_taker_id.in_(client_ids))
         .order_by(ServiceTakerInbound.created_at.desc(), ServiceTakerInbound.id.desc())
         .all()
     )
     orders = (
         db.query(ServiceTakerOrder)
+        .options(
+            joinedload(ServiceTakerOrder.service_taker),
+            joinedload(ServiceTakerOrder.manufacturing_order),
+            selectinload(ServiceTakerOrder.items).joinedload(ServiceTakerOrderItem.product),
+        )
         .filter(ServiceTakerOrder.service_taker_id.in_(client_ids))
         .order_by(ServiceTakerOrder.created_at.desc(), ServiceTakerOrder.id.desc())
         .all()
     )
     manufacturing_orders = (
         db.query(ServiceTakerManufacturingOrder)
+        .options(
+            joinedload(ServiceTakerManufacturingOrder.service_taker),
+            joinedload(ServiceTakerManufacturingOrder.product),
+            selectinload(ServiceTakerManufacturingOrder.payments),
+            selectinload(ServiceTakerManufacturingOrder.updates).joinedload(
+                ServiceTakerManufacturingUpdate.created_by_user
+            ),
+        )
         .filter(ServiceTakerManufacturingOrder.service_taker_id.in_(client_ids))
         .order_by(
             ServiceTakerManufacturingOrder.created_at.desc(),
@@ -881,12 +898,14 @@ def dashboard_response(
     )
     shipping_requests = (
         db.query(ServiceTakerShippingRequest)
+        .options(joinedload(ServiceTakerShippingRequest.service_taker))
         .filter(ServiceTakerShippingRequest.service_taker_id.in_(client_ids))
         .order_by(ServiceTakerShippingRequest.created_at.desc(), ServiceTakerShippingRequest.id.desc())
         .all()
     )
     ledger = (
         db.query(ServiceTakerInventoryTransaction)
+        .options(joinedload(ServiceTakerInventoryTransaction.product))
         .filter(ServiceTakerInventoryTransaction.service_taker_id.in_(client_ids))
         .order_by(
             ServiceTakerInventoryTransaction.created_at.desc(),
@@ -2376,7 +2395,7 @@ def ship_order(
 def portal_dashboard(request: Request, db: Session = Depends(get_db)):
     client = portal_service_taker(request, db)
     response = dashboard_response(db, [client])
-    response["client"] = client_response(db, client)
+    response["client"] = response["clients"][0]
     return response
 
 

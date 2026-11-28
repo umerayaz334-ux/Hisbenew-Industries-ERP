@@ -1,5 +1,5 @@
 import ServiceAccountSettings from "../components/ServiceAccountSettings";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api, { getStaticUrl } from "../api/api";
 import ManufacturingServicePortal from "./ManufacturingServicePortal";
 import "./ServiceTakerWorkspace.css";
@@ -472,8 +472,10 @@ export default function ServiceTakerWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const activeLoads = useRef(0);
 
   const load = useCallback(async ({ quiet = false } = {}) => {
+    activeLoads.current += 1;
     if (!quiet) setLoading(true);
     try {
       const response = await api.get(
@@ -486,6 +488,7 @@ export default function ServiceTakerWorkspace({
     } catch (loadError) {
       setError(errorMessage(loadError, "Service fulfillment data could not be loaded."));
     } finally {
+      activeLoads.current -= 1;
       if (!quiet) setLoading(false);
     }
   }, [isAdmin]);
@@ -497,7 +500,11 @@ export default function ServiceTakerWorkspace({
 
   useEffect(() => {
     if (isAdmin || initialTab !== "dashboard") return undefined;
-    const intervalId = window.setInterval(() => load({ quiet: true }), 30000);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible" && activeLoads.current === 0) {
+        void load({ quiet: true });
+      }
+    }, 30000);
     return () => window.clearInterval(intervalId);
   }, [initialTab, isAdmin, load]);
 
