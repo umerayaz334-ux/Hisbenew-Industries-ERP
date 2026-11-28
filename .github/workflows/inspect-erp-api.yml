@@ -1,0 +1,35 @@
+name: Inspect ERP API response and listener
+on:
+  push:
+    branches: [codex/inspect-erp-vps-20261128]
+    paths: [.github/workflows/inspect-erp-api.yml]
+permissions: {}
+jobs:
+  inspect:
+    runs-on: self-hosted
+    timeout-minutes: 3
+    steps:
+      - name: Check existing ERP listener and HTTP timings without changes
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path -LiteralPath 'C:\HisbenewERP\backend\app\main.py')) { throw 'Runner does not host the ERP backend.' }
+          $expected = 'C:\HisbenewERP\backend\.venv\Scripts\python.exe'
+          $owners = @(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique)
+          Write-Host "Port 8000 listener count: $($owners.Count)"
+          foreach ($owner in $owners) {
+            $process = Get-CimInstance Win32_Process -Filter "ProcessId=$owner"
+            $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($process.ParentProcessId)"
+            $knownNames = @('python.exe', 'pythonw.exe', 'uvicorn.exe', 'caddy.exe', 'nginx.exe', 'nssm.exe')
+            $kind = if ($process.Name -in $knownNames) { $process.Name } else { 'other' }
+            Write-Host "Listener type: $kind"
+            Write-Host "Process command line readable: $([bool]$process.CommandLine)"
+            Write-Host "Parent command line readable: $([bool]$parent.CommandLine)"
+            Write-Host "ERP app target found in process: $($process.CommandLine -match 'app\.main:app')"
+            Write-Host "ERP app target found in parent: $($parent.CommandLine -match 'app\.main:app')"
+            Write-Host "Expected Python found: $($process.ExecutablePath -eq $expected -or $parent.ExecutablePath -eq $expected -or $process.CommandLine -like "*$expected*" -or $parent.CommandLine -like "*$expected*")"
+          }
+          foreach ($target in @('http://127.0.0.1:8000/health','https://api.hisbenew.com/health','http://127.0.0.1:8000/openapi.json','https://api.hisbenew.com/openapi.json')) {
+            & curl.exe -s -o NUL --max-time 10 -w '%{url_effective} HTTP %{http_code} TTFB %{time_starttransfer}s total %{time_total}s\n' $target
+          }
+          exit 0
